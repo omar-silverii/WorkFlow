@@ -1,0 +1,15 @@
+<Project>
+  <!-- Snapshot antes de cada Build -->
+  <Target Name="SnapshotPreBuild" BeforeTargets="Build">
+    <Message Text="Snapshot (pre-build)..." Importance="high" />
+    <Exec Command="&quot;$(SolutionDir)snapshot.bat&quot; &quot;$(MSBuildProjectName) $(Configuration) $(Platform)&quot;"
+          IgnoreExitCode="true" />
+  </Target>
+
+  <!-- Diff después del Build (solo Debug) -->
+  <Target Name="DiffPostBuild" AfterTargets="Build" Condition="'$(Configuration)'=='Debug'">
+    <Message Text="Diff last snapshot (post-build)..." Importance="high" />
+    <Exec Command="&quot;$(SolutionDir)diff_last_snapshot.bat&quot;"
+          IgnoreExitCode="true" />
+  </Target>
+</Project>

@@ -1,0 +1,25 @@
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+
+# Build outputs
+[Bb]uild/
+[Rr]elease/
+[Dd]ebug/
+
+# NuGet
+packages/
+
+# Config locales / secretos (no subir)
+Web.config.local
+App.config.local
+*.secret.config
+*.local.config
+
+# Transform files OK to keep
+# (si usás Web.Debug.config / Web.Release.config, se pueden subir)
