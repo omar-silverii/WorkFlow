@@ -1,0 +1,252 @@
+1) ¿Cómo se configura un IF?
+En la IU
+
+Arrastrá “Condición (If)” al canvas.
+
+Conectalo desde un nodo anterior (p. ej. Solicitud HTTP).
+
+Seleccioná el nodo If → en el Inspector:
+
+Tocá Insertar plantilla para ver:
+
+{ "expression": "${payload.status} == 200" }
+
+
+Cambiá la expresión si querés (ver “Gramática” abajo) y Guardar.
+
+Creá dos aristas que salgan del If:
+
+Una con Condición = "true"
+
+Otra con Condición = "false"
+
+El valor de “Condición” en la arista (del Inspector de aristas) debe coincidir con la etiqueta que emite el nodo en tiempo de ejecución. Para If, el motor emite "true" o "false".
+
+Gramática de expresiones (sencilla y pensada para mapping a C#)
+
+Variables: ${payload.status}, ${vars.clave}, ${http.body.campo}, etc.
+(el motor resuelve ${…} contra el contexto)
+
+Operadores soportados (recomendados):
+
+==, != (numérico o string)
+
+>, <, >=, <= (numérico)
+
+Valores literales: números (200), strings ("ok"), booleanos (true, false)
+
+Ejemplos válidos:
+
+${payload.status} == 200
+
+${vars.usuarioRol} == "admin"
+
+${monto} > 1000
+
+true (siempre verdadero) / false (siempre falso)
+
+Sugerencia: mantené la gramática simple. El motor en C# puede implementar un evaluador muy chico (o usar un parser de expresiones si después querés crecer).
+
+¿Qué pasa al exportar?
+
+JSON: el nodo If queda con Parameters.expression igual a tu texto.
+
+C#: el snippet que exportamos arma:
+
+new NodeDef {
+  Id = "...",
+  Type = "control.if",
+  Parameters = JsonConvert.DeserializeObject<Dictionary<string, object>>(@"{ ""expression"": ""${payload.status} == 200"" }")
+}
+
+
+En el motor (tu parte): el handler de control.if debe:
+
+Leer expression
+
+Evaluarla contra el contexto (ver § “Contrato de Motor”)
+
+Devolver etiqueta "true" o "false" para que el enrutador tome la arista correspondiente.
+
+2) Contrato de Motor (cómo “pega” con el C#)
+
+Para que todo sea consistente, cada tipo de nodo devuelve una Etiqueta de salida (string) que se compara con Edge.Condition. Si ninguna coincide, se busca una arista con condición "always". Si tampoco hay, no sigue.
+
+Convención que usamos:
+
+control.if → emite "true" o "false".
+
+control.switch → emite el nombre del caso (ej: "ok", "error"). Si no matchea, el motor debería intentar "default" o "always".
+
+Nodos “normales” (HTTP, SQL, etc.) → emiten "always" (si no hay error). Podés ampliar a "error" si tu handler falla (y entonces conectás una arista con condición "error").
+
+Esto encaja perfecto con lo que editás en el Inspector de aristas.
+
+3) Guía rápida de cada familia de nodos
+
+A continuación: qué parámetros ponés en el Inspector, qué escribe el motor en el contexto, y qué etiqueta suelen emitir.
+
+Disparadores
+
+trigger.webhook
+
+Params: { "path": "/hook/orden", "secret": "…" }
+
+Contexto: setea payload con el cuerpo recibido.
+
+Emite: "always".
+
+trigger.cron
+
+Params: { "cron": "*/5 * * * *", "zonaHoraria": "America/Argentina/Buenos_Aires" }
+
+Emite: "always".
+
+trigger.queue
+
+Params: { "broker": "rabbitmq", "queue": "entrantes", "ack": true }
+
+Contexto: payload = mensaje.
+
+Emite: "always".
+
+Control de flujo
+
+control.if
+
+Params: { "expression": "${payload.status} == 200" }
+
+Emite: "true" / "false".
+
+Conectá aristas con true y false.
+
+control.switch
+
+Params: { "casos": { "ok": "${payload.ok}", "error": "${payload.error}" }, "default": "ok" }
+
+Evaluá casos: si casos.error es verdadero → emite "error", si casos.ok → "ok", si nada → "default".
+
+Conectá aristas con "ok", "error" y "default" (o "always").
+
+control.parallel
+
+Params: { "ramas": 2, "maxConcurrencia": 4 }
+
+El motor dispara N ramas; suele emitir "always" al finalizar la bifurcación.
+
+control.join
+
+Params: { "tipo": "all"|"any", "timeoutMs": 30000 }
+
+Espera a que converjan ramas; luego "always".
+
+control.loop
+
+Params: { "forEach": "${items}", "itemVar": "item", "max": 100 }
+
+El motor itera. Podés modelar aristas "next" y "done" si querés separar flujo. Si no, usá "always".
+
+control.delay
+
+Params: { "ms": 1000 }; Emite "always".
+
+control.retry
+
+Params: { "reintentos": 3, "backoffMs": 500 }; Emite "always" (el motor reintenta internamente).
+
+control.ratelimit
+
+Params: { "porSegundos": 60, "max": 100 }; Emite "always".
+
+Datos & Integraciones
+
+http.request
+
+Params: { "url": "…", "method": "GET", "headers": {}, "body": null, "timeoutMs": 10000 }
+
+Contexto: payload.status, payload.body (si querés).
+
+Emite: "always" o "error" (si implementás manejo de errores).
+
+Suele alimentar tus IF/SWITCH.
+
+data.sql
+
+Params: { "connection": "…", "query": "…", "parameters": {} }
+
+Contexto: payload.rows o vars.tuVariable.
+
+Emite: "always" / "error".
+
+data.redis.get / set
+
+GET lee a vars o payload según prefieras; SET guarda. Emite "always".
+
+file.read / write, email.send, chat.notify, cloud.storage, queue.publish/consume, ftp.get/put
+
+Todos con sus respectivos params del catálogo.
+
+Emite: "always" / "error".
+
+Transformación & Lógica
+
+transform.map
+
+Params: { "mapping": { "out.campo": "${in.campo}" } }
+
+Motor toma valores del contexto y genera otro objeto (p.ej. payload nuevo). Emite "always".
+
+code.function (C#)
+
+Params: { "code": "return input;" }
+
+Motor compila/ejecuta (o invoca método conocido) y escribe en contexto. Emite "always".
+
+code.script (JS)
+
+Params: { "language": "js", "code": "return input;" }
+
+Similar al anterior, pero JS (si tu motor lo soporta).
+
+state.vars / config.secrets
+
+Para set/get de variables y secretos. Emite "always".
+
+ai.call
+
+Params: { "provider":"openai", "model":"gpt-4o-mini", "prompt":"…", "temperature":0.2, … }
+
+Contexto: payload.text o lo que definas. Emite "always" / "error".
+
+Utilidad / Operación
+
+util.start y util.end
+
+Sin params. El flujo debe tener 1 Start y al menos 1 End.
+
+Start es el StartNodeId. End concluye.
+
+util.logger
+
+Params: { "level":"Info", "message":"…" }
+
+Emite: "always".
+
+util.notify / util.error / util.subflow
+
+Notificar, manejar errores, invocar subflujos. Emite "always" (o "error" si corresponde).
+
+4) ¿Cómo lo uso de principio a fin? (mini receta)
+
+HTTP → If → (true) → Notificar → End
+
+En el If, expression = ${payload.status} == 200.
+
+Arista del If a “Notificar”: Condición = "true".
+Arista del If a “End”: Condición = "false".
+
+Exportá JSON o C#:
+
+En C#, cada nodo va como NodeDef con Type y Parameters.
+
+El motor (tuyo) toma ese modelo y ejecuta; el handler de control.if evalúa y retorna "true"/"false".
