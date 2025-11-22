@@ -285,6 +285,19 @@ namespace Intranet.WorkflowStudio.WebForms
         }
     }
 
+    //public class HLogger : IManejadorNodo
+    //{
+    //    public string TipoNodo => "util.logger";
+    //    public Task<ResultadoEjecucion> EjecutarAsync(ContextoEjecucion ctx, NodeDef nodo, CancellationToken ct)
+    //    {
+    //        object lvl, msg;
+    //        var level = (nodo.Parameters != null && nodo.Parameters.TryGetValue("level", out lvl)) ? Convert.ToString(lvl) : "Info";
+    //        var text = (nodo.Parameters != null && nodo.Parameters.TryGetValue("message", out msg)) ? Convert.ToString(msg) : "";
+    //        ctx.Log("[Logger] [" + level + "] " + text);
+    //        return Task.FromResult(new ResultadoEjecucion { Etiqueta = "always" });
+    //    }
+    //}
+
     public class HIf : IManejadorNodo
     {
         public string TipoNodo => "control.if";
@@ -1106,7 +1119,7 @@ INSERT INTO dbo.WF_Queue(Queue, Payload) VALUES(@q, @p);";
             {
                 new HStart(),
                 new HEnd(),
-                new HLogger(),
+                
                 new HIf(),
                 new HDocEntrada(),
                 new HHttpRequest(),
