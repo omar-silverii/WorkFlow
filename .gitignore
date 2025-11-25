@@ -33,3 +33,7 @@ Web.Local.config
 AppSettings.Private.config
 ConnectionStrings.Private.config
 MailSettings.Private.config
+
+# Backups locales de Omar
+_snapshots/
+Intranet.WorkflowStudio.WebFormsOmar.csproj
