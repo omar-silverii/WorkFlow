@@ -273,6 +273,7 @@
     <Compile Include="App_Code\Handlers\HEmail.cs" />
     <Compile Include="App_Code\Handlers\HHumanTask.cs" />
     <Compile Include="App_Code\Handlers\HLogger.cs" />
+    <Compile Include="App_Code\Handlers\HParallel.cs" />
     <Compile Include="App_Code\Manifest.cs" />
     <Compile Include="App_Code\ManifestService.cs" />
     <Compile Include="App_Code\MotorFlujoMinimo.cs" />

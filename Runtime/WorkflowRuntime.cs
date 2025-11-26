@@ -169,7 +169,12 @@ WHERE   t.Id = @Id;", cn))
             };
 
             // ================== 3) Ejecutar motor con handlers por defecto + SQL ==================
-            var handlersExtra = new IManejadorNodo[] { new ManejadorSql() };
+            var handlersExtra = new IManejadorNodo[]
+ {
+                new ManejadorSql(),
+                new HParallel(),
+                new HJoin()
+ };
 
             await MotorDemo.EjecutarAsync(
                 wf,
@@ -177,6 +182,7 @@ WHERE   t.Id = @Id;", cn))
                 handlersExtra,
                 ct: CancellationToken.None
             );
+
 
             // ================== 4) Ver si el motor se detuvo (human.task u otro nodo Detener=true) ==================
             bool detenido = false;
@@ -400,7 +406,12 @@ WHERE Id = @Id;", cn))
 
             // 5) Ejecutar el motor otra vez sobre la misma instancia
             Action<string> logAction = s => logs.Add(s);
-            var handlersExtra = new IManejadorNodo[] { new ManejadorSql() };
+            var handlersExtra = new IManejadorNodo[]
+            {
+                new ManejadorSql(),
+                new HParallel(),
+                new HJoin()
+            };
 
             await MotorDemo.EjecutarAsync(
                 wf,
@@ -513,7 +524,12 @@ WHERE Id = @Id;", cn))
                 // si querés, acá después usamos GuardarLog(instId, "Info", s, nodoId, nodoTipo);
             };
 
-            var handlersExtra = new IManejadorNodo[] { new ManejadorSql() };
+            var handlersExtra = new IManejadorNodo[]
+            {
+                new ManejadorSql(),
+                new HParallel(),
+                new HJoin()
+            };
 
             await MotorDemo.EjecutarAsync(
                 wf,

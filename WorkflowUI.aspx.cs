@@ -433,7 +433,12 @@ VALUES
                 await MotorDemo.EjecutarAsync(
                     wf,
                     s => logs.Add(s),
-                    handlersExtra: new IManejadorNodo[] { new ManejadorSql() },
+                    handlersExtra: new IManejadorNodo[]
+                    {
+                        new ManejadorSql(),
+                        new HParallel(),
+                        new HJoin()
+                    },
                     ct: System.Threading.CancellationToken.None
                 );
                 litLogs.Text = Server.HtmlEncode(string.Join(Environment.NewLine, logs));
