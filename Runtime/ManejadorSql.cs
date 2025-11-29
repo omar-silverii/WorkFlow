@@ -22,57 +22,89 @@ namespace Intranet.WorkflowStudio.Runtime
             // 1) tomar parámetros
             var p = nodo.Parameters ?? new Dictionary<string, object>();
 
-            // nombre de la cadena en web.config
+            // nombre de la cadena en web.config (por defecto: DefaultConnection)
             string cnnName = p.ContainsKey("connectionStringName")
                 ? Convert.ToString(p["connectionStringName"])
                 : "DefaultConnection";
 
-            // SQL a ejecutar
-            string sql = p.ContainsKey("commandText")   
-                ? Convert.ToString(p["commandText"])
-                : null;
+            // 2) SQL a ejecutar: commandText o, si no viene, query
+            string sql = null;
 
+            if (p.ContainsKey("commandText") && p["commandText"] != null)
+                sql = Convert.ToString(p["commandText"]);
+
+            if (string.IsNullOrWhiteSpace(sql) &&
+                p.ContainsKey("query") && p["query"] != null)
+                sql = Convert.ToString(p["query"]);
+
+            // Si sigue vacío, consideramos que es un ERROR de configuración del nodo
             if (string.IsNullOrWhiteSpace(sql))
             {
-                ctx.Log("SQL: no hay commandText");
-                return new ResultadoEjecucion { Etiqueta = "always" };
+                ctx.Log("[data.sql] no hay SQL (commandText/query)");
+                ctx.Estado["sql.error"] = "Falta commandText/query en nodo data.sql";
+                return new ResultadoEjecucion { Etiqueta = "error" };
             }
 
-            // parámetros opcionales
+            // 3) parámetros opcionales
             Dictionary<string, object> sqlParams = null;
             if (p.ContainsKey("parameters") && p["parameters"] is Newtonsoft.Json.Linq.JObject jobj)
             {
                 sqlParams = jobj.ToObject<Dictionary<string, object>>();
             }
 
-            string cnnString = ConfigurationManager.ConnectionStrings[cnnName].ConnectionString;
-
-            using (var cn = new SqlConnection(cnnString))
-            using (var cmd = new SqlCommand(sql, cn))
+            // 4) resolver cadena de conexión
+            var csItem = ConfigurationManager.ConnectionStrings[cnnName];
+            if (csItem == null)
             {
-                if (sqlParams != null)
-                {
-                    foreach (var kv in sqlParams)
-                    {
-                        object val = kv.Value;
-
-                        // si es del tipo "${path}" => resolver contra ctx.Estado
-                        if (val is string sv && sv.StartsWith("${") && sv.EndsWith("}"))
-                        {
-                            var path = sv.Substring(2, sv.Length - 3); // sin ${}
-                            val = Intranet.WorkflowStudio.WebForms.ContextoEjecucion.ResolverPath(ctx.Estado, path);
-                        }
-                        cmd.Parameters.AddWithValue("@" + kv.Key, kv.Value ?? DBNull.Value);
-                    }
-                }
-
-                await cn.OpenAsync(ct);
-                int rows = await cmd.ExecuteNonQueryAsync(ct);
-                ctx.Estado["sql.rows"] = rows;
-                ctx.Log($"SQL ejecutado. Filas afectadas: {rows}");
+                ctx.Log($"[data.sql/error] connectionString '{cnnName}' no encontrada en Web.config");
+                ctx.Estado["sql.error"] = $"ConnectionString '{cnnName}' no encontrada";
+                return new ResultadoEjecucion { Etiqueta = "error" };
             }
 
-            return new ResultadoEjecucion { Etiqueta = "always" };
+            string cnnString = csItem.ConnectionString;
+            ctx.Log($"[data.sql] usando connectionStringName='{cnnName}'");
+
+            try
+            {
+                using (var cn = new SqlConnection(cnnString))
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    if (sqlParams != null)
+                    {
+                        foreach (var kv in sqlParams)
+                        {
+                            object val = kv.Value;
+
+                            // si es del tipo "${path}" => resolver contra ctx.Estado
+                            if (val is string sv && sv.StartsWith("${") && sv.EndsWith("}"))
+                            {
+                                var path = sv.Substring(2, sv.Length - 3); // sin ${}
+                                val = ContextoEjecucion.ResolverPath(ctx.Estado, path);
+                            }
+
+                            cmd.Parameters.AddWithValue("@" + kv.Key, val ?? DBNull.Value);
+                        }
+                    }
+
+                    await cn.OpenAsync(ct);
+                    int rows = await cmd.ExecuteNonQueryAsync(ct);
+
+                    ctx.Estado["sql.rows"] = rows;
+                    ctx.Log($"[data.sql] SQL ejecutado. Filas afectadas: {rows}");
+                }
+
+                // Éxito: seguimos por "always"
+                return new ResultadoEjecucion { Etiqueta = "always" };
+            }
+            catch (Exception ex)
+            {
+                // Acá caés cuando la tabla no existe, constraint, timeout, etc.
+                ctx.Log($"[data.sql/error] {ex.GetType().Name}: {ex.Message}");
+                ctx.Estado["sql.error"] = ex.Message;
+
+                // importante: devolvemos "error" para que el grafo pueda cablear a util.error
+                return new ResultadoEjecucion { Etiqueta = "error" };
+            }
         }
     }
 }

@@ -32,6 +32,7 @@
                 DataKeyNames="Id"
                 AllowPaging="True"
                 PageSize="20"
+                OnRowCommand="gvTareas_RowCommand"
                 OnPageIndexChanging="gvTareas_PageIndexChanging">
                 <Columns>
                     <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="50px" />
@@ -51,6 +52,13 @@
                                 NavigateUrl='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") %>'>
                                 Abrir
                             </asp:HyperLink>
+                            <!-- NUEVO: botón para ir a la instancia -->
+                            <asp:LinkButton ID="lnkInstancia" runat="server"
+                                CommandName="VerInstancia"
+                                CommandArgument='<%# Eval("WF_InstanciaId") + "|" + Eval("WF_DefinicionId") %>'
+                                CssClass="btn btn-sm btn-info">
+                                Instancia
+                            </asp:LinkButton>
                         </ItemTemplate>
                     </asp:TemplateField>
                 </Columns>

@@ -27,6 +27,7 @@ namespace Intranet.WorkflowStudio.WebForms
 SELECT
     T.Id,
     T.WF_InstanciaId,
+    i.WF_DefinicionId,
     T.NodoId,
     T.NodoTipo,
     T.Titulo,
@@ -37,7 +38,7 @@ SELECT
     T.Resultado,
     T.FechaCreacion,
     T.FechaVencimiento
-FROM dbo.WF_Tarea T
+FROM dbo.WF_Tarea T JOIN    dbo.WF_Instancia  i ON i.Id = T.WF_InstanciaId
 WHERE 1 = 1";
 
             bool soloPend = chkSoloPendientes.Checked;
@@ -98,5 +99,55 @@ WHERE 1 = 1";
             gvTareas.PageIndex = e.NewPageIndex;
             CargarGrid();
         }
+
+        protected void gvTareas_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            // ya tendrás algo como esto para “Detalle”
+            if (e.CommandName == "Detalle")
+            {
+                long tareaId = Convert.ToInt64(e.CommandArgument);
+                Response.Redirect("WF_Tarea_Detalle.aspx?id=" + tareaId);
+                return;
+            }
+
+            // ===== NUEVO: Ir a la instancia =====
+            if (e.CommandName == "VerInstancia")
+            {
+                // CommandArgument viene como "WF_InstanciaId|WF_DefinicionId"
+                var arg = Convert.ToString(e.CommandArgument) ?? string.Empty;
+                long instId = 0;
+                int defId = 0;
+
+                var parts = arg.Split('|');
+                if (parts.Length >= 2)
+                {
+                    long.TryParse(parts[0], out instId);
+                    int.TryParse(parts[1], out defId);
+                }
+
+                if (instId > 0 && defId > 0)
+                {
+                    // WF_Instancias ya la preparamos para entender estos parámetros
+                    Response.Redirect(
+                        "WF_Instancias.aspx?WF_DefinicionId=" + defId +
+                        "&instId=" + instId);
+                }
+                else if (instId > 0)
+                {
+                    // Fallback si por alguna razón no vino la definición
+                    Response.Redirect(
+                        "WF_Instancias.aspx?WF_InstanciaId=" + instId);
+                }
+                else
+                {
+                    Response.Redirect("WF_Instancias.aspx");
+                }
+
+                return;
+            }
+
+            // ...el resto de tus comandos (re-asignar, etc)...
+        }
+
     }
 }

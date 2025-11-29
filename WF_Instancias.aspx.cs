@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Configuration;
 using System.Data;
+using Newtonsoft.Json.Linq;
 using System.Data.SqlClient;
 using System.Text;
 using System.Web.UI;
@@ -20,12 +21,20 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (!IsPostBack)
             {
+
                 CargarDefiniciones();
 
-                // si viene de WF_Definiciones.aspx?defId=...
-                string defIdQS = Request.QueryString["defId"];
+                // Acepto varios nombres de parámetro:
+                // ?defId=28  (viejo)
+                // ?WF_DefinicionId=28  (el que estás usando desde WF_Tarea_Detalle)
+                string defIdQS =
+                    Request.QueryString["defId"]
+                    ?? Request.QueryString["WF_DefinicionId"];
+
                 if (!string.IsNullOrEmpty(defIdQS))
                 {
+                    ViewState["InstanciaSeleccionada"] = defIdQS;
+
                     ListItem li = ddlDef.Items.FindByValue(defIdQS);
                     if (li != null)
                     {
@@ -33,7 +42,10 @@ namespace Intranet.WorkflowStudio.WebForms
                         li.Selected = true;
                     }
                 }
-
+                else
+                {
+                    ViewState["InstanciaSeleccionada"] = null;
+                }
                 CargarInstancias();
             }
         }
@@ -68,7 +80,8 @@ namespace Intranet.WorkflowStudio.WebForms
         private void CargarInstancias()
         {
             string sql = @"
-                SELECT i.Id, i.Estado, i.FechaInicio, i.FechaFin
+                SELECT i.Id, i.WF_DefinicionId, i.Estado, i.FechaInicio, i.FechaFin,
+                i.DatosContexto
                 FROM dbo.WF_Instancia i
                 WHERE 1=1";
 
@@ -182,6 +195,83 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
         }
+
+        protected void gvInst_RowDataBound(object sender, GridViewRowEventArgs e) {
+            if (e.Row.RowType != DataControlRowType.DataRow)
+                return;
+
+            // 1) Obtener el DataRowView (asumiendo que el DataSource es un DataTable/DataView)
+            var drv = e.Row.DataItem as DataRowView;
+            if (drv == null)
+                return;
+
+            string estado = Convert.ToString(drv["Estado"]);
+            string datosContexto = drv["DatosContexto"] as string;
+
+            long? instSel = null;
+            if (ViewState["InstanciaSeleccionada"] != null &&
+                long.TryParse(ViewState["InstanciaSeleccionada"].ToString(), out var tmp))
+            {
+                instSel = tmp;
+            }
+
+            long idInstanciaFila = Convert.ToInt64(drv["Id"]);
+
+            // 2) Buscar el Label de la columna Error
+            var lblError = e.Row.FindControl("lblErrorMsg") as Label;
+            if (lblError == null)
+                return;
+
+            // Si no está en estado 'Error', no mostramos nada
+            if (!string.Equals(estado, "Error", StringComparison.OrdinalIgnoreCase))
+            {
+                lblError.Text = string.Empty;
+            }
+            else
+            {
+                // 3) Solo si Estado = 'Error', tratamos de leer DatosContexto.error.message
+                string mensaje = null;
+
+                if (!string.IsNullOrWhiteSpace(datosContexto))
+                {
+                    try
+                    {
+                        var root = JObject.Parse(datosContexto);
+                        // Buscamos error.message, según lo que guarda WorkflowRuntime
+                        mensaje = (string)(root["error"]?["message"]);
+                    }
+                    catch
+                    {
+                        // Si el JSON vino roto, al menos indicamos algo
+                        mensaje = "(error sin detalle JSON)";
+                    }
+                }
+
+                lblError.Text = mensaje ?? "(error sin detalle)";
+            }
+
+            // 4) Pintar la fila en rojo si está en estado Error
+            if (string.Equals(estado, "Error", StringComparison.OrdinalIgnoreCase))
+            {
+                // Agregamos la clase de Bootstrap
+                // (respetando cualquier CssClass previa)
+                string cls = e.Row.CssClass ?? string.Empty;
+                if (!cls.Contains("table-danger"))
+                    e.Row.CssClass = (cls + " table-danger").Trim();
+            }
+
+            // 5) (Opcional) resaltar la instancia seleccionada
+            if (instSel.HasValue && idInstanciaFila == instSel.Value)
+            {
+                // azul clarito de Bootstrap para marcar "seleccionado"
+                string cls = e.Row.CssClass ?? string.Empty;
+                if (!cls.Contains("table-info"))
+                    e.Row.CssClass = (cls + " table-info").Trim();
+            }
+
+        }
+
+
 
         private void VerDatos(long instId)
         {

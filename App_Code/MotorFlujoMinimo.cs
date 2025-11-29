@@ -215,7 +215,24 @@ namespace Intranet.WorkflowStudio.WebForms
 
         public MotorFlujo(IEnumerable<IManejadorNodo> handlers)
         {
-            _handlers = handlers.ToDictionary(h => h.TipoNodo, StringComparer.OrdinalIgnoreCase);
+            // Construimos un diccionario sin reventar por claves repetidas
+            var dict = new Dictionary<string, IManejadorNodo>(StringComparer.OrdinalIgnoreCase);
+
+            if (handlers != null)
+            {
+                foreach (var h in handlers)
+                {
+                    if (h == null) continue;
+
+                    var key = h.TipoNodo;
+                    if (string.IsNullOrWhiteSpace(key)) continue;
+
+                    // Si ya había un handler con esa clave, lo reemplazamos por este
+                    dict[key] = h;
+                }
+            }
+
+            _handlers = dict;
         }
 
         public static void Validar(WorkflowDef wf)
@@ -252,10 +269,10 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 var res = await manejador.EjecutarAsync(ctx, nodo, ct);
 
-                // === NUEVO: publicar estado luego de ejecutar cada nodo ===
+                // Publicar estado luego de ejecutar cada nodo
                 PublishEstado(ctx, nodo.Id, nodo.Type);
 
-                // === NUEVO: si algún nodo pidió detener (wf.detener = true), corto ===
+                // Si algún nodo pidió detener (wf.detener = true), corto
                 if (ctx.Estado != null &&
                     ctx.Estado.TryGetValue("wf.detener", out var detVal) &&
                     ContextoEjecucion.ToBool(detVal))
@@ -289,7 +306,6 @@ namespace Intranet.WorkflowStudio.WebForms
             PublishEstado(ctx, null, null);
         }
 
-        // === NUEVO helper ===
         private static void PublishEstado(ContextoEjecucion ctx, string nodoId, string nodoTipo)
         {
             try
@@ -304,15 +320,15 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrEmpty(nodoTipo))
                     ctx.Estado["wf.currentNodeType"] = nodoTipo;
 
-                // Exponer el estado completo para WorkflowRuntime
                 items["WF_CTX_ESTADO"] = ctx.Estado;
             }
             catch
             {
-                // Nunca romper el motor por problemas de HttpContext
+                // nunca romper el motor por HttpContext
             }
         }
     }
+
 
 
 

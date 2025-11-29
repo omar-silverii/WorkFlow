@@ -7,7 +7,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web;   // <<< NUEVO: para HttpContext
+using System.Web;   // <<< para HttpContext
 
 namespace Intranet.WorkflowStudio.Runtime
 {
@@ -147,34 +147,39 @@ WHERE   t.Id = @Id;", cn))
             Action<string> logAction = s =>
             {
                 logs.Add(s);
+                // NUEVO: también persistimos en WF_InstanciaLog
+                try
+                {
+                    string nodoId = null;
+                    string nodoTipo = null;
 
-                // Si más adelante querés guardar en WF_InstanciaLog, acá es el lugar.
-                // Por ahora, solo guardamos en memoria y luego en DatosContexto.
-                // Si quisieras usar GuardarLog, algo como:
-                //
-                // string nodoId = null;
-                // string nodoTipo = null;
-                // try
-                // {
-                //     var it = HttpContext.Current?.Items;
-                //     if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
-                //     {
-                //         if (est.TryGetValue("wf.currentNodeId", out var nid)) nodoId = Convert.ToString(nid);
-                //         if (est.TryGetValue("wf.currentNodeType", out var nt)) nodoTipo = Convert.ToString(nt);
-                //     }
-                // }
-                // catch { }
-                //
-                // GuardarLog(instId, "Info", s, nodoId, nodoTipo);
+                    var it = HttpContext.Current?.Items;
+                    if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
+                    {
+                        if (est.TryGetValue("wf.currentNodeId", out var nid))
+                            nodoId = Convert.ToString(nid);
+
+                        if (est.TryGetValue("wf.currentNodeType", out var nt))
+                            nodoTipo = Convert.ToString(nt);
+                    }
+
+                    GuardarLog(instId, "Info", s, nodoId, nodoTipo);
+                }
+                catch
+                {
+                    // Nunca romper la ejecución del workflow por un problema de logueo
+                }
             };
 
             // ================== 3) Ejecutar motor con handlers por defecto + SQL ==================
             var handlersExtra = new IManejadorNodo[]
- {
+            {
                 new ManejadorSql(),
                 new HParallel(),
-                new HJoin()
- };
+                new HJoin(),
+                new HUtilError(),
+                new HUtilNotify()
+            };
 
             await MotorDemo.EjecutarAsync(
                 wf,
@@ -183,9 +188,10 @@ WHERE   t.Id = @Id;", cn))
                 ct: CancellationToken.None
             );
 
-
-            // ================== 4) Ver si el motor se detuvo (human.task u otro nodo Detener=true) ==================
+            // ================== 4) Ver si el motor se detuvo / hubo error ==================
             bool detenido = false;
+            bool hayError = false;
+            string mensajeError = null;
 
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
@@ -194,16 +200,41 @@ WHERE   t.Id = @Id;", cn))
                 {
                     detenido = true;
                 }
+
+                // NUEVO: detección de error de instancia
+                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
+                    ContextoEjecucion.ToBool(errVal))
+                {
+                    hayError = true;
+                }
+
+                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
+                {
+                    mensajeError = Convert.ToString(msgVal);
+                }
             }
 
-            // Por ahora, guardamos solo logs en DatosContexto (igual que antes)
+            // NUEVO: guardamos logs + error (si lo hubo) en DatosContexto
+            object ctxPayload = (mensajeError != null)
+                ? new
+                {
+                    logs,
+                    error = new { message = mensajeError }
+                }
+                : (object)new { logs };
+
             string datosContexto =
-                JsonConvert.SerializeObject(new { logs }, Formatting.None);
+                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
 
             if (detenido)
             {
-                // La instancia queda EnCurso (no se marca Finalizado)
+                // La instancia queda EnCurso (no se marca Finalizado ni Error)
                 ActualizarInstanciaEnCurso(instId, datosContexto);
+            }
+            else if (hayError)
+            {
+                // NUEVO: la instancia queda en Error
+                MarcarInstanciaError(instId, datosContexto);
             }
             else
             {
@@ -311,17 +342,31 @@ WHERE Id = @Id;", cn))
             }
         }
 
-        /// <summary>
-        /// Completa una tarea humana (WF_Tarea) y reanuda el workflow
-        /// sobre la MISMA instancia (no crea otra).
-        /// </summary>
+        // NUEVO: helper para marcar la instancia en Error
+        private static void MarcarInstanciaError(long instId, string datosContexto)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+UPDATE dbo.WF_Instancia
+SET Estado      = 'Error',
+    FechaFin    = ISNULL(FechaFin, GETDATE()),
+    DatosContexto = @Ctx
+WHERE Id = @Id;", cn))
+            {
+                cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@Id", instId);
+                cn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         /// <summary>
         /// Completa una tarea humana (WF_Tarea) y reanuda el workflow
         /// sobre la MISMA instancia (no crea otra).
         /// Además, expone en el contexto variables como:
         ///   - tarea.resultado
         ///   - tarea.datos / tarea.datosRaw
-        ///   - wf.tarea.*
+        ///   - wf.tarea.* 
         ///   - humanTask.* (compatibilidad)
         /// para usarlas en expresiones (${...}) dentro del grafo.
         /// </summary>
@@ -371,7 +416,7 @@ WHERE Id = @Id;", cn))
             seed["humanTask.id"] = tareaId;
             seed["humanTask.result"] = resultado ?? "";
 
-            // NUEVO: alias genéricos para usar en expresiones (${tarea.resultado}, etc.)
+            // Alias genéricos
             seed["wf.tarea.id"] = tareaId;
             seed["wf.tarea.resultado"] = resultado ?? "";
             seed["tarea.id"] = tareaId;
@@ -405,12 +450,40 @@ WHERE Id = @Id;", cn))
             }
 
             // 5) Ejecutar el motor otra vez sobre la misma instancia
-            Action<string> logAction = s => logs.Add(s);
+            Action<string> logAction = s =>
+            {
+                logs.Add(s);
+
+                try
+                {
+                    string nodoId = null;
+                    string nodoTipo = null;
+
+                    var it = HttpContext.Current?.Items;
+                    if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
+                    {
+                        if (est.TryGetValue("wf.currentNodeId", out var nid))
+                            nodoId = Convert.ToString(nid);
+
+                        if (est.TryGetValue("wf.currentNodeType", out var nt))
+                            nodoTipo = Convert.ToString(nt);
+                    }
+
+                    // acá usamos la instancia EXISTENTE
+                    GuardarLog(info.InstanciaId, "Info", s, nodoId, nodoTipo);
+                }
+                catch
+                {
+                    // silencio total ante errores de log
+                }
+            };
             var handlersExtra = new IManejadorNodo[]
             {
                 new ManejadorSql(),
                 new HParallel(),
-                new HJoin()
+                new HJoin(),
+                new HUtilError(),
+                new HUtilNotify()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -420,8 +493,10 @@ WHERE Id = @Id;", cn))
                 ct: CancellationToken.None
             );
 
-            // 6) Ver si el motor volvió a detenerse (otra human.task) o terminó
+            // 6) Ver si el motor volvió a detenerse (otra human.task) o terminó / error
             bool detenido = false;
+            bool hayError = false;
+            string mensajeError = null;
 
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
@@ -430,15 +505,39 @@ WHERE Id = @Id;", cn))
                 {
                     detenido = true;
                 }
+
+                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
+                    ContextoEjecucion.ToBool(errVal))
+                {
+                    hayError = true;
+                }
+
+                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
+                {
+                    mensajeError = Convert.ToString(msgVal);
+                }
             }
 
+            object ctxPayload = (mensajeError != null)
+                ? new
+                {
+                    logs,
+                    error = new { message = mensajeError }
+                }
+                : (object)new { logs };
+
             string datosContexto =
-                JsonConvert.SerializeObject(new { logs }, Formatting.None);
+                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
 
             if (detenido)
             {
                 // la instancia sigue viva (EnCurso)
                 ActualizarInstanciaEnCurso(info.InstanciaId, datosContexto);
+            }
+            else if (hayError)
+            {
+                // terminó con error
+                MarcarInstanciaError(info.InstanciaId, datosContexto);
             }
             else
             {
@@ -446,8 +545,6 @@ WHERE Id = @Id;", cn))
                 CerrarInstanciaOk(info.InstanciaId, datosContexto);
             }
         }
-
-
 
         private static void MarcarTareaCompletada(
             long tareaId,
@@ -459,16 +556,16 @@ WHERE Id = @Id;", cn))
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = @"
-                                    UPDATE dbo.WF_Tarea
-                                    SET Estado          = 'Completada',
-                                        Resultado       = @Resultado,
-                                        UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
-                                        FechaCierre     = GETDATE(),
-                                        Datos           = CASE 
-                                                            WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
-                                                            ELSE @Datos 
-                                                          END
-                                    WHERE Id = @Id;";
+UPDATE dbo.WF_Tarea
+SET Estado          = 'Completada',
+    Resultado       = @Resultado,
+    UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
+    FechaCierre     = GETDATE(),
+    Datos           = CASE 
+                        WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
+                        ELSE @Datos 
+                      END
+WHERE Id = @Id;";
                 cmd.Parameters.Add("@Resultado", SqlDbType.NVarChar, 50).Value = (object)resultado ?? DBNull.Value;
                 cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value = (object)usuario ?? DBNull.Value;
                 cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datosJson ?? DBNull.Value;
@@ -521,14 +618,37 @@ WHERE Id = @Id;", cn))
             Action<string> logAction = s =>
             {
                 logs.Add(s);
-                // si querés, acá después usamos GuardarLog(instId, "Info", s, nodoId, nodoTipo);
+
+                try
+                {
+                    string nodoId = null;
+                    string nodoTipo = null;
+
+                    var it = HttpContext.Current?.Items;
+                    if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
+                    {
+                        if (est.TryGetValue("wf.currentNodeId", out var nid))
+                            nodoId = Convert.ToString(nid);
+
+                        if (est.TryGetValue("wf.currentNodeType", out var nt))
+                            nodoTipo = Convert.ToString(nt);
+                    }
+
+                    GuardarLog(instId, "Info", s, nodoId, nodoTipo);
+                }
+                catch
+                {
+                    // no interrumpir el flujo por fallas de log
+                }
             };
 
             var handlersExtra = new IManejadorNodo[]
             {
                 new ManejadorSql(),
                 new HParallel(),
-                new HJoin()
+                new HJoin(),
+                new HUtilError(),
+                new HUtilNotify()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -539,6 +659,9 @@ WHERE Id = @Id;", cn))
             );
 
             bool detenido = false;
+            bool hayError = false;
+            string mensajeError = null;
+
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
                 if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
@@ -546,16 +669,36 @@ WHERE Id = @Id;", cn))
                 {
                     detenido = true;
                 }
+
+                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
+                    ContextoEjecucion.ToBool(errVal))
+                {
+                    hayError = true;
+                }
+
+                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
+                {
+                    mensajeError = Convert.ToString(msgVal);
+                }
             }
 
+            object ctxPayload = (mensajeError != null)
+                ? new
+                {
+                    logs,
+                    error = new { message = mensajeError }
+                }
+                : (object)new { logs };
+
             string datosContexto =
-                JsonConvert.SerializeObject(new { logs }, Formatting.None);
+                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
 
             if (detenido)
                 ActualizarInstanciaEnCurso(instId, datosContexto);
+            else if (hayError)
+                MarcarInstanciaError(instId, datosContexto);
             else
                 CerrarInstanciaOk(instId, datosContexto);
         }
-
     }
 }

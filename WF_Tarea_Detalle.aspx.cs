@@ -33,12 +33,22 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-SELECT  Id, WF_InstanciaId, NodoId, NodoTipo,
-        Titulo, Descripcion, RolDestino, UsuarioAsignado,
-        Estado, Resultado, FechaCreacion, FechaVencimiento, FechaCierre,
-        Datos
-FROM    dbo.WF_Tarea
-WHERE   Id = @Id;", cn))
+SELECT  t.Id,
+        t.WF_InstanciaId,
+        t.NodoId,
+        t.NodoTipo,
+        t.Titulo,
+        t.Descripcion,
+        t.RolDestino,
+        t.UsuarioAsignado,
+        t.Estado,
+        t.Resultado,
+        t.FechaCreacion,
+        t.FechaVencimiento,
+        t.FechaCierre,
+        t.Datos
+FROM    dbo.WF_Tarea      t
+WHERE   t.Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = id;
                 cn.Open();
@@ -50,7 +60,7 @@ WHERE   Id = @Id;", cn))
                         MostrarError("Tarea no encontrada.");
                         return;
                     }
-
+         
                     lblId.Text = dr["Id"].ToString();
                     lblInstancia.Text = dr["WF_InstanciaId"].ToString();
                     lblEstado.Text = Convert.ToString(dr["Estado"]);
@@ -143,7 +153,6 @@ WHERE   Id = @Id;", cn))
                 MostrarError("Error al reanudar el workflow: " + ex.Message);
             }
         }
-
 
         protected void btnVolver_Click(object sender, EventArgs e)
         {

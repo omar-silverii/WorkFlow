@@ -38,12 +38,19 @@
                 PageSize="20"
                 DataKeyNames="Id"
                 OnPageIndexChanging="gvInst_PageIndexChanging"
-                OnRowCommand="gvInst_RowCommand">
+                OnRowCommand="gvInst_RowCommand"
+                OnRowDataBound="gvInst_RowDataBound">
                 <Columns>
                     <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="60px" />
+                    <asp:BoundField DataField="WF_DefinicionId" HeaderText="Definición" />
                     <asp:BoundField DataField="Estado" HeaderText="Estado" />
                     <asp:BoundField DataField="FechaInicio" HeaderText="Inicio" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
                     <asp:BoundField DataField="FechaFin" HeaderText="Fin" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
+                    <asp:TemplateField HeaderText="Error">
+                        <ItemTemplate>
+                            <asp:Label ID="lblErrorMsg" runat="server" CssClass="text-danger small"></asp:Label>
+                        </ItemTemplate>
+                    </asp:TemplateField>
                     <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="210px">
                         <ItemTemplate>
                             <asp:LinkButton ID="lnkVerDatos" runat="server" CommandName="VerDatos" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-info mr-1">Datos</asp:LinkButton>
