@@ -150,7 +150,15 @@ WHERE   t.Id = @Id;", cn))
             }
             catch (Exception ex)
             {
-                MostrarError("Error al reanudar el workflow: " + ex.Message);
+                if (ex is InvalidOperationException &&
+                    ex.Message.StartsWith("WF_Tarea ya fue completada"))
+                {
+                    MostrarError("La tarea ya fue completada o cancelada por otro usuario.");
+                }
+                else
+                {
+                    MostrarError("Error al reanudar el workflow: " + ex.Message);
+                }
             }
         }
 

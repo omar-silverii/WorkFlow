@@ -78,6 +78,7 @@
         { key: "state.vars", label: "Variables", tint: "#16a34a", icon: "var" },
         { key: "config.secrets", label: "Secretos/Claves", tint: "#16a34a", icon: "key" },
         { key: "ai.call", label: "AI / LLM", tint: "#16a34a", icon: "bot" },
+        { key: "doc.extract", label: "Extraer de texto", tint: "#16a34a", icon: "code" },  // <<< NUEVO
 
         // Utilidad / Operación
         { key: "util.start", label: "Inicio", tint: "#0f766e", icon: "play" },
@@ -95,7 +96,7 @@
         { name: "Disparadores", items: ["trigger.webhook", "trigger.cron", "trigger.queue"] },
         { name: "Control", items: ["control.if", "control.switch", "control.parallel", "control.join", "control.loop", "control.delay", "control.retry", "control.ratelimit"] },
         { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada"] },
-        { name: "Transformación y Lógica", items: ["transform.map", "code.function", "code.script", "state.vars", "config.secrets", "ai.call"] },
+        { name: "Transformación y Lógica", items: ["transform.map", "code.function", "code.script", "state.vars", "config.secrets", "ai.call", "doc.extract"] },
         { name: "Utilidad / Operación", items: ["util.start", "util.end", "util.logger", "util.notify", "util.error", "util.subflow", "human.task"] }
     ];
 
@@ -133,8 +134,17 @@
         },
         "data.redis.get": { connection: "localhost:6379", key: "mi-clave" },
         "data.redis.set": { connection: "localhost:6379", key: "mi-clave", value: "${payload}", ttlSeconds: 300 },
-        "file.read": { path: "C:/data/entrada.json", encoding: "utf-8" },
-        "file.write": { path: "C:/data/salida.json", encoding: "utf-8", overwrite: true },
+        "file.read": {
+            path: "C:/data/entrada.json",
+            encoding: "utf-8",
+            salida: "archivo"
+        },
+        "file.write": {
+            path: "C:/data/salida.json",
+            encoding: "utf-8",
+            overwrite: true,
+            origen: "archivo"
+        },
         "email.send": { smtp: "smtp.miempresa.com", from: "noreply@miempresa.com", to: ["ops@miempresa.com"], subject: "Asunto", html: "<b>Hola</b>" },
         "chat.notify": { provider: "slack", webhookUrl: "https://hooks.slack.com/services/xxx", channel: "#general", message: "Hola", mention: [] },
         "cloud.storage": { provider: "s3", bucket: "mi-bucket", key: "ruta/archivo", region: "us-east-1" },
@@ -156,6 +166,13 @@
         "state.vars": { set: { clave: "valor" }, get: ["clave"] },
         "config.secrets": { set: { API_KEY: "***" }, get: ["API_KEY"] },
         "ai.call": { provider: "openai", model: "gpt-4o-mini", prompt: "Decí hola", temperature: 0.2, maxTokens: 256 },
+        "doc.extract": {
+            origen: "archivo",
+            salidaPrefix: "doc.",
+            fixedRules: [],
+            regexRules: [],
+            logValues: true
+        },
 
         // Utilidad / Operación
         "util.start": {},

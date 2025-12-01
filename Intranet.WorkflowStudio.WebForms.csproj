@@ -190,12 +190,18 @@
     <Content Include="Content\bootstrap-grid.rtl.css.map" />
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
+    <Content Include="Scripts\inspector.control.delay.js" />
     <Content Include="Scripts\inspector.logger.js" />
     <Content Include="Scripts\Inspectors\inspector.chat.notify.js" />
     <Content Include="Scripts\Inspectors\inspector.core.js" />
     <Content Include="Scripts\Inspectors\inspector.data.sql.js" />
     <Content Include="Scripts\Inspectors\inspector.doc.entrada.js" />
+    <Content Include="Scripts\Inspectors\inspector.doc.extract.js" />
     <Content Include="Scripts\Inspectors\inspector.edge.js" />
+    <Content Include="Scripts\Inspectors\inspector.email.send.js" />
+    <Content Include="Scripts\Inspectors\inspector.file.read.js" />
+    <Content Include="Scripts\Inspectors\inspector.file.write.js" />
+    <Content Include="Scripts\Inspectors\inspector.ftp.put.js" />
     <Content Include="Scripts\Inspectors\inspector.http.request.js" />
     <Content Include="Scripts\Inspectors\inspector.human.task.js" />
     <Content Include="Scripts\Inspectors\inspector.if.js" />
@@ -204,6 +210,8 @@
     <Content Include="Scripts\Inspectors\inspector.util.notify.js" />
     <Content Include="Scripts\workflow.catalog.js" />
     <Content Include="Scripts\workflow.demo.js" />
+    <Content Include="Scripts\workflow.inspector.file.read.js" />
+    <Content Include="Scripts\workflow.inspector.file.write.js" />
     <Content Include="Scripts\workflow.templates.js" />
     <Content Include="Scripts\workflow.ui.js" />
     <Content Include="Styles\workflow.ui.css" />
@@ -268,9 +276,14 @@
     <Compile Include="Api\Score.ashx.cs">
       <DependentUpon>Score.ashx</DependentUpon>
     </Compile>
+    <Compile Include="App_Code\Handlers\HControlDelay.cs" />
     <Compile Include="App_Code\Handlers\HDocEntrada.cs" />
+    <Compile Include="App_Code\Handlers\HDocExtract.cs" />
+    <Compile Include="App_Code\Handlers\HEmailSend.cs" />
+    <Compile Include="App_Code\Handlers\HFileRead.cs" />
+    <Compile Include="App_Code\Handlers\HFileWrite.cs" />
+    <Compile Include="App_Code\Handlers\HFtpPut.cs" />
     <Compile Include="App_Code\Handlers\HHttpRequest.cs" />
-    <Compile Include="App_Code\Handlers\HEmail.cs" />
     <Compile Include="App_Code\Handlers\HHumanTask.cs" />
     <Compile Include="App_Code\Handlers\HLogger.cs" />
     <Compile Include="App_Code\Handlers\HParallel.cs" />

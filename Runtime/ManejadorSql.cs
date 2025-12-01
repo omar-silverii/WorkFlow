@@ -75,11 +75,12 @@ namespace Intranet.WorkflowStudio.Runtime
                         {
                             object val = kv.Value;
 
-                            // si es del tipo "${path}" => resolver contra ctx.Estado
-                            if (val is string sv && sv.StartsWith("${") && sv.EndsWith("}"))
+                            // Si es string, usamos la misma interpolación que en otros handlers:
+                            // esto expande cualquier ${...} dentro del texto, no solo si es todo el valor.
+                            if (val is string s)
                             {
-                                var path = sv.Substring(2, sv.Length - 3); // sin ${}
-                                val = ContextoEjecucion.ResolverPath(ctx.Estado, path);
+                                // ctx.ExpandString ya sabe leer ctx.Estado["doc"], "wf.*", "tarea.*", etc.
+                                val = ctx.ExpandString(s);
                             }
 
                             cmd.Parameters.AddWithValue("@" + kv.Key, val ?? DBNull.Value);

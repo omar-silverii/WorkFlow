@@ -20,13 +20,16 @@ namespace Intranet.WorkflowStudio.WebForms
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-
             // Si nos llaman con ?defId=### abrimos esa definición y rehidratamos el canvas
             if (!IsPostBack)
             {
                 var qs = Request.QueryString["defId"];
-                if (int.TryParse(qs, out var defId))
+                int defId;
+                if (int.TryParse(qs, out defId) && defId > 0)
                 {
+                    // Guardamos el Id en el hidden para futuros POSTBACKs (UPDATE)
+                    hfDefId.Value = defId.ToString();
+
                     string json = null;
                     using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
                     using (var cmd = cn.CreateCommand())
@@ -39,11 +42,21 @@ namespace Intranet.WorkflowStudio.WebForms
                     }
                     if (!string.IsNullOrWhiteSpace(json))
                     {
-                        ClientScript.RegisterStartupScript(this.GetType(), "wfRestoreFromDef",
-                            "window.__WF_RESTORE = " + json + ";", true);
+                        ClientScript.RegisterStartupScript(
+                            this.GetType(),
+                            "wfRestoreFromDef",
+                            "window.__WF_RESTORE = " + json + ";",
+                            true
+                        );
                     }
                 }
+                else
+                {
+                    // Es un workflow NUEVO (sin Id todavía)
+                    hfDefId.Value = string.Empty;
+                }
             }
+
             // 1) Traigo el JSON que venga del front
             //    (acepto los dos nombres para no romper lo que ya tenías)
             var jsonFromForm =
@@ -78,6 +91,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ClientScript.RegisterStartupScript(this.GetType(), "wfRestore", script, true);
             }
         }
+
 
         private static string EscapeForInlineScript(string s)
         {
@@ -130,9 +144,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 ? nameFromMeta.Trim()
                 : (esEmision ? "Emisión de Póliza " : "Workflow desde UI ") + DateTime.Now.ToString("dd/MM/yyyy HH:mm");
 
-            // ¿Estamos editando una definición existente? (WF_Definiciones → Editar)
+            // 1) ¿Estamos editando una definición existente?
             int defId = 0;
-            int.TryParse(Request.QueryString["defId"], out defId);
+            int.TryParse(hfDefId.Value, out defId);   // <<< AHORA usamos el hidden, NO el QueryString
 
             string cs = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
             string mensaje;
@@ -146,9 +160,9 @@ namespace Intranet.WorkflowStudio.WebForms
                     // ===== UPDATE: edición de una definición existente (mantiene el Id) =====
                     using (var cmd = new SqlCommand(@"
 UPDATE dbo.WF_Definicion
-SET    Nombre  = @Nombre,
-       JsonDef = @JsonDef
-WHERE  Id      = @Id;", cn))
+SET    Nombre   = @Nombre,
+       JsonDef  = @JsonDef
+WHERE  Id       = @Id;", cn))
                     {
                         cmd.Parameters.Add("@Nombre", SqlDbType.NVarChar, 200).Value = (object)nombre ?? DBNull.Value;
                         cmd.Parameters.Add("@JsonDef", SqlDbType.NVarChar).Value = json;
@@ -173,7 +187,8 @@ WHERE  Id      = @Id;", cn))
 INSERT INTO dbo.WF_Definicion
     (Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef)
 VALUES
-    (@Codigo, @Nombre, @Version, 1, GETDATE(), @CreadoPor, @JsonDef);", cn))
+    (@Codigo, @Nombre, @Version, 1, GETDATE(), @CreadoPor, @JsonDef);
+SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     {
                         cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 50).Value = codigo;
                         cmd.Parameters.Add("@Nombre", SqlDbType.NVarChar, 200).Value = nombre;
@@ -181,10 +196,13 @@ VALUES
                         cmd.Parameters.Add("@CreadoPor", SqlDbType.NVarChar, 100).Value = (object)creadoPor ?? DBNull.Value;
                         cmd.Parameters.Add("@JsonDef", SqlDbType.NVarChar).Value = json;
 
-                        cmd.ExecuteNonQuery();
+                        // Obtenemos el nuevo Id
+                        defId = Convert.ToInt32(cmd.ExecuteScalar());
+                        // Lo guardamos en el hidden para próximos saves (serán UPDATE)
+                        hfDefId.Value = defId.ToString();
                     }
 
-                    mensaje = "Workflow guardado en SQL (WF_Definicion nueva).";
+                    mensaje = $"Workflow guardado en SQL (WF_Definicion nueva, Id={defId}).";
                 }
             }
 
@@ -195,6 +213,7 @@ VALUES
                 true
             );
         }
+
 
 
 
@@ -437,7 +456,10 @@ VALUES
                     {
                         new ManejadorSql(),
                         new HParallel(),
-                        new HJoin()
+                        new HJoin(),
+                        new HUtilError(),
+                        new HUtilNotify(),
+                        new HEmailSend()
                     },
                     ct: System.Threading.CancellationToken.None
                 );

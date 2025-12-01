@@ -49,12 +49,36 @@
             ctx.drawEdges(); // refrescar SVG
         };
 
-        bDel.onclick = function () {
-            var arr = ctx.edges;
-            for (var i = arr.length - 1; i >= 0; i--) if (arr[i].id === e.id) arr.splice(i, 1);
+        bDel.onclick = () => {
+            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
+            if (Array.isArray(ctx.edges)) {
+                for (let i = ctx.edges.length - 1; i >= 0; i--) {
+                    const e = ctx.edges[i];
+                    if (!e) continue;
+                    if (e.from === node.id || e.to === node.id) {
+                        ctx.edges.splice(i, 1);
+                    }
+                }
+            }
+
+            // Eliminar el nodo del array real
+            if (Array.isArray(ctx.nodes)) {
+                for (let i = ctx.nodes.length - 1; i >= 0; i--) {
+                    const n = ctx.nodes[i];
+                    if (n && n.id === node.id) {
+                        ctx.nodes.splice(i, 1);
+                    }
+                }
+            }
+
+            // Quitar del DOM y refrescar canvas
+            const elNode = ctx.nodeEl(node.id);
+            if (elNode) elNode.remove();
+
             ctx.drawEdges();
             ctx.select(null);
         };
+
 
         // UX: guardar con Enter
         sel.addEventListener('keydown', function (ev) {

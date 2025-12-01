@@ -178,7 +178,13 @@ WHERE   t.Id = @Id;", cn))
                 new HParallel(),
                 new HJoin(),
                 new HUtilError(),
-                new HUtilNotify()
+                new HUtilNotify(),
+                new HFileRead(),
+                new HFileWrite(),
+                new HDocExtract(),
+                new HControlDelay(),
+                new HFtpPut(),
+                new HEmailSend()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -483,7 +489,13 @@ WHERE Id = @Id;", cn))
                 new HParallel(),
                 new HJoin(),
                 new HUtilError(),
-                new HUtilNotify()
+                new HUtilNotify(),
+                new HFileRead(),
+                new HFileWrite(),
+                new HDocExtract(),
+                new HControlDelay(),
+                new HFtpPut(),
+                new HEmailSend()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -547,10 +559,10 @@ WHERE Id = @Id;", cn))
         }
 
         private static void MarcarTareaCompletada(
-            long tareaId,
-            string resultado,
-            string usuario,
-            string datosJson)
+    long tareaId,
+    string resultado,
+    string usuario,
+    string datosJson)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = cn.CreateCommand())
@@ -565,16 +577,26 @@ SET Estado          = 'Completada',
                         WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
                         ELSE @Datos 
                       END
-WHERE Id = @Id;";
+WHERE Id = @Id
+  AND Estado NOT IN ('Completada','Cancelada');";
+
                 cmd.Parameters.Add("@Resultado", SqlDbType.NVarChar, 50).Value = (object)resultado ?? DBNull.Value;
                 cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value = (object)usuario ?? DBNull.Value;
                 cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datosJson ?? DBNull.Value;
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
 
                 cn.Open();
-                cmd.ExecuteNonQuery();
+                var rows = cmd.ExecuteNonQuery();
+
+                if (rows == 0)
+                {
+                    // Nadie actualizado => alguien la cerró antes
+                    throw new InvalidOperationException(
+                        "WF_Tarea ya fue completada o cancelada por otro usuario.");
+                }
             }
         }
+
 
         private static async Task ReanudarInstanciaAsync(
             long instId,
@@ -648,7 +670,13 @@ WHERE Id = @Id;";
                 new HParallel(),
                 new HJoin(),
                 new HUtilError(),
-                new HUtilNotify()
+                new HUtilNotify(),
+                new HFileRead(),
+                new HFileWrite(),
+                new HDocExtract(),
+                new HControlDelay(),
+                new HFtpPut(),  
+                new HEmailSend()
             };
 
             await MotorDemo.EjecutarAsync(

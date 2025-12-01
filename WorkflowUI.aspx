@@ -10,6 +10,7 @@
   <form id="form1" runat="server" ClientIDMode="Static">
       <asp:ScriptManager ID="sm1" runat="server" EnablePageMethods="true" />
       <asp:HiddenField ID="hfWorkflow" runat="server" ClientIDMode="Static" ValidateRequestMode="Disabled" />
+      <asp:HiddenField ID="hfDefId" runat="server" ClientIDMode="Static" />
     <div class="layout">
       <!-- TOOLBOX -->
       <div class="panel">
@@ -120,6 +121,9 @@
     <script src="Scripts/workflow.ui.js"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/inspector.core.js"></script>
+    <script src="Scripts/workflow.inspector.file.read.js"></script>
+    <script src="Scripts/workflow.inspector.file.write.js"></script>
+    <script src="Scripts/inspectors/inspector.doc.extract.js"></script>
     <script src="Scripts/inspectors/inspector.edge.js"></script>
     <script src="Scripts/inspectors/inspector.http.request.js"></script>
     <script src="Scripts/inspectors/inspector.if.js"></script>
@@ -131,6 +135,8 @@
     <script src="Scripts/inspectors/inspector.queue.publish.js"></script>
     <script src="Scripts/inspectors/inspector.doc.entrada.js"></script>
     <script src="Scripts/inspectors/inspector.util.error.js"></script>
+    <script src="Scripts/inspectors/inspector.ftp.put.js"></script>
+    <script src="Scripts/inspectors/inspector.email.send.js"></script>
 
     <!-- (Opcional) Demos -->
     <script src="Scripts/workflow.demo.js"></script>

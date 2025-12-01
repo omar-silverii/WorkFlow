@@ -2,44 +2,64 @@
     const { register, helpers } = window.WF_Inspector;
     const { el, section, rowButtons, btn } = helpers;
 
-    register('control.if', (node, ctx, dom) => {
+    register('file.read', (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
-        const { body, title, sub } = dom; body.innerHTML = '';
-        if (title) title.textContent = node.label || 'If';
+        const { body, title, sub } = dom;
+        body.innerHTML = '';
+
+        if (title) title.textContent = node.label || 'Archivo: Leer';
         if (sub) sub.textContent = node.key || '';
 
         const p = node.params || {};
-        const inpLbl = el('input', 'input'); inpLbl.value = node.label || '';
+
+        // === Etiqueta del nodo ===
+        const inpLbl = el('input', 'input');
+        inpLbl.value = node.label || '';
         const sLbl = section('Etiqueta (label)', inpLbl);
 
-        const selTpl = el('select', 'input');
-        (function () {
-            const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if.templates']) || {};
-            const opt = document.createElement('option'); opt.value = ''; opt.textContent = '— Elegir —'; selTpl.appendChild(opt);
-            Object.keys(pack).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = (pack[k].label || k); selTpl.appendChild(o); });
-        })();
-        const sTpl = section('Plantilla', selTpl);
+        // === Path del archivo ===
+        const inpPath = el('input', 'input');
+        inpPath.value = p.path || 'C:/temp/origen.txt';
+        const sPath = section('Ruta del archivo (path)', inpPath);
 
-        const inpExpr = el('input', 'input'); inpExpr.value = p.expression || '';
-        const sExpr = section('Expresión (truthy)', inpExpr);
+        // === Salida en el contexto ===
+        const inpSalida = el('input', 'input');
+        inpSalida.value = p.salida || 'archivo';
+        const sSalida = section('Salida en contexto (key)', inpSalida);
 
-        const bTpl = btn('Insertar plantilla');
+        // === Encoding ===
+        const inpEnc = el('input', 'input');
+        inpEnc.value = p.encoding || 'utf-8';
+        const sEnc = section('Encoding (ej: utf-8)', inpEnc);
+
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
 
-        bTpl.onclick = () => {
-            const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if.templates']) || {};
-            const tpl = selTpl.value && pack[selTpl.value] ? pack[selTpl.value] : ((window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if']) || {});
-            inpExpr.value = tpl.expression || '${payload.status} == 200';
-        };
-
         bSave.onclick = () => {
-            const next = Object.assign({}, node.params || {});
-            next.expression = (inpExpr.value || '').trim();
             node.label = inpLbl.value || node.label;
+
+            const next = {
+                path: inpPath.value || '',
+                salida: inpSalida.value || 'archivo',
+                encoding: inpEnc.value || 'utf-8'
+            };
+
+            // Conservamos la posición si ya existe
+            const pos = (p.position && typeof p.position === 'object')
+                ? p.position
+                : { x: node.x | 0, y: node.y | 0 };
+
+            next.position = pos;
+
             node.params = next;
             ensurePosition(node);
-            const elNode = nodeEl(node.id); if (elNode) elNode.querySelector('.node__title').textContent = node.label;
+
+            const elNode = nodeEl(node.id);
+            if (elNode) {
+                const t = elNode.querySelector('.node__title');
+                if (t) t.textContent = node.label;
+            }
+
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
         };
 
@@ -75,8 +95,9 @@
 
 
         body.appendChild(sLbl);
-        body.appendChild(sTpl);
-        body.appendChild(sExpr);
-        body.appendChild(rowButtons(bTpl, bSave, bDel));
+        body.appendChild(sPath);
+        body.appendChild(sSalida);
+        body.appendChild(sEnc);
+        body.appendChild(rowButtons(bSave, bDel));
     });
 })();
