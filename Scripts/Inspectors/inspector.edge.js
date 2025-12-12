@@ -47,6 +47,10 @@
         bSave.onclick = function () {
             e.condition = (sel.value || 'always').trim();
             ctx.drawEdges(); // refrescar SVG
+            // === FIX: redraw edges after save ===
+            setTimeout(() => {
+                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+            }, 0);
         };
 
         bDel.onclick = () => {

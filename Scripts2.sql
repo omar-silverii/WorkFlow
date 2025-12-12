@@ -90,3 +90,155 @@ BEGIN
   );
 END
 GO
+
+IF OBJECT_ID('dbo.WF_QueueMessage', 'U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_QueueMessage
+(
+    Id            BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    Broker        NVARCHAR(50)  NOT NULL,          -- ej: 'sql'
+    Queue         NVARCHAR(200) NOT NULL,          -- nombre lógico de la cola
+    Payload       NVARCHAR(MAX) NOT NULL,          -- JSON del mensaje
+    Estado        NVARCHAR(20)  NOT NULL 
+                  CONSTRAINT DF_WF_QueueMessage_Estado DEFAULT ('Pendiente'),
+    Intentos      INT           NOT NULL 
+                  CONSTRAINT DF_WF_QueueMessage_Intentos DEFAULT (0),
+    FechaCreacion DATETIME      NOT NULL 
+                  CONSTRAINT DF_WF_QueueMessage_FechaCreacion DEFAULT (GETDATE())
+);
+END
+GO
+
+IF OBJECT_ID('dbo.WF_Queue', 'U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_Queue
+(
+    Id              BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_WF_Queue PRIMARY KEY,
+    QueueName       NVARCHAR(100)        NOT NULL,
+    Payload         NVARCHAR(MAX)        NOT NULL,
+    Estado          NVARCHAR(20)         NOT NULL DEFAULT 'Pendiente',  -- Pendiente / Procesado / Error
+    Intentos        INT                  NOT NULL DEFAULT 0,
+    FechaCreacion   DATETIME             NOT NULL DEFAULT GETDATE(),
+    FechaDisponible DATETIME             NOT NULL DEFAULT GETDATE(),
+    FechaProcesado  DATETIME             NULL,
+    UltimoError     NVARCHAR(MAX)        NULL
+);
+
+CREATE INDEX IX_WF_Queue_QueueName_Estado
+    ON dbo.WF_Queue (QueueName, Estado, FechaDisponible, Id);
+END
+GO
+
+IF OBJECT_ID('dbo.WF_Tarea', 'U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_Tarea
+(
+    Id               BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+
+    WF_InstanciaId   BIGINT NOT NULL,          -- FK -> WF_Instancia.Id
+    NodoId           NVARCHAR(50) NOT NULL,    -- Id del nodo en el JSON
+    NodoTipo         NVARCHAR(100) NOT NULL,   -- 'human.task' (por ahora)
+
+    Titulo           NVARCHAR(200) NOT NULL,
+    Descripcion      NVARCHAR(MAX) NULL,
+
+    RolDestino       NVARCHAR(100) NULL,       -- ej: 'Recepcion', 'RRHH', 'Medico'
+    UsuarioAsignado  NVARCHAR(100) NULL,       -- login interno / legajo
+
+    Estado           NVARCHAR(20) NOT NULL,    -- 'Pendiente','EnCurso','Completada','Cancelada','Error'
+    Resultado        NVARCHAR(50) NULL,        -- ej: 'apto','no_apto','rechazado','timeout'
+
+    FechaCreacion    DATETIME NOT NULL DEFAULT (GETDATE()),
+    FechaVencimiento DATETIME NULL,
+    FechaCierre      DATETIME NULL,
+
+    Datos            NVARCHAR(MAX) NULL        -- JSON libre (extra)
+);
+
+-- Índices típicos de bandeja
+CREATE INDEX IX_WF_Tarea_Instancia_Estado ON dbo.WF_Tarea (WF_InstanciaId, Estado);
+CREATE INDEX IX_WF_Tarea_Usuario_Estado   ON dbo.WF_Tarea (UsuarioAsignado, Estado);
+CREATE INDEX IX_WF_Tarea_Rol_Estado       ON dbo.WF_Tarea (RolDestino, Estado);
+
+END
+GO
+
+IF OBJECT_ID('dbo.WF_DocumentoTipo', 'U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_DocumentoTipo (
+    Id INT IDENTITY PRIMARY KEY,
+    Codigo VARCHAR(50) UNIQUE NOT NULL,      -- "NPC", "OC", "FACT"
+    Nombre VARCHAR(200) NOT NULL,            -- "Nota de Pedido", "Orden de Compra, factura A"
+    Formato VARCHAR(10) NOT NULL,            -- "pdf", "docx"
+    Descripcion VARCHAR(500) NULL,
+    Activo BIT NOT NULL DEFAULT 1
+);
+END
+GO
+
+/*
+INSERT INTO WF_DocumentoTipo (Codigo, Nombre, Formato)
+VALUES
+('NPC', 'Nota de Pedido de Compras', 'docx'),
+('OC',  'Orden de Compra', 'pdf'),
+('FACT','Factura', 'pdf');
+*/
+
+IF OBJECT_ID('dbo.WF_DocumentoPlantilla', 'U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_DocumentoPlantilla (
+    Id INT IDENTITY PRIMARY KEY,
+    DocumentoTipoId INT NOT NULL
+        FOREIGN KEY REFERENCES WF_DocumentoTipo(Id),
+
+    Version INT NOT NULL DEFAULT 1,
+
+    RegexPattern NVARCHAR(MAX) NULL,
+    RegexOptions VARCHAR(200) NULL,
+
+    CamposJson NVARCHAR(MAX) NULL,   -- mapeo de fields
+    FechaCreacion DATETIME NOT NULL DEFAULT GETDATE(),
+    Activa BIT NOT NULL DEFAULT 1
+);
+END
+GO
+
+/*
+INSERT INTO WF_DocumentoPlantilla
+(DocumentoTipoId, RegexPattern, CamposJson)
+VALUES
+(
+   (SELECT Id FROM WF_DocumentoTipo WHERE Codigo='NPC'),
+   N'Nota de Pedido de Compras N°:\s*(?<numero>NPC-\d{4}-\d+).*?Solicitante:\s*(?<solicitante>.+?)\s*\(.*?Sector:\s*(?<sector>.+?)\s*Item solicitado:\s*Código:\s*(?<codigo>[\w-]+).*?Cantidad:\s*(?<cantidad>\d+).*?Monto Estimado:\s*(?<monto>[0-9\.,]+)',
+   N'[
+        {"name":"numero", "group":"numero"},
+        {"name":"solicitante","group":"solicitante"},
+        {"name":"sector","group":"sector"},
+        {"name":"codigo","group":"codigo"},
+        {"name":"cantidad","group":"cantidad", "type":"int"},
+        {"name":"monto","group":"monto", "type":"decimal"}
+    ]'
+);
+*/
+
+
+SELECT * FROM WF_DocumentoTipo WHERE Codigo='NPC'
+
+SELECT * FROM WF_DocumentoPlantilla
+
+SELECT * FROM WF_Definicion
+SELECT * FROM WF_instancia
+SELECT * FROM WF_instanciaLog
+delete from WF_instanciaLog where WF_InstanciaId >= 135
+delete from WF_instancia where id >= 133
+delete from WF_Definicion where id = 56
+
+{"StartNodeId":"n1","Nodes":{"n1":{"Id":"n1","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":648,"y":8}}},"n2":{"Id":"n2","Type":"util.notify","Label":"Solicitud de compra","Parameters":{"titulo":"Solicitud de compra","mensaje":"Usuario=${input.usuarioId}, Tipo=${input.tipo}, Item=${input.codigoItem}, Importe=${input.monto}","canal":"log","nivel":"info","position":{"x":24,"y":112}}},"n3":{"Id":"n3","Type":"control.if","Label":"¿Material o servicio?","Parameters":{"expression":"${input.tipo} == \"MATERIAL\"","position":{"x":24,"y":208}}},"n4":{"Id":"n4","Type":"http.request","Label":"Comprobar inventario ERP","Parameters":{"method":"GET","url":"https://erp.interno/api/inventario?item=${input.codigoItem}","headers":{},"body":"","destino":"erp.stock","position":{"x":16,"y":312}}},"n5":{"Id":"n5","Type":"control.if","Label":"¿Hay stock?","Parameters":{"expression":"${erp.stock.cantidadDisponible} > 0","position":{"x":32,"y":408}}},"n6":{"Id":"n6","Type":"util.notify","Label":"Atender y actualizar stock","Parameters":{"titulo":"Atender solicitud","mensaje":"Reserva stock para item=${input.codigoItem}, cant=${input.cantidad}","canal":"log","nivel":"info","position":{"x":24,"y":512}}},"n7":{"Id":"n7","Type":"control.delay","Label":"Esperar actualización","Parameters":{"seconds":300,"position":{"x":24,"y":616}}},"n8":{"Id":"n8","Type":"util.notify","Label":"Comprobar presupuestos anteriores","Parameters":{"titulo":"Comprobar presupuestos anteriores","mensaje":"Revisar presupuestos previos para item=${input.codigoItem}","canal":"log","nivel":"info","position":{"x":480,"y":216}}},"n9":{"Id":"n9","Type":"util.notify","Label":"Hacer al menos 3 presupuestos","Parameters":{"titulo":"Hacer al menos 3 presupuestos","mensaje":"Item=${input.codigoItem}, se requieren al menos 3 presupuestos.","canal":"log","nivel":"info","position":{"x":464,"y":384}}},"n10":{"Id":"n10","Type":"control.if","Label":"¿Compra autorizada?","Parameters":{"expression":"${input.autorizada} == true","position":{"x":920,"y":368}}},"n11":{"Id":"n11","Type":"control.if","Label":"¿Monto > 1000?","Parameters":{"expression":"${input.monto} > 1000","position":{"x":920,"y":496}}},"n12":{"Id":"n12","Type":"queue.publish","Label":"Autorización de compra","Parameters":{"queue":"AUTORIZACION_COMPRA","broker":"sql","correlationId":"${wf.instanceId}","priority":10,"payload":{"usuarioId":"${input.usuarioId}","monto":"${input.monto}","codigoItem":"${input.codigoItem}","descripcion":"${input.descripcion}"},"position":{"x":632,"y":616}}},"n13":{"Id":"n13","Type":"util.notify","Label":"Contrato de compra","Parameters":{"titulo":"Contrato de compra","mensaje":"Preparar contrato para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":920,"y":744}}},"n14":{"Id":"n14","Type":"util.error","Label":"Error / No autorizada","Parameters":{"mensaje":"Compra NO autorizada para usuario ${input.usuarioId}, monto=${input.monto}","capturar":true,"notificar":true,"volverAIntentar":false,"position":{"x":456,"y":520}}},"n17":{"Id":"n17","Type":"util.notify","Label":"Proceso de compra","Parameters":{"titulo":"Proceso de compra","mensaje":"Iniciar proceso de compra para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":440,"y":736}}},"n15":{"Id":"n15","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":32,"y":736}}},"n27":{"Id":"n27","Type":"doc.extract","Label":"Extraer de texto","Parameters":{"origen":"doc.archivo","rulesJson":"[\n  { \"campo\": \"Proveedor\", \"regex\": \"Proveedor:\\\\s*(.+)\", \"grupo\": 1 },\n  { \"campo\": \"Fecha\",     \"regex\": \"Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})\", \"grupo\": 1 }\n]","position":{"x":40,"y":8}}},"n28":{"Id":"n28","Type":"doc.load","Label":"Documento: Cargar archivo","Parameters":{"path":" C:\\temp\\Nota de Pedido de Compras.docx","mode":"word","position":{"x":320,"y":24}}}},"Edges":[{"Id":"efix1","From":"n2","To":"n3","Condition":"always"},{"Id":"efix2","From":"n3","To":"n4","Condition":"true"},{"Id":"efix3","From":"n3","To":"n8","Condition":"false"},{"Id":"efix4","From":"n4","To":"n5","Condition":"always"},{"Id":"efix5","From":"n5","To":"n6","Condition":"true"},{"Id":"efix6","From":"n5","To":"n9","Condition":"false"},{"Id":"efix7","From":"n6","To":"n7","Condition":"always"},{"Id":"efix8","From":"n7","To":"n15","Condition":"always"},{"Id":"efix9","From":"n8","To":"n10","Condition":"always"},{"Id":"efix10","From":"n9","To":"n10","Condition":"always"},{"Id":"efix11","From":"n10","To":"n11","Condition":"true"},{"Id":"efix12","From":"n10","To":"n14","Condition":"false"},{"Id":"efix13","From":"n11","To":"n12","Condition":"true"},{"Id":"efix14","From":"n11","To":"n13","Condition":"false"},{"Id":"efix15","From":"n12","To":"n13","Condition":"always"},{"Id":"efix16","From":"n13","To":"n17","Condition":"always"},{"Id":"efix17","From":"n17","To":"n15","Condition":"always"},{"Id":"efix18","From":"n14","To":"n15","Condition":"always"},{"Id":"efix21","From":"n27","To":"n2","Condition":"always"},{"Id":"e29","From":"n1","To":"n28","Condition":"always"},{"Id":"e30","From":"n28","To":"n27","Condition":"always"}],"Meta":{"Name":"Solicitud de Compras"}}
+{"StartNodeId":"n1","Nodes":{"n1":{"Id":"n1","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":648,"y":8}}},"n2":{"Id":"n2","Type":"util.notify","Label":"Solicitud de compra","Parameters":{"titulo":"Solicitud de compra","mensaje":"Usuario=${input.usuarioId}, Tipo=${input.tipo}, Item=${input.codigoItem}, Importe=${input.monto}","canal":"log","nivel":"info","position":{"x":24,"y":112}}},"n3":{"Id":"n3","Type":"control.if","Label":"¿Material o servicio?","Parameters":{"expression":"${input.tipo} == \"MATERIAL\"","position":{"x":24,"y":208}}},"n4":{"Id":"n4","Type":"http.request","Label":"Comprobar inventario ERP","Parameters":{"method":"GET","url":"https://erp.interno/api/inventario?item=${input.codigoItem}","headers":{},"body":"","destino":"erp.stock","position":{"x":16,"y":312}}},"n5":{"Id":"n5","Type":"control.if","Label":"¿Hay stock?","Parameters":{"expression":"${erp.stock.cantidadDisponible} > 0","position":{"x":32,"y":408}}},"n6":{"Id":"n6","Type":"util.notify","Label":"Atender y actualizar stock","Parameters":{"titulo":"Atender solicitud","mensaje":"Reserva stock para item=${input.codigoItem}, cant=${input.cantidad}","canal":"log","nivel":"info","position":{"x":24,"y":512}}},"n7":{"Id":"n7","Type":"control.delay","Label":"Esperar actualización","Parameters":{"seconds":300,"position":{"x":24,"y":616}}},"n8":{"Id":"n8","Type":"util.notify","Label":"Comprobar presupuestos anteriores","Parameters":{"titulo":"Comprobar presupuestos anteriores","mensaje":"Revisar presupuestos previos para item=${input.codigoItem}","canal":"log","nivel":"info","position":{"x":480,"y":216}}},"n9":{"Id":"n9","Type":"util.notify","Label":"Hacer al menos 3 presupuestos","Parameters":{"titulo":"Hacer al menos 3 presupuestos","mensaje":"Item=${input.codigoItem}, se requieren al menos 3 presupuestos.","canal":"log","nivel":"info","position":{"x":464,"y":384}}},"n10":{"Id":"n10","Type":"control.if","Label":"¿Compra autorizada?","Parameters":{"expression":"${input.autorizada} == true","position":{"x":920,"y":368}}},"n11":{"Id":"n11","Type":"control.if","Label":"¿Monto > 1000?","Parameters":{"expression":"${input.monto} > 1000","position":{"x":920,"y":496}}},"n12":{"Id":"n12","Type":"queue.publish","Label":"Autorización de compra","Parameters":{"queue":"AUTORIZACION_COMPRA","broker":"sql","correlationId":"${wf.instanceId}","priority":10,"payload":{"usuarioId":"${input.usuarioId}","monto":"${input.monto}","codigoItem":"${input.codigoItem}","descripcion":"${input.descripcion}"},"position":{"x":632,"y":616}}},"n13":{"Id":"n13","Type":"util.notify","Label":"Contrato de compra","Parameters":{"titulo":"Contrato de compra","mensaje":"Preparar contrato para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":920,"y":744}}},"n14":{"Id":"n14","Type":"util.error","Label":"Error / No autorizada","Parameters":{"mensaje":"Compra NO autorizada para usuario ${input.usuarioId}, monto=${input.monto}","capturar":true,"notificar":true,"volverAIntentar":false,"position":{"x":456,"y":520}}},"n17":{"Id":"n17","Type":"util.notify","Label":"Proceso de compra","Parameters":{"titulo":"Proceso de compra","mensaje":"Iniciar proceso de compra para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":440,"y":736}}},"n15":{"Id":"n15","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":32,"y":736}}},"n26":{"Id":"n26","Type":"doc.load","Label":"Documento: Cargar archivo","Parameters":{"path":" C:\\temp\\Nota de Pedido de Compras.docx","mode":"auto","position":{"x":328,"y":8}}},"n27":{"Id":"n27","Type":"doc.extract","Label":"Extraer de texto","Parameters":{"origen":"doc.archivo","rulesJson":"[\n  { \"campo\": \"Proveedor\", \"regex\": \"Proveedor:\\\\s*(.+)\", \"grupo\": 1 },\n  { \"campo\": \"Fecha\",     \"regex\": \"Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})\", \"grupo\": 1 }\n]","position":{"x":40,"y":8}}}},"Edges":[{"Id":"efix1","From":"n2","To":"n3","Condition":"always"},{"Id":"efix2","From":"n3","To":"n4","Condition":"true"},{"Id":"efix3","From":"n3","To":"n8","Condition":"false"},{"Id":"efix4","From":"n4","To":"n5","Condition":"always"},{"Id":"efix5","From":"n5","To":"n6","Condition":"true"},{"Id":"efix6","From":"n5","To":"n9","Condition":"false"},{"Id":"efix7","From":"n6","To":"n7","Condition":"always"},{"Id":"efix8","From":"n7","To":"n15","Condition":"always"},{"Id":"efix9","From":"n8","To":"n10","Condition":"always"},{"Id":"efix10","From":"n9","To":"n10","Condition":"always"},{"Id":"efix11","From":"n10","To":"n11","Condition":"true"},{"Id":"efix12","From":"n10","To":"n14","Condition":"false"},{"Id":"efix13","From":"n11","To":"n12","Condition":"true"},{"Id":"efix14","From":"n11","To":"n13","Condition":"false"},{"Id":"efix15","From":"n12","To":"n13","Condition":"always"},{"Id":"efix16","From":"n13","To":"n17","Condition":"always"},{"Id":"efix17","From":"n17","To":"n15","Condition":"always"},{"Id":"efix18","From":"n14","To":"n15","Condition":"always"},{"Id":"efix19","From":"n1","To":"n26","Condition":"always"},{"Id":"efix20","From":"n26","To":"n27","Condition":"always"},{"Id":"efix21","From":"n27","To":"n2","Condition":"always"}],"Meta":{"Name":"Solicitud de Compras"}}
+{"StartNodeId":"n1","Nodes":{"n1":{"Id":"n1","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":720,"y":8}}},"n2":{"Id":"n2","Type":"util.notify","Label":"Solicitud de compra","Parameters":{"titulo":"Solicitud de compra","mensaje":"Usuario=${input.usuarioId}, Tipo=${input.tipo}, Item=${input.codigoItem}, Importe=${input.monto}","canal":"log","nivel":"info","position":{"x":24,"y":112}}},"n3":{"Id":"n3","Type":"control.if","Label":"¿Material o servicio?","Parameters":{"expression":"${input.tipo} == \"MATERIAL\"","position":{"x":24,"y":208}}},"n4":{"Id":"n4","Type":"http.request","Label":"Comprobar inventario ERP","Parameters":{"method":"GET","url":"https://erp.interno/api/inventario?item=${input.codigoItem}","headers":{},"body":"","destino":"erp.stock","position":{"x":16,"y":312}}},"n5":{"Id":"n5","Type":"control.if","Label":"¿Hay stock?","Parameters":{"expression":"${erp.stock.cantidadDisponible} > 0","position":{"x":32,"y":408}}},"n6":{"Id":"n6","Type":"util.notify","Label":"Atender y actualizar stock","Parameters":{"titulo":"Atender solicitud","mensaje":"Reserva stock para item=${input.codigoItem}, cant=${input.cantidad}","canal":"log","nivel":"info","position":{"x":24,"y":512}}},"n7":{"Id":"n7","Type":"control.delay","Label":"Esperar actualización","Parameters":{"seconds":300,"position":{"x":24,"y":616}}},"n8":{"Id":"n8","Type":"util.notify","Label":"Comprobar presupuestos anteriores","Parameters":{"titulo":"Comprobar presupuestos anteriores","mensaje":"Revisar presupuestos previos para item=${input.codigoItem}","canal":"log","nivel":"info","position":{"x":480,"y":216}}},"n9":{"Id":"n9","Type":"util.notify","Label":"Hacer al menos 3 presupuestos","Parameters":{"titulo":"Hacer al menos 3 presupuestos","mensaje":"Item=${input.codigoItem}, se requieren al menos 3 presupuestos.","canal":"log","nivel":"info","position":{"x":464,"y":384}}},"n10":{"Id":"n10","Type":"control.if","Label":"¿Compra autorizada?","Parameters":{"expression":"${input.autorizada} == true","position":{"x":920,"y":368}}},"n11":{"Id":"n11","Type":"control.if","Label":"¿Monto > 1000?","Parameters":{"expression":"${input.monto} > 1000","position":{"x":920,"y":496}}},"n12":{"Id":"n12","Type":"queue.publish","Label":"Autorización de compra","Parameters":{"queue":"AUTORIZACION_COMPRA","broker":"sql","correlationId":"${wf.instanceId}","priority":10,"payload":{"usuarioId":"${input.usuarioId}","monto":"${input.monto}","codigoItem":"${input.codigoItem}","descripcion":"${input.descripcion}"},"position":{"x":632,"y":616}}},"n13":{"Id":"n13","Type":"util.notify","Label":"Contrato de compra","Parameters":{"titulo":"Contrato de compra","mensaje":"Preparar contrato para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":920,"y":744}}},"n14":{"Id":"n14","Type":"util.error","Label":"Error / No autorizada","Parameters":{"mensaje":"Compra NO autorizada para usuario ${input.usuarioId}, monto=${input.monto}","capturar":true,"notificar":true,"volverAIntentar":false,"position":{"x":456,"y":520}}},"n17":{"Id":"n17","Type":"util.notify","Label":"Proceso de compra","Parameters":{"titulo":"Proceso de compra","mensaje":"Iniciar proceso de compra para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":440,"y":736}}},"n15":{"Id":"n15","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":32,"y":736}}},"n22":{"Id":"n22","Type":"doc.load","Label":"Documento: Cargar archivo","Parameters":{"path":" C:\\temp\\Nota de Pedido de Compras.docx","mode":"word","salidaPrefix":"doc.","position":{"x":360,"y":8}}},"n23":{"Id":"n23","Type":"doc.extract","Label":"Extraer de texto","Parameters":{"origen":"doc.archivo","rulesJson":"[\n  { \"campo\": \"Proveedor\", \"regex\": \"Proveedor:\\\\s*(.+)\", \"grupo\": 1 },\n  { \"campo\": \"Fecha\",     \"regex\": \"Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})\", \"grupo\": 1 }\n]","position":{"x":40,"y":8}}}},"Edges":[{"From":"n2","To":"n3","Condition":"always"},{"From":"n3","To":"n4","Condition":"true"},{"From":"n3","To":"n8","Condition":"false"},{"From":"n4","To":"n5","Condition":"always"},{"From":"n5","To":"n6","Condition":"true"},{"From":"n5","To":"n9","Condition":"false"},{"From":"n6","To":"n7","Condition":"always"},{"From":"n7","To":"n15","Condition":"always"},{"From":"n8","To":"n10","Condition":"always"},{"From":"n9","To":"n10","Condition":"always"},{"From":"n10","To":"n11","Condition":"true"},{"From":"n10","To":"n14","Condition":"false"},{"From":"n11","To":"n12","Condition":"true"},{"From":"n11","To":"n13","Condition":"false"},{"From":"n12","To":"n13","Condition":"always"},{"From":"n13","To":"n17","Condition":"always"},{"From":"n17","To":"n15","Condition":"always"},{"From":"n14","To":"n15","Condition":"always"},{"From":"n1","To":"n22","Condition":"always"},{"From":"n22","To":"n23","Condition":"always"},{"From":"n23","To":"n2","Condition":"always"}],"Meta":{"Name":"Solicitud de Compras"}}
+
+
+
+
+
+

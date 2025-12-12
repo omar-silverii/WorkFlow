@@ -72,6 +72,10 @@
 
             // Re-render del inspector
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
+            // === FIX: redraw edges after save ===
+            setTimeout(() => {
+                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+            }, 0);
         };
 
         bDel.onclick = () => {

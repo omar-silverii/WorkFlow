@@ -185,6 +185,10 @@
                 var t = el.querySelector('.node__title'); if (t) t.textContent = n.label;
             }
             window.WF_Inspector.render({ type: 'node', id: n.id }, state, ui);
+            // === FIX: redraw edges after save ===
+            setTimeout(() => {
+                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+            }, 0);
         };
 
         bDel.onclick = () => {

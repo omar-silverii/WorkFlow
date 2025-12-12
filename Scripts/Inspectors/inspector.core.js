@@ -104,6 +104,10 @@
             ensurePosition(node);
             const nel = nodeEl(node.id); if (nel) nel.querySelector('.node__title').textContent = node.label;
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom); // re-render
+            // === FIX: redraw edges after save ===
+            setTimeout(() => {
+                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+            }, 0);
         };
         bDel.onclick = () => {
             // Eliminar edges que salen o llegan a este nodo (mutando el array real)

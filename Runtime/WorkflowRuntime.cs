@@ -8,6 +8,7 @@ using System.Data.SqlClient;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;   // <<< para HttpContext
+using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
 
 namespace Intranet.WorkflowStudio.Runtime
 {
@@ -184,7 +185,12 @@ WHERE   t.Id = @Id;", cn))
                 new HDocExtract(),
                 new HControlDelay(),
                 new HFtpPut(),
-                new HEmailSend()
+                new HEmailSend(),
+                new HQueuePublish(),
+                new HQueueConsume(),
+                new HQueuePublishSql(),
+                new HQueueConsumeSql(),
+                new HDocLoad()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -495,7 +501,12 @@ WHERE Id = @Id;", cn))
                 new HDocExtract(),
                 new HControlDelay(),
                 new HFtpPut(),
-                new HEmailSend()
+                new HEmailSend(),
+                new HQueuePublish(),
+                new HQueueConsume(),
+                new HQueuePublishSql(),
+                new HQueueConsumeSql(),
+                new HDocLoad()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -676,7 +687,12 @@ WHERE Id = @Id
                 new HDocExtract(),
                 new HControlDelay(),
                 new HFtpPut(),  
-                new HEmailSend()
+                new HEmailSend(),
+                new HQueuePublish(),
+                new HQueueConsume(),
+                new HQueuePublishSql(),
+                new HQueueConsumeSql(),
+                new HDocLoad()
             };
 
             await MotorDemo.EjecutarAsync(

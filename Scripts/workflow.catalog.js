@@ -70,6 +70,7 @@
         { key: "ftp.get", label: "FTP: Descargar", tint: "#0284c7", icon: "download" },
         { key: "ftp.put", label: "FTP: Subir", tint: "#0284c7", icon: "upload" },
         { key: "doc.entrada", label: "Entrada de documento", tint: "#0284c7", icon: "file" },
+        { key: "doc.load", label: "Documento: Cargar archivo", tint: "#0284c7", icon: "file" },
 
         // Transformación & Lógica
         { key: "transform.map", label: "Transformar (Mapeo)", tint: "#16a34a", icon: "code" },
@@ -95,7 +96,7 @@
     var GROUPS = [
         { name: "Disparadores", items: ["trigger.webhook", "trigger.cron", "trigger.queue"] },
         { name: "Control", items: ["control.if", "control.switch", "control.parallel", "control.join", "control.loop", "control.delay", "control.retry", "control.ratelimit"] },
-        { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada"] },
+        { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada", "doc.load"] },
         { name: "Transformación y Lógica", items: ["transform.map", "code.function", "code.script", "state.vars", "config.secrets", "ai.call", "doc.extract"] },
         { name: "Utilidad / Operación", items: ["util.start", "util.end", "util.logger", "util.notify", "util.error", "util.subflow", "human.task"] }
     ];
@@ -158,6 +159,13 @@
             maxMB: 10,
             salida: "documento"
         },
+        "doc.load": {
+            path: "C:/documentos/entrada.pdf",
+            mode: "auto"
+            // salida fija en el handler:
+            //   input.filename
+            //   input.text
+        },
 
         // Transformación & Lógica
         "transform.map": { mapping: { "out.campo": "${in.campo}" } },
@@ -167,11 +175,14 @@
         "config.secrets": { set: { API_KEY: "***" }, get: ["API_KEY"] },
         "ai.call": { provider: "openai", model: "gpt-4o-mini", prompt: "Decí hola", temperature: 0.2, maxTokens: 256 },
         "doc.extract": {
-            origen: "archivo",
-            salidaPrefix: "doc.",
-            fixedRules: [],
-            regexRules: [],
-            logValues: true
+            // De dónde lee el texto: por defecto input.text
+            origen: "input.text",
+
+            // Reglas legacy en JSON (las mismas que ponés en el Inspector → rulesJson)
+            rulesJson: `[
+                          { "campo": "Proveedor", "regex": "Proveedor:\\\\s*(.+)", "grupo": 1 },
+                          { "campo": "Fecha",     "regex": "Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})", "grupo": 1 }
+                        ]`
         },
 
         // Utilidad / Operación

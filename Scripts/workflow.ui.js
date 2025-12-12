@@ -48,7 +48,7 @@
     var canvas, svg;
 
     function canvasRect() { return canvas.getBoundingClientRect(); }
-    function nodeEl(id) { return document.getElementById(id); }
+    function nodeEl(id) { return canvas.querySelector('[data-node-id="' + id + '"]'); }
     function nodeCenter(id) {
         var el = nodeEl(id); if (!el) return null;
         var r = el.getBoundingClientRect(); var c = canvasRect();
@@ -199,6 +199,8 @@
         el.id = n.id;
         el.style.left = (n.x | 0) + 'px';
         el.style.top = (n.y | 0) + 'px';
+        // === FIX: asegurar referencia correcta del nodo en DOM ===
+        el.dataset.nodeId = n.id;
         var head = createEl('div', 'node__header');
         var ic = createEl('div', 'node__icon'); ic.style.background = hexToRgba(n.tint, .15); ic.style.color = n.tint; ic.innerHTML = ICONS[n.icon] || ICONS['box'] || '';
         var title = createEl('div', 'node__title'); title.textContent = n.label;
@@ -271,111 +273,152 @@
     }
 
     function edgeAnchors(fromRect, toRect) {
-        // fromRect / toRect: { x: centerX, y: centerY, w, h }
-        var dx = toRect.x - fromRect.x;
-        var dy = toRect.y - fromRect.y;
 
-        // Pad ~ tamaño de la flecha para que la PUNTA quede en el borde del nodo
-        var pad = 10;
+        function intersectRect(cx, cy, tx, ty, w, h) {
 
-        // Si predomina el desplazamiento vertical, usamos top/bottom; si no, left/right
-        var useVertical = Math.abs(dy) > Math.abs(dx) * 0.8;
+            // Vector desde el centro origen hacia el destino
+            var dx = tx - cx;
+            var dy = ty - cy;
 
-        if (useVertical) {
-            if (dy >= 0) {
-                // Receptor abajo: sale por abajo, entra por arriba
-                return {
-                    sx: fromRect.x, sy: fromRect.y + fromRect.h / 2 - pad, // bottom (from)
-                    tx: toRect.x, ty: toRect.y - toRect.h / 2 + pad,     // top (to)
-                    mode: 'vertical'
-                };
-            } else {
-                // Receptor arriba: sale por arriba, entra por abajo
-                return {
-                    sx: fromRect.x, sy: fromRect.y - fromRect.h / 2 + pad, // top (from)
-                    tx: toRect.x, ty: toRect.y + toRect.h / 2 - pad,     // bottom (to)
-                    mode: 'vertical'
-                };
-            }
-        } else {
-            if (dx >= 0) {
-                // Receptor a la derecha: sale por derecha, entra por izquierda
-                return {
-                    sx: fromRect.x + fromRect.w / 2 - pad, sy: fromRect.y, // right (from)
-                    tx: toRect.x - toRect.w / 2 + pad, ty: toRect.y,   // left (to)
-                    mode: 'horizontal'
-                };
-            } else {
-                // Receptor a la izquierda: sale por izquierda, entra por derecha
-                return {
-                    sx: fromRect.x - fromRect.w / 2 + pad, sy: fromRect.y, // left (from)
-                    tx: toRect.x + toRect.w / 2 - pad, ty: toRect.y,   // right (to)
-                    mode: 'horizontal'
-                };
-            }
+            // Mitad del ancho/alto (rectángulo centrado)
+            var hw = w / 2;
+            var hh = h / 2;
+
+            // Calcular escalas necesarias para llegar al borde
+            var scaleX = dx !== 0 ? Math.abs(hw / dx) : Infinity;
+            var scaleY = dy !== 0 ? Math.abs(hh / dy) : Infinity;
+
+            // Usar el borde más cercano (el que se alcanza con la menor escala)
+            var scale = Math.min(scaleX, scaleY);
+
+            return {
+                x: cx + dx * scale,
+                y: cy + dy * scale
+            };
         }
+
+        // Punto exacto donde comienza la curva en el borde del nodo origen
+        var start = intersectRect(
+            fromRect.x,
+            fromRect.y,
+            toRect.x,
+            toRect.y,
+            fromRect.w,
+            fromRect.h
+        );
+
+        // Punto exacto donde termina la curva en el borde del nodo destino
+        var end = intersectRect(
+            toRect.x,
+            toRect.y,
+            fromRect.x,
+            fromRect.y,
+            toRect.w,
+            toRect.h
+        );
+
+        return {
+            sx: start.x,
+            sy: start.y,
+            tx: end.x,
+            ty: end.y
+        };
+    }
+
+    function resizeSvgToFitContent() {
+        var maxX = 0, maxY = 0;
+
+        nodes.forEach(n => {
+            var w = 300;  // ancho aprox nodo
+            var h = 150;  // alto aprox nodo
+            if (n.x + w > maxX) maxX = n.x + w;
+            if (n.y + h > maxY) maxY = n.y + h;
+        });
+
+        svg.setAttribute("width", maxX);
+        svg.setAttribute("height", maxY);
     }
 
     // ====== aristas
     function drawEdges() {
-        var r = canvasRect();
-        svg.setAttribute('viewBox', '0 0 ' + r.width + ' ' + r.height);
 
-        // Limpio todo menos <defs>
+        // Ajustar SVG al tamaño real del contenido
+        resizeSvgToFitContent();
+
+        // NO usar viewBox porque distorsiona al scrollear
+        svg.removeAttribute("viewBox");
+
+        // Limpiar todo menos <defs>
         while (svg.lastChild && svg.lastChild.tagName !== 'defs') {
             svg.removeChild(svg.lastChild);
         }
 
         edges.forEach(function (e) {
-            var from = nodeCenter(e.from), to = nodeCenter(e.to);
+            var from = nodeCenter(e.from),
+                to = nodeCenter(e.to);
+
             if (!from || !to) return;
 
-            // Calcula anclajes inteligentes (dos salidas y dos entradas posibles)
+            // Anclaje preciso sobre el borde de cada nodo
             var a = edgeAnchors(from, to);
 
-            // Curvas suaves
-            var dx = Math.max(40, Math.abs(a.tx - a.sx) / 2);
-            var dy = Math.max(40, Math.abs(a.ty - a.sy) / 2);
+            // Curvatura suave
+            var dx = (a.tx - a.sx) * 0.3;
+            var dy = (a.ty - a.sy) * 0.3;
 
             var d;
             if (a.mode === 'horizontal') {
-                // curva horizontal
                 d = 'M ' + a.sx + ' ' + a.sy +
                     ' C ' + (a.sx + dx) + ' ' + a.sy + ', ' +
                     (a.tx - dx) + ' ' + a.ty + ', ' +
                     a.tx + ' ' + a.ty;
             } else {
-                // curva vertical
                 d = 'M ' + a.sx + ' ' + a.sy +
                     ' C ' + a.sx + ' ' + (a.sy + dy) + ', ' +
                     a.tx + ' ' + (a.ty - dy) + ', ' +
                     a.tx + ' ' + a.ty;
             }
 
+            // Path
             var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             p.setAttribute('d', d);
-            p.setAttribute('class', 'edge' + (selected && selected.type === 'edge' && selected.id === e.id ? ' selected' : ''));
+            p.setAttribute(
+                'class',
+                'edge' + (selected && selected.type === 'edge' && selected.id === e.id ? ' selected' : '')
+            );
             p.setAttribute('data-id', e.id);
-            // Mantiene tus marcadores de flecha (punta llega al borde gracias al pad)
-            p.setAttribute('marker-end', 'url(#' + (selected && selected.type === 'edge' && selected.id === e.id ? 'arrowSel' : 'arrow') + ')');
+
+            // Punta de flecha
+            var markerId = (selected && selected.type === 'edge' && selected.id === e.id)
+                ? 'arrowSel'
+                : 'arrow';
+
+            p.setAttribute('marker-end', 'url(#' + markerId + ')');
+
             p.addEventListener('click', function (ev) {
                 select({ type: 'edge', id: e.id });
                 ev.stopPropagation();
             });
+
             svg.appendChild(p);
 
-            // Etiqueta de condición centrada
+            // Etiqueta centrada
             var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             label.setAttribute('font-size', '10');
             label.setAttribute('fill', '#64748b');
-            var mx = (a.sx + a.tx) / 2, my = (a.sy + a.ty) / 2 - 4;
+
+            var mx = (a.sx + a.tx) / 2;
+            var my = (a.sy + a.ty) / 2 - 4;
+
             label.setAttribute('x', mx);
             label.setAttribute('y', my);
             label.textContent = e.condition || 'always';
             label.style.pointerEvents = 'none';
+
             svg.appendChild(label);
         });
     }
+
 
     function handleConnectClick(nodeId) {
         if (!connectFrom) { connectFrom = nodeId; highlightNode(nodeId, true); return; }
@@ -423,14 +466,71 @@
         // Si hay un motor de inspectores externo, delegamos:
         if (window.WF_Inspector && typeof window.WF_Inspector.render === 'function') {
             window.WF_Inspector.render(selected, {
+
                 nodes: nodes,
                 edges: edges,
                 ensurePosition: ensurePosition,
                 nodeEl: nodeEl,
                 drawEdges: drawEdges,
                 select: select,
-                uid: uid
+                uid: uid,
+
+                // ============================================================
+                // === PROBAR EXTRACCIÓN (solo para vista previa en inspector)
+                // ============================================================
+                previewExtract: function (origenKey, rules) {
+
+                    try {
+                        // 1) Buscar nodo doc.load que haya puesto texto en ctx
+                        let last = null;
+
+                        for (let n of nodes) {
+                            if (n.key === 'doc.load') {
+                                last = n;
+                            }
+                        }
+
+                        if (!last)
+                            return { error: "No existe un nodo 'doc.load' en el grafo." };
+
+                        // 2) Revisar si tiene texto cargado en params (modo vista previa)
+                        const tmpText = last.params && last.params.previewText;
+                        const text = tmpText || "";
+
+                        const lines = text.split(/\r?\n/);
+                        const salida = {};
+
+                        for (const r of rules) {
+
+                            // === POSICIONAL ===
+                            if (r.linea && r.colDesde && r.largo) {
+                                const ln = lines[r.linea - 1] || "";
+                                salida[r.campo] = ln.substr(r.colDesde - 1, r.largo).trim();
+                            }
+
+                            // === REGEX ===
+                            if (r.regex) {
+                                const re = new RegExp(r.regex, 'i');
+                                const m = re.exec(text);
+                                if (m) {
+                                    salida[r.campo] = r.grupo ? m[r.grupo] : m[0];
+                                }
+                            }
+                        }
+
+                        return salida;
+
+                    } catch (err) {
+                        return { error: "previewExtract EXCEPTION: " + err.message };
+                    }
+                }
+
             }, { body: body, title: title, sub: sub });
+
+            // === FIX: asegurar que después de dibujar inspector no se destruyan edges ===
+            requestAnimationFrame(() => {
+                try { drawEdges(); } catch (e) { console.warn('drawEdges post-inspector', e); }
+            });
             return;
         }
 
@@ -438,6 +538,7 @@
         body.innerHTML = '';
         if (title) title.textContent = 'Seleccioná un nodo o una arista';
         if (sub) sub.textContent = '';
+
     }
 
 
@@ -468,6 +569,7 @@
 
         edges.forEach(function (e) {
             wf.Edges.push({
+                Id: e.id,                    // <<< AGREGAR ESTO
                 From: e.from,
                 To: e.to,
                 Condition: (e.condition || 'always').trim()
@@ -569,7 +671,232 @@
         });
         idSeq = Math.max(idSeq, maxN + 1, maxE + 1);
     }
- 
+
+    function convertListFormatToWorkflow(raw) {
+
+        if (raw.Nodes && raw.Edges) return raw; // ya es formato correcto
+        if (!Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) return null;
+
+        var wf = {
+            StartNodeId: null,
+            Nodes: {},
+            Edges: [],
+            Meta: { Name: raw.name || "Workflow importado" }
+        };
+
+        // Convertir nodos
+        raw.nodes.forEach(n => {
+            wf.Nodes[n.id] = {
+                Id: n.id,
+                Type: n.type,
+                Label: n.label,
+                Parameters: Object.assign({}, n.parameters || {}, {
+                    position: { x: n.x || 100, y: n.y || 100 }
+                })
+            };
+
+            if (n.type === "util.start")
+                wf.StartNodeId = n.id;
+        });
+
+        // Si no había start node, ponemos el primero
+        if (!wf.StartNodeId && raw.nodes.length > 0)
+            wf.StartNodeId = raw.nodes[0].id;
+
+        // Convertir edges
+        raw.edges.forEach(e => {
+            wf.Edges.push({
+                From: e.from,
+                To: e.to,
+                Condition: e.label || "always"
+            });
+        });
+
+        return wf;
+    }
+
+
+
+    // Cargar un grafo (objeto) en el canvas
+    function WF_applyGraphFromObject(wf) {
+        if (!wf || !wf.Nodes) {
+            console.warn('WF_applyGraphFromObject: wf inválido o sin Nodes.', wf);
+            return;
+        }
+
+        // Asegurar refs a canvas/svg por si alguien llama WF_loadFromJson antes de init()
+        if (!canvas) {
+            canvas = $('canvas');
+        }
+        if (!svg) {
+            svg = $('edgesSvg');
+        }
+        if (!canvas) {
+            console.error('WF_applyGraphFromObject: canvas no encontrado.');
+            return;
+        }
+
+        console.log('WF_applyGraphFromObject: cargando grafo con Nodes=', Object.keys(wf.Nodes).length,
+            'Edges=', (wf.Edges || []).length);
+
+        // limpiar lo que haya
+        clearAll();
+
+        Object.keys(wf.Nodes).forEach(function (id) {
+            var n = wf.Nodes[id];
+            var meta = findCat(n.Type) || { key: n.Type, label: n.Type, tint: '#94a3b8', icon: 'box' };
+
+            var hasPos = n.Parameters &&
+                n.Parameters.position &&
+                typeof n.Parameters.position.x === 'number' &&
+                typeof n.Parameters.position.y === 'number';
+
+            var x = hasPos ? n.Parameters.position.x : (120 + (nodes.length * 40));
+            var y = hasPos ? n.Parameters.position.y : (120 + (nodes.length * 10));
+
+            var newN = {
+                id: id,
+                key: meta.key,
+                label: n.Label || meta.label,
+                x: x,
+                y: y,
+                tint: meta.tint,
+                icon: meta.icon,
+                params: n.Parameters ? deepClone(n.Parameters) : {}
+            };
+            ensurePosition(newN);
+            nodes.push(newN);
+            drawNode(newN);
+        });
+
+        // === FIX: preservar IDs reales y evitar colisiones ===
+        (wf.Edges || []).forEach(function (e) {
+
+            // respetar ID del JSON
+            const edgeId = e.Id || e.id || ('e' + uid('fix'));
+
+            edges.push({
+                id: edgeId,
+                from: e.From,
+                to: e.To,
+                condition: e.Condition || 'always'
+            });
+        });
+        // === FIX: recalcular idSeq basado en nodos y edges cargados ===
+        bumpIdSeqFromExisting();
+        drawEdges();
+        
+
+        // Nombre del workflow en la caja de texto, si viene en Meta
+        try {
+            if (wf.Meta && wf.Meta.Name) {
+                var t = document.getElementById('txtNombreWf');
+                if (t) t.value = wf.Meta.Name;
+            }
+        } catch (e) { /* noop */ }
+    }
+
+    // Normaliza distintas formas de JSON para llegar a { StartNodeId, Nodes, Edges, Meta }
+    // Normaliza distintas formas de JSON para llegar a { StartNodeId, Nodes, Edges, Meta }
+    function normalizeWorkflowObject(raw) {
+        var wf = raw || {};
+
+        // Caso ideal: ya es el formato nuevo
+        if (wf.Nodes && wf.Edges) {
+            console.log('normalizeWorkflowObject: formato directo (root.Nodes)');
+            return wf;
+        }
+
+        // Caso 1: string con JSON adentro en alguna propiedad "conocida"
+        var stringProps = [
+            'json', 'Json',
+            'workflowJson', 'WorkflowJson',
+            'graphJson', 'GraphJson'
+        ];
+
+        for (var i = 0; i < stringProps.length; i++) {
+            var sp = stringProps[i];
+            if (typeof wf[sp] === 'string') {
+                try {
+                    var inner = JSON.parse(wf[sp]);
+                    if (inner && inner.Nodes && inner.Edges) {
+                        console.log('normalizeWorkflowObject: usando inner string wf.' + sp);
+                        return inner;
+                    }
+                } catch (e) {
+                    console.warn('normalizeWorkflowObject: error parseando wf.' + sp, e);
+                }
+            }
+        }
+
+        // Caso 2: objetos anidados con nombres típicos
+        var objProps = ['workflow', 'Workflow', 'graph', 'Graph'];
+        for (var j = 0; j < objProps.length; j++) {
+            var op = objProps[j];
+            var v = wf[op];
+            if (v && typeof v === 'object' && v.Nodes && v.Edges) {
+                console.log('normalizeWorkflowObject: usando wf.' + op);
+                return v;
+            }
+        }
+
+        // Caso 3 (GENÉRICO): buscar en cualquier propiedad hija
+        for (var k in wf) {
+            if (!Object.prototype.hasOwnProperty.call(wf, k)) continue;
+            var val = wf[k];
+
+            // 3a) Si ya es un objeto con Nodes/Edges
+            if (val && typeof val === 'object' && val.Nodes && val.Edges) {
+                console.log('normalizeWorkflowObject: usando wf.' + k + ' (scan genérico)');
+                return val;
+            }
+
+            // 3b) Si tiene una subpropiedad Json/string con el grafo
+            if (val && typeof val === 'object') {
+                var innerStr = val.Json || val.json || val.WorkflowJson || val.workflowJson;
+                if (typeof innerStr === 'string') {
+                    try {
+                        var innerObj = JSON.parse(innerStr);
+                        if (innerObj && innerObj.Nodes && innerObj.Edges) {
+                            console.log('normalizeWorkflowObject: usando wf.' + k + '.Json (scan genérico)');
+                            return innerObj;
+                        }
+                    } catch (e2) {
+                        console.warn('normalizeWorkflowObject: error parseando wf.' + k + '.Json', e2);
+                    }
+                }
+            }
+        }
+
+        // Si llegamos acá, no supimos normalizar
+        console.warn('normalizeWorkflowObject: formato desconocido', wf);
+        return wf; // WF_applyGraphFromObject va a volver a decir "wf inválido o sin Nodes"
+    }
+
+
+    // API pública para cargar desde JSON (string u objeto)
+    window.WF_loadFromJson = function (jsonOrObject) {
+        console.log('WF_loadFromJson llamado');
+
+        var base = (typeof jsonOrObject === 'string')
+            ? JSON.parse(jsonOrObject)
+            : jsonOrObject;
+
+        // Guardamos para inspección desde la consola si hace falta
+        window.__WF_LAST_JSON_SERVER = base;
+        console.log('WF_loadFromJson objeto base:', base);
+
+        var wf = normalizeWorkflowObject(base);
+        // Si no es formato workflow, intentar conversión automática:
+        if (!wf.Nodes || !wf.Edges) {
+            var converted = convertListFormatToWorkflow(wf);
+            if (converted) wf = converted;
+        }
+        WF_applyGraphFromObject(wf);
+    };
+
+
+
     function init() {
         canvas = $('canvas'); svg = $('edgesSvg');
 
@@ -578,36 +905,10 @@
         // Restaurar si el server mandó algo (usa posiciones si existen)
         if (window.__WF_RESTORE) {
             try {
-                var wf = (typeof window.__WF_RESTORE === 'string')
+                var wfRestore = (typeof window.__WF_RESTORE === 'string')
                     ? JSON.parse(window.__WF_RESTORE)
                     : window.__WF_RESTORE;
-                if (wf && wf.Nodes) {
-                    Object.keys(wf.Nodes).forEach(function (id) {
-                        var n = wf.Nodes[id];
-                        var meta = findCat(n.Type) || { key: n.Type, label: n.Type, tint: '#94a3b8' };
-                        var hasPos = n.Parameters && n.Parameters.position && typeof n.Parameters.position.x === 'number' && typeof n.Parameters.position.y === 'number';
-                        var x = hasPos ? n.Parameters.position.x : (120 + (Object.keys(nodes).length * 40));
-                        var y = hasPos ? n.Parameters.position.y : (120 + (Object.keys(nodes).length * 10));
-                        var newN = {
-                            id: id,
-                            key: meta.key,
-                            label: n.Label || meta.label,
-                            x: x,
-                            y: y,
-                            tint: meta.tint,
-                            icon: meta.icon,
-                            params: n.Parameters ? deepClone(n.Parameters) : {}
-                        };
-                        ensurePosition(newN);
-                        nodes.push(newN);
-                        drawNode(newN);
-                    });
-                    (wf.Edges || []).forEach(function (e) {
-                        edges.push({ id: uid('e'), from: e.From, to: e.To, condition: e.Condition || 'always' });
-                    });
-                    drawEdges();
-                    bumpIdSeqFromExisting();
-                }
+                WF_applyGraphFromObject(wfRestore);
             } catch (e) { console.warn(e); }
         }
 

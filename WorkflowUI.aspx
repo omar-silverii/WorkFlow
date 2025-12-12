@@ -92,6 +92,13 @@
                       CssClass="btn"
                       Text="Pegar último JSON del visor"
                       OnClientClick="(function(){var t=document.getElementById('outText'); var a=document.getElementById('JsonServidor'); a.value=(t&&t.textContent)||'';})(); return false;" />
+             <!-- Dibujar desde JSON -->
+          <asp:Button ID="btnCargarEnCanvas"
+                     runat ="server"
+                     ClientIDMode="Static"
+                     CssClass="btn"
+                     Text="Cargar en canvas"
+                     OnClientClick="WF_cargarJsonServidorEnCanvas(); return false;" />
         </div>
       </div>
 
@@ -134,6 +141,7 @@
     <script src="Scripts/inspectors/inspector.chat.notify.js"></script>
     <script src="Scripts/inspectors/inspector.queue.publish.js"></script>
     <script src="Scripts/inspectors/inspector.doc.entrada.js"></script>
+    <script src="Scripts/inspectors/inspector.doc.load.js"></script>
     <script src="Scripts/inspectors/inspector.util.error.js"></script>
     <script src="Scripts/inspectors/inspector.ftp.put.js"></script>
     <script src="Scripts/inspectors/inspector.email.send.js"></script>
@@ -161,6 +169,37 @@
                 return true; // deja seguir el postback
             }
 
+            // Cargar el JSON pegado en el panel inferior dentro del canvas
+            function WF_cargarJsonServidorEnCanvas() {
+                try {
+                    console.log('WF_cargarJsonServidorEnCanvas: click');
+
+                    var txt = document.getElementById('JsonServidor');
+                    if (!txt) {
+                        alert('No encuentro el TextBox JsonServidor.');
+                        return;
+                    }
+
+                    var json = (txt.value || '').trim();
+                    console.log('WF_cargarJsonServidorEnCanvas: longitud JSON =', json.length);
+
+                    if (!json) {
+                        alert('Pegá primero el JSON del workflow en el cuadro "JSON del workflow".');
+                        return;
+                    }
+
+                    if (window.WF_loadFromJson) {
+                        console.log('WF_cargarJsonServidorEnCanvas: llamando WF_loadFromJson...');
+                        window.WF_loadFromJson(json);
+                    } else {
+                        alert('No existe window.WF_loadFromJson. Verificá que esté definido en Scripts/workflow.ui.js.');
+                    }
+                } catch (e) {
+                    console.error('Error en WF_cargarJsonServidorEnCanvas:', e);
+                    alert('Error al cargar el JSON en el canvas: ' + e.message);
+                }
+            }
+
             // NUEVO: mostrar/ocultar panel de "Probar motor en servidor"
             (function () {
                 var btn = document.getElementById('btnToggleTest');
@@ -179,5 +218,6 @@
                 });
             })();
         </script>
+
  </body>
 </html>
