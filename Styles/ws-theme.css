@@ -1,0 +1,146 @@
+﻿/* === Base === */
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    margin: 0;
+    background: #f8fafc; /* gris muy suave */
+    color: #0f172a;
+}
+
+/* === Layout === */
+.wrap {
+    display: grid;
+    grid-template-columns: 520px 1fr;
+    gap: 16px;
+    padding: 16px;
+}
+
+/* === Cards === */
+.card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+}
+
+/* === Filas === */
+.row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+    .row > * {
+        flex: 1;
+    }
+
+/* === Labels === */
+label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #334155;
+}
+
+/* === Inputs === */
+select,
+input,
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 10px;
+    border-radius: 10px;
+    border: 1px solid #cbd5f5;
+    font-size: 13px;
+    background: #ffffff;
+}
+
+    select:focus,
+    input:focus,
+    textarea:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 2px rgba(99,102,241,.15);
+    }
+
+/* === Textarea técnica === */
+textarea {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+}
+
+/* === Botones === */
+button,
+.btn {
+    cursor: pointer;
+    background: #ffffff;
+    border: 1px solid #c7d2fe;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+    button:hover {
+        background: #eef2ff;
+    }
+
+/* === Botón chico === */
+.btn-small {
+    width: auto;
+    padding: 8px 10px;
+}
+
+/* === Grilla === */
+.grid {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+    .grid th {
+        text-align: left;
+        font-size: 12px;
+        color: #475569;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 8px;
+    }
+
+    .grid td {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 8px;
+        font-size: 13px;
+    }
+
+/* === Texto auxiliar === */
+.muted {
+    color: #64748b;
+    font-size: 12px;
+}
+
+/* === Preview === */
+.preview {
+    height: 520px;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+/* === Pills === */
+.pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #c7d2fe;
+    font-size: 12px;
+    background: #eef2ff;
+    color: #3730a3;
+}
+
+/* === Estados === */
+.ok {
+    color: #065f46;
+}
+
+.bad {
+    color: #991b1b;
+}

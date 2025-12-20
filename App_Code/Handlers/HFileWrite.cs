@@ -46,6 +46,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var p = nodo.Parameters ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+            string contentTpl = GetString(p, "content"); // NUEVO: plantilla directa
+
             string pathTpl = GetString(p, "path");
             string encodingName = GetString(p, "encoding") ?? "utf-8";
             bool overwrite = GetBool(p, "overwrite", defaultValue: true);
@@ -76,12 +78,13 @@ namespace Intranet.WorkflowStudio.WebForms
                 });
             }
 
-            if (string.IsNullOrWhiteSpace(origen))
+            if (string.IsNullOrWhiteSpace(contentTpl) && string.IsNullOrWhiteSpace(origen))
             {
-                string msg = "Nodo file.write: falta parámetro 'origen'.";
+                string msg = "Nodo file.write: falta parámetro 'origen' (y no vino 'content').";
                 ctx.Log("[file.write/error] " + msg);
                 ctx.Estado["file.write.lastError"] = msg;
                 ctx.Estado["wf.error"] = true;
+
 
                 return Task.FromResult(new ResultadoEjecucion
                 {
@@ -108,19 +111,44 @@ namespace Intranet.WorkflowStudio.WebForms
                 });
             }
 
-            // Obtener los datos a escribir desde el contexto
-            if (!ctx.Estado.TryGetValue(origen, out var data) || data == null)
-            {
-                string msg = $"Nodo file.write: no se encontró ctx.Estado[\"{origen}\"] o es null.";
-                ctx.Log("[file.write/error] " + msg);
-                ctx.Estado["file.write.lastError"] = msg;
-                ctx.Estado["wf.error"] = true;
+            // ===================================================
+            // NUEVO: 1) Si viene "content", se usa como plantilla
+            // ===================================================
+            object data = null;
 
-                return Task.FromResult(new ResultadoEjecucion
+            if (!string.IsNullOrWhiteSpace(contentTpl))
+            {
+                try
                 {
-                    Etiqueta = "error"
-                });
+                    // content permite ${input.xxx} y cualquier key del ctx.Estado
+                    data = ctx.ExpandString(contentTpl);
+                }
+                catch (Exception ex)
+                {
+                    string msg = $"Nodo file.write: error al expandir 'content': {ex.Message}";
+                    ctx.Log("[file.write/error] " + msg);
+                    ctx.Estado["file.write.lastError"] = msg;
+                    ctx.Estado["wf.error"] = true;
+
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
+                }
             }
+            else
+            {
+                // ==========================================
+                // Legacy: 2) Si no hay content, uso "origen"
+                // ==========================================
+                if (!ctx.Estado.TryGetValue(origen, out data) || data == null)
+                {
+                    string msg = $"Nodo file.write: no se encontró ctx.Estado[\"{origen}\"] o es null.";
+                    ctx.Log("[file.write/error] " + msg);
+                    ctx.Estado["file.write.lastError"] = msg;
+                    ctx.Estado["wf.error"] = true;
+
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
+                }
+            }
+
 
             try
             {

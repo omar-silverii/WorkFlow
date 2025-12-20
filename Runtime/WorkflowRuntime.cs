@@ -190,7 +190,8 @@ WHERE   t.Id = @Id;", cn))
                 new HQueueConsume(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
-                new HDocLoad()
+                new HDocLoad(),
+                new HDocTipoResolve()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -506,7 +507,8 @@ WHERE Id = @Id;", cn))
                 new HQueueConsume(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
-                new HDocLoad()
+                new HDocLoad(),
+                new HDocTipoResolve()
             };
 
             await MotorDemo.EjecutarAsync(
@@ -692,7 +694,8 @@ WHERE Id = @Id
                 new HQueueConsume(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
-                new HDocLoad()
+                new HDocLoad(),
+                new HDocTipoResolve()
             };
 
             await MotorDemo.EjecutarAsync(

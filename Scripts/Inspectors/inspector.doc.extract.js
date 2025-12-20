@@ -1,166 +1,249 @@
-﻿(() => {
+﻿// Scripts/inspectors/inspector.doc.extract.js
+(() => {
     const { register, helpers } = window.WF_Inspector;
     const { el, section, rowButtons, btn } = helpers;
 
+    function toBool(v) {
+        if (v === true) return true;
+        if (v === false) return false;
+        if (v == null) return false;
+        const s = String(v).trim().toLowerCase();
+        return (s === "1" || s === "true" || s === "yes" || s === "si" || s === "sí" || s === "y");
+    }
+
+    function toInt(v, defVal) {
+        if (v == null) return defVal;
+        const n = parseInt(String(v), 10);
+        return isFinite(n) ? n : defVal;
+    }
+
+    function removeNodeAndEdges(node, ctx) {
+        // Eliminar edges
+        if (Array.isArray(ctx.edges)) {
+            for (let i = ctx.edges.length - 1; i >= 0; i--) {
+                const e = ctx.edges[i];
+                if (!e) continue;
+                if (e.from === node.id || e.to === node.id) ctx.edges.splice(i, 1);
+            }
+        }
+        // Eliminar nodo
+        if (Array.isArray(ctx.nodes)) {
+            for (let i = ctx.nodes.length - 1; i >= 0; i--) {
+                const n = ctx.nodes[i];
+                if (n && n.id === node.id) ctx.nodes.splice(i, 1);
+            }
+        }
+        // Quitar del DOM
+        const elNode = ctx.nodeEl(node.id);
+        if (elNode) elNode.remove();
+
+        ctx.drawEdges();
+        ctx.select(null);
+    }
+
+    function setNodeTitle(ctx, node) {
+        const elNode = ctx.nodeEl(node.id);
+        if (elNode) {
+            const t = elNode.querySelector('.node__title');
+            if (t) t.textContent = node.label || '';
+        }
+    }
+
+    function setEnabled(inputEl, enabled) {
+        if (!inputEl) return;
+        inputEl.disabled = !enabled;
+        inputEl.style.opacity = enabled ? "" : ".65";
+    }
+
+    // Inspector mínimo para nodos tipo "doc.extract"
     register('doc.extract', (node, ctx, dom) => {
-
-        const { ensurePosition, nodeEl } = ctx;
+        const { ensurePosition } = ctx;
         const { body, title, sub } = dom;
-
         body.innerHTML = '';
 
-        // Título y subtítulo
-        if (title) title.textContent = node.label || 'Extraer datos';
+        if (title) title.textContent = node.label || 'Extraer de texto';
         if (sub) sub.textContent = node.key || '';
 
         const p = node.params || {};
 
-        // =====================================
-        // 1) Etiqueta del nodo
-        // =====================================
+        // === Label visual del nodo ===
         const inpLbl = el('input', 'input');
-        inpLbl.value = node.label || 'Extraer datos';
-        const sLbl = section('Etiqueta', inpLbl);
+        inpLbl.value = node.label || '';
+        const sLbl = section('Etiqueta (label)', inpLbl);
 
-        // =====================================
-        // 2) Origen: clave en contexto donde está el texto
-        //      *** UNIFICADO A input.text ***
-        // =====================================
+        // === Origen / Destino (esencial) ===
         const inpOrigen = el('input', 'input');
-        inpOrigen.value = p.origen || 'input.text';
-        const sOrigen = section('Origen (ctx[key] con el texto)', inpOrigen);
+        inpOrigen.value = (p.origen !== undefined && p.origen !== null) ? String(p.origen) : 'input.text';
+        const sOrigen = section('Origen (ctx key)', inpOrigen);
 
-        // =====================================
-        // 3) Reglas JSON
-        // =====================================
-        const txtRules = document.createElement('textarea');
-        txtRules.className = 'input';
-        txtRules.rows = 12;
-        txtRules.style.fontFamily = 'monospace';
-        txtRules.spellcheck = false;
+        const inpDestino = el('input', 'input');
+        inpDestino.value = (p.destino !== undefined && p.destino !== null) ? String(p.destino) : '';
+        const sDestino = section('Destino (opcional)', inpDestino);
 
-        txtRules.value = p.rulesJson || `[
-  { "campo": "Poliza",  "linea": 3, "colDesde": 9,  "largo": 11 },
-  { "campo": "Nombre",  "regex": "NOMBRE\\\\s*:\\\\s*(.+)", "grupo": 1 }
-]`;
+        const hintOrigen = el('div', 'hint');
+        hintOrigen.innerHTML =
+            'En runtime, el handler toma este texto desde el contexto. ' +
+            'Ejemplo típico: <b>input.text</b>.';
+        sOrigen.appendChild(hintOrigen);
 
-        const sRules = section('Reglas (JSON)', txtRules);
+        // ============================================================
+        // NUEVO: Modo BD (useDbRules + docTipoId) — SIN tocar rulesJson
+        // ============================================================
+        const chkUseDb = el('input');
+        chkUseDb.type = 'checkbox';
+        chkUseDb.checked = toBool(p.useDbRules);
 
-        // =====================================
-        // Botones
-        // =====================================
-        const bEjemplo = btn('Insertar ejemplo');
-        const bTest = btn('Probar extracción');
+        const lblUseDb = el('label');
+        lblUseDb.style.display = 'inline-flex';
+        lblUseDb.style.alignItems = 'center';
+        lblUseDb.style.gap = '8px';
+        lblUseDb.appendChild(chkUseDb);
+        lblUseDb.appendChild(document.createTextNode('Usar reglas desde BD (useDbRules)'));
+
+        const sDb = section('Modo BD', lblUseDb);
+
+        const inpDocTipoId = el('input', 'input');
+        inpDocTipoId.type = 'number';
+        inpDocTipoId.min = '0';
+        inpDocTipoId.placeholder = 'Ej: 1';
+        inpDocTipoId.value = String(toInt(p.docTipoId, 0) || '');
+        const sDocTipo = section('DocTipoId (solo si Modo BD)', inpDocTipoId);
+
+        const hintDb = el('div', 'hint');
+        hintDb.innerHTML =
+            'Si activás <b>Modo BD</b>, el nodo carga reglas desde <code>WF_DocTipoReglaExtract</code> ' +
+            'por <code>DocTipoId</code>. En este modo <b>NO</b> se usa <code>rulesJson</code>.';
+        sDb.appendChild(hintDb);
+
+        // === rulesJson (legacy) ===
+        const taRules = el('textarea', 'textarea');
+        taRules.rows = 12;
+        taRules.wrap = 'off';
+        taRules.spellcheck = false;
+        taRules.style.fontFamily = 'Consolas, Monaco, monospace';
+        taRules.style.fontSize = '12px';
+        taRules.value = (p.rulesJson !== undefined && p.rulesJson !== null) ? String(p.rulesJson) : '';
+
+        // Sección rulesJson
+        const sRules = section('Reglas JSON (rulesJson) — LEGACY', taRules);
+
+        // Botón "Formatear JSON" (NO estándar)
+        const topRowRules = el('div', '');
+        topRowRules.style.display = 'flex';
+        topRowRules.style.justifyContent = 'flex-end';
+        topRowRules.style.gap = '8px';
+
+        const bFormatJson = btn('Formatear JSON');
+        bFormatJson.title = 'Formatea el JSON del textarea (pretty print)';
+        topRowRules.appendChild(bFormatJson);
+
+        // Insertarlo arriba del textarea
+        sRules.insertBefore(topRowRules, taRules);
+
+        // Validación JSON en vivo (global)
+        if (window.WF_Json && typeof WF_Json.attachValidator === 'function') {
+            WF_Json.attachValidator(taRules);
+        }
+
+        // Click → formatear (global)
+        if (window.WF_Json && typeof WF_Json.attachFormatterButton === 'function') {
+            WF_Json.attachFormatterButton(bFormatJson, taRules);
+        }
+
+        const hintRules = el('div', 'hint');
+        hintRules.innerHTML =
+            'Legacy: se guarda tal cual en el nodo. Si lo dejás vacío y guardás, <b>no se persiste</b> la propiedad rulesJson.';
+        sRules.appendChild(hintRules);
+
+        // UI: si está en Modo BD, deshabilitamos rulesJson
+        function refreshUiMode() {
+            const dbOn = chkUseDb.checked === true;
+            setEnabled(inpDocTipoId, dbOn);
+            setEnabled(taRules, !dbOn);
+            setEnabled(bFormatJson, !dbOn);
+
+            // Si enciendo Modo BD, NO borro rulesJson (por si vuelve),
+            // solo lo dejo deshabilitado para que no se use por error.
+        }
+        chkUseDb.addEventListener('change', refreshUiMode);
+        refreshUiMode();
+
+        // === Ayuda / salida (mantengo tu contrato legacy) ===
+        const info = el('div', 'muted');
+        info.style.padding = '6px 0';
+        info.innerHTML =
+            '<div><b>Salida:</b></div>' +
+            '<div>• Escribe en contexto: <code>input.&lt;campo&gt;</code> (por cada regla).</div>';
+
+        // === Botones estándar ===
+        const bTpl = btn('Insertar plantilla');
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
 
-        // =====================================
-        // Acciones
-        // =====================================
+        bTpl.onclick = () => {
+            const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['doc.extract']) || {};
+            if (def.label !== undefined) inpLbl.value = def.label || '';
+            if (def.origen !== undefined) inpOrigen.value = def.origen || 'input.text';
+            if (def.destino !== undefined) inpDestino.value = def.destino || '';
+            if (def.rulesJson !== undefined) taRules.value = def.rulesJson || '';
 
-        bEjemplo.onclick = () => {
-            txtRules.value = `[
-  { "campo": "Indice",   "linea": 1, "colDesde": 1,  "largo": 8 },
-  { "campo": "Cabecera", "linea": 2, "colDesde": 20, "largo": 30 },
-  { "campo": "Fecha",    "linea": 3, "colDesde": 89, "largo": 8 },
-  { "campo": "Nombre",   "regex": "NOMBRE\\\\s*:\\\\s*(.+)", "grupo": 1 }
-]`;
+            // opcional templates para BD (si existieran)
+            if (def.useDbRules !== undefined) chkUseDb.checked = toBool(def.useDbRules);
+            if (def.docTipoId !== undefined) inpDocTipoId.value = String(toInt(def.docTipoId, 0) || '');
+
+            refreshUiMode();
         };
 
-        // === PROBAR EXTRACCIÓN ===
-        bTest.onclick = () => {
-            if (!window.WF_Inspector.previewBox) {
-                window.WF_Inspector.previewBox = document.createElement('pre');
-                window.WF_Inspector.previewBox.style.background = '#111';
-                window.WF_Inspector.previewBox.style.color = '#0f0';
-                window.WF_Inspector.previewBox.style.padding = '8px';
-                window.WF_Inspector.previewBox.style.whiteSpace = 'pre-wrap';
-                window.WF_Inspector.previewBox.style.fontSize = '12px';
-                body.appendChild(window.WF_Inspector.previewBox);
-            }
-
-            let rules;
-            try {
-                rules = JSON.parse(txtRules.value);
-            } catch (err) {
-                window.WF_Inspector.previewBox.textContent =
-                    '❌ ERROR en el JSON de reglas:\n' + err.message;
-                return;
-            }
-
-            if (typeof ctx.previewExtract !== 'function') {
-                window.WF_Inspector.previewBox.textContent =
-                    '⚠ No existe ctx.previewExtract(). Agregar hook en el motor.';
-                return;
-            }
-
-            const origen = inpOrigen.value.trim() || 'input.text';
-
-            const result = ctx.previewExtract(origen, rules);
-
-            window.WF_Inspector.previewBox.textContent =
-                'Resultado de prueba:\n' + JSON.stringify(result, null, 2);
-        };
-
-        // === GUARDAR ===
         bSave.onclick = () => {
-            node.label = inpLbl.value || 'Extraer datos';
+            node.label = (inpLbl.value || '').trim() || node.label || 'Extraer de texto';
 
-            node.params = {
-                origen: inpOrigen.value || 'input.text',
-                rulesJson: txtRules.value || ''
-            };
+            const origen = (inpOrigen.value || '').trim() || 'input.text';
+            const destino = (inpDestino.value || '').trim();
+
+            const dbOn = chkUseDb.checked === true;
+            const docTipoId = toInt(inpDocTipoId.value, 0);
+
+            const newParams = { origen: origen };
+            if (destino) newParams.destino = destino;
+
+            if (dbOn) {
+                // ✅ MODO BD: NO guardamos rulesJson
+                newParams.useDbRules = true;
+                if (docTipoId > 0) newParams.docTipoId = docTipoId;
+            } else {
+                // ✅ LEGACY: guardamos rulesJson SOLO si hay contenido
+                const rules = (taRules.value || '').trim();
+                if (rules) newParams.rulesJson = rules;
+
+                // por las dudas, NO dejamos un useDbRules viejo
+                // (si el usuario lo desactivó)
+                // (no hace falta setear false)
+            }
+
+            node.params = newParams;
 
             ensurePosition(node);
-
-            // Actualizar título en el canvas
-            const nd = nodeEl(node.id);
-            if (nd) {
-                const t = nd.querySelector('.node__title');
-                if (t) t.textContent = node.label;
-            }
+            setNodeTitle(ctx, node);
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
 
             setTimeout(() => {
-                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+                try { ctx.drawEdges(); } catch (e) { /* noop */ }
             }, 0);
         };
 
-        // === ELIMINAR NODO ===
-        bDel.onclick = () => {
+        bDel.onclick = () => removeNodeAndEdges(node, ctx);
 
-            if (Array.isArray(ctx.edges)) {
-                for (let i = ctx.edges.length - 1; i >= 0; i--) {
-                    const e = ctx.edges[i];
-                    if (e.from === node.id || e.to === node.id) {
-                        ctx.edges.splice(i, 1);
-                    }
-                }
-            }
-
-            if (Array.isArray(ctx.nodes)) {
-                for (let i = ctx.nodes.length - 1; i >= 0; i--) {
-                    if (ctx.nodes[i].id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
-                }
-            }
-
-            const nd = nodeEl(node.id);
-            if (nd) nd.remove();
-
-            ctx.drawEdges();
-            ctx.select(null);
-        };
-
-        // =====================================
-        // Armar DOM final
-        // =====================================
+        // Render
         body.appendChild(sLbl);
         body.appendChild(sOrigen);
-        body.appendChild(sRules);
-        body.appendChild(rowButtons(bSave, bDel, bEjemplo, bTest));
+        body.appendChild(sDestino);
 
+        body.appendChild(sDb);
+        body.appendChild(sDocTipo);
+
+        body.appendChild(sRules);
+        body.appendChild(info);
+        body.appendChild(rowButtons(bTpl, bSave, bDel));
     });
 })();

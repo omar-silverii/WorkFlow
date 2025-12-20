@@ -107,5 +107,54 @@ namespace Intranet.WorkflowStudio.Runtime
                 return new ResultadoEjecucion { Etiqueta = "error" };
             }
         }
+
+        // ============================================================
+        // Helpers reutilizables (para otros handlers)
+        // ============================================================
+
+        /// <summary>
+        /// Obtiene DocTipoId y ContextPrefix desde dbo.WF_DocTipo por Codigo (solo activos).
+        /// Usa la misma connectionStringName que el nodo (default: DefaultConnection).
+        /// </summary>
+        public async Task<(int DocTipoId, string ContextPrefix)> GetDocTipoByCodigoAsync(
+            string codigo,
+            string connectionStringName = "DefaultConnection",
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(codigo))
+                throw new ArgumentException("codigo requerido", nameof(codigo));
+
+            // 1) resolver cadena de conexión (igual que en EjecutarAsync)
+            var csItem = ConfigurationManager.ConnectionStrings[connectionStringName];
+            if (csItem == null)
+                throw new InvalidOperationException($"ConnectionString '{connectionStringName}' no encontrada");
+
+            string cnnString = csItem.ConnectionString;
+
+            // 2) query
+            const string sql = @"
+SELECT TOP (1) DocTipoId, ContextPrefix
+FROM dbo.WF_DocTipo WITH (READPAST)
+WHERE Codigo = @Codigo AND EsActivo = 1;";
+
+            using (var cn = new SqlConnection(cnnString))
+            using (var cmd = new SqlCommand(sql, cn))
+            {
+                cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 50).Value = codigo.Trim();
+
+                await cn.OpenAsync(ct);
+                using (var dr = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow, ct))
+                {
+                    if (!await dr.ReadAsync(ct))
+                        throw new InvalidOperationException($"DocTipo inexistente o inactivo: '{codigo}'");
+
+                    int docTipoId = dr.GetInt32(0);
+                    string prefix = dr.GetString(1);
+
+                    return (docTipoId, prefix);
+                }
+            }
+        }
+
     }
 }

@@ -1,1 +1,1 @@
-﻿<%@ WebHandler Language="C#" CodeBehind="Generico.ashx.cs" Class="Api" %>
+﻿<%@ WebHandler Language="C#" CodeBehind="Generico.ashx.cs" Class="Api.Generico" %>

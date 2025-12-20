@@ -5,11 +5,17 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
+// === NUEVO: SQL ===
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+
 namespace Intranet.WorkflowStudio.WebForms
 {
     public class HDocExtract : IManejadorNodo
     {
         public string TipoNodo => "doc.extract";
+
         private static string GetString(IDictionary<string, object> p, string key)
         {
             if (p != null && p.TryGetValue(key, out var v) && v != null)
@@ -17,10 +23,80 @@ namespace Intranet.WorkflowStudio.WebForms
             return null;
         }
 
+        private static bool GetBool(IDictionary<string, object> p, string key, bool defaultValue)
+        {
+            var s = GetString(p, key);
+            if (string.IsNullOrWhiteSpace(s)) return defaultValue;
+
+            if (bool.TryParse(s, out var b)) return b;
+            if (s == "1") return true;
+            if (s == "0") return false;
+            return defaultValue;
+        }
+
+        private static int GetInt(IDictionary<string, object> p, string key, int defaultValue)
+        {
+            var s = GetString(p, key);
+            if (string.IsNullOrWhiteSpace(s)) return defaultValue;
+            if (int.TryParse(s, out var i)) return i;
+            return defaultValue;
+        }
+
+        private static string NormalizeKey(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return "campo";
+
+            // 1) Trim + sacar ':' final típico de labels
+            s = s.Trim();
+            while (s.EndsWith(":")) s = s.Substring(0, s.Length - 1).Trim();
+
+            // 2) Pasar a minúsculas
+            s = s.ToLowerInvariant();
+
+            // 3) Quitar acentos/diacríticos
+            s = RemoveDiacritics(s);
+
+            // 4) Reemplazar todo lo que no sea [a-z0-9] por _
+            var chars = s.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                char c = chars[i];
+                bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+                chars[i] = ok ? c : '_';
+            }
+
+            var cleaned = new string(chars);
+
+            // 5) Compactar ___
+            while (cleaned.Contains("__")) cleaned = cleaned.Replace("__", "_");
+
+            cleaned = cleaned.Trim('_');
+            if (cleaned.Length == 0) cleaned = "campo";
+
+            return cleaned;
+        }
+
+        private static string RemoveDiacritics(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            var normalized = text.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder(normalized.Length);
+
+            foreach (var ch in normalized)
+            {
+                var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+                if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+
+            return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+        }
+
+
         public Task<ResultadoEjecucion> EjecutarAsync(
-            ContextoEjecucion ctx,
-            NodeDef nodo,
-            CancellationToken ct)
+    ContextoEjecucion ctx,
+    NodeDef nodo,
+    CancellationToken ct)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (nodo == null) throw new ArgumentNullException(nameof(nodo));
@@ -29,8 +105,17 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var rulesJson = GetString(p, "rulesJson");
 
-            // --- Determinar si es modo legacy o modo nuevo ---
-            if (!string.IsNullOrWhiteSpace(rulesJson))
+            // ============================================================
+            // CAMBIO 2 (CLAVE): si useDbRules=true, IGNORAMOS rulesJson y forzamos SQL
+            // ============================================================
+            bool useDbRules = GetBool(p, "useDbRules", defaultValue: false);
+            if (useDbRules)
+                rulesJson = null;
+
+            // ============================================================
+            // 1) Si hay rulesJson (y NO estoy forzando DB), ejecutar como antes (legacy o modo nuevo)
+            // ============================================================
+            if (!useDbRules && !string.IsNullOrWhiteSpace(rulesJson) && rulesJson.Trim().Length > 2)
             {
                 var trimmed = rulesJson.TrimStart();
 
@@ -74,10 +159,48 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
             }
 
-            // Modo nuevo sin rulesJson
+            // ============================================================
+            // 2) SQL: cargar reglas desde BD si useDbRules=true o si no vino rulesJson
+            // ============================================================
+            try
+            {
+                // DocTipoId: prioridad -> params del nodo -> ctx
+                int docTipoId = GetInt(p, "docTipoId", 0);
+                if (docTipoId <= 0) docTipoId = GetDocTipoId(ctx);
+
+                if (useDbRules || string.IsNullOrWhiteSpace(rulesJson))
+                {
+                    if (docTipoId > 0)
+                    {
+                        var reglasSql = CargarReglasDesdeSql(docTipoId, p, ct);
+                        if (reglasSql != null && reglasSql.Count > 0)
+                        {
+                            var resSql = EjecutarLegacyConReglas(ctx, p, reglasSql, normalizeKeys: true);
+                            return Task.FromResult(resSql);
+                        }
+                        else
+                        {
+                            ctx.Log($"[doc.extract] (sql) sin reglas para DocTipoId={docTipoId}.");
+                        }
+                    }
+                    else
+                    {
+                        ctx.Log("[doc.extract] (sql) DocTipoId no encontrado (params.docTipoId ni ctx.wf.docTipoId).");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ctx.Log("[doc.extract] (sql) error al cargar reglas: " + ex.Message);
+            }
+
+            // ============================================================
+            // 3) Fallback: modo nuevo (regex suelto)
+            // ============================================================
             var res = EjecutarModoRegex(ctx, p);
             return Task.FromResult(res);
         }
+
 
         // ============================================================
         // MODO NUEVO — REGEX
@@ -238,6 +361,67 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             ctx.Log($"[doc.extract] (legacy) Reglas aplicadas: fixed={fixedCount}, regex={regexCount}.");
+            return new ResultadoEjecucion { Etiqueta = "always" };
+        }
+
+        // ============================================================
+        // NUEVO: LEGACY usando reglas ya cargadas (SQL)
+        // ============================================================
+
+        private ResultadoEjecucion EjecutarLegacyConReglas(
+            ContextoEjecucion ctx,
+            IDictionary<string, object> p,
+            List<ReglaDocExtract> reglas,
+            bool normalizeKeys)
+        {
+            string origenKey = GetString(p, "origen");
+            if (string.IsNullOrWhiteSpace(origenKey))
+                origenKey = "input.text";
+
+            if (!ctx.Estado.TryGetValue(origenKey, out var raw) || raw == null)
+            {
+                ctx.Log($"[doc.extract/error] (sql) No se encontró ctx.Estado[\"{origenKey}\"]");
+                return new ResultadoEjecucion { Etiqueta = "error" };
+            }
+
+            string texto = Convert.ToString(raw) ?? "";
+            var lineas = NormalizarLineas(texto);
+
+            int fixedCount = 0, regexCount = 0;
+
+            foreach (var reg in reglas)
+            {
+                if (string.IsNullOrWhiteSpace(reg.Campo))
+                    continue;
+
+                var campo = (reg.Campo ?? "").Trim();
+                var campoKey = normalizeKeys ? NormalizeKey(campo) : campo;
+                string key = "input." + campoKey;
+
+                if (reg.Linea.HasValue && reg.ColDesde.HasValue && reg.Largo.HasValue)
+                {
+                    string valor = ExtraerFixed(lineas, reg, ctx);
+                    if (valor != null)
+                    {
+                        ctx.Estado[key] = valor;
+                        fixedCount++;
+                    }
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(reg.Regex))
+                {
+                    string valor = ExtraerRegex(texto, reg, ctx);
+                    if (valor != null)
+                    {
+                        ctx.Estado[key] = valor;
+                        regexCount++;
+                    }
+                    continue;
+                }
+            }
+
+            ctx.Log($"[doc.extract] (sql/legacy) Reglas aplicadas: fixed={fixedCount}, regex={regexCount}.");
             return new ResultadoEjecucion { Etiqueta = "always" };
         }
 
@@ -481,7 +665,78 @@ namespace Intranet.WorkflowStudio.WebForms
             }
             var lastKey = parts[parts.Length - 1];
             current[lastKey] = value;
-            
+        }
+
+        // ============================================================
+        // NUEVO: helpers SQL (mínimos)
+        // ============================================================
+
+        private static int GetDocTipoId(ContextoEjecucion ctx)
+        {
+            if (ctx?.Estado == null) return 0;
+
+            if (ctx.Estado.TryGetValue("wf.docTipoId", out var v) && v != null)
+            {
+                if (int.TryParse(Convert.ToString(v), out var id)) return id;
+            }
+
+            // fallback por las dudas (si alguna vez lo guardás distinto)
+            if (ctx.Estado.TryGetValue("docTipoId", out var v2) && v2 != null)
+            {
+                if (int.TryParse(Convert.ToString(v2), out var id2)) return id2;
+            }
+
+            return 0;
+        }
+
+        private static List<ReglaDocExtract> CargarReglasDesdeSql(int docTipoId, IDictionary<string, object> p, CancellationToken ct)
+        {
+            // Por defecto DefaultConnection (igual que venís usando)
+            string cnnName = GetString(p, "connectionStringName");
+            if (string.IsNullOrWhiteSpace(cnnName)) cnnName = "DefaultConnection";
+
+            var csItem = ConfigurationManager.ConnectionStrings[cnnName];
+            if (csItem == null)
+                throw new InvalidOperationException($"ConnectionString '{cnnName}' no encontrada");
+
+            string cnnString = csItem.ConnectionString;
+
+            var list = new List<ReglaDocExtract>();
+
+            using (var cn = new SqlConnection(cnnString))
+            using (var cmd = new SqlCommand(@"
+SELECT Campo, Regex, Grupo
+FROM dbo.WF_DocTipoReglaExtract
+WHERE DocTipoId = @DocTipoId
+  AND Activo = 1
+ORDER BY Orden, Id;", cn))
+            {
+                cmd.Parameters.Add("@DocTipoId", SqlDbType.Int).Value = docTipoId;
+
+                cn.Open(); // sync OK (handler ya es sync, no queremos tocar tu firma)
+                using (var rdr = cmd.ExecuteReader())
+                {
+                    while (rdr.Read())
+                    {
+                        var campo = rdr["Campo"] == DBNull.Value ? null : Convert.ToString(rdr["Campo"]);
+                        var regex = rdr["Regex"] == DBNull.Value ? null : Convert.ToString(rdr["Regex"]);
+                        int? grupo = null;
+                        if (rdr["Grupo"] != DBNull.Value)
+                        {
+                            if (int.TryParse(Convert.ToString(rdr["Grupo"]), out var g)) grupo = g;
+                        }
+
+                        list.Add(new ReglaDocExtract
+                        {
+                            Campo = campo,
+                            Regex = regex,
+                            Grupo = grupo
+                        });
+                    }
+                }
+            }
+
+            return list;
         }
     }
 }

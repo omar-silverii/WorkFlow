@@ -40,10 +40,16 @@
 
     // ====== Catálogo de nodos (profesional, en español)
     var CATALOG = [
-        // Disparadores
-        { key: "trigger.webhook", label: "Webhook", tint: "#0ea5e9", icon: "globe" },
-        { key: "trigger.cron", label: "Programador (Cron)", tint: "#0ea5e9", icon: "clock" },
-        { key: "trigger.queue", label: "Disparador de Cola", tint: "#0ea5e9", icon: "queue" },
+        // Utilidad / Operación
+        { key: "util.start", label: "Inicio", tint: "#0f766e", icon: "play" },
+        { key: "util.end", label: "Fin", tint: "#0f766e", icon: "stop" },
+        { key: "util.logger", label: "Logger", tint: "#0f766e", icon: "server" },
+        { key: "util.docTipo.resolve", label: "Documento: Resolver tipo", tint: "#0f766e", icon: "file" },
+        { key: "util.notify", label: "Notificar", tint: "#0f766e", icon: "bell" },
+        { key: "util.error", label: "Manejador de Error", tint: "#0f766e", icon: "alert" },
+        { key: "util.subflow", label: "Subflujo", tint: "#0f766e", icon: "workflow" },
+        // Tareas humanas
+        { key: "human.task", label: "Tarea humana", tint: "#0f766e", icon: "user" },
 
         // Control
         { key: "control.if", label: "Condición (If)", tint: "#8b5cf6", icon: "filter" },
@@ -81,129 +87,128 @@
         { key: "ai.call", label: "AI / LLM", tint: "#16a34a", icon: "bot" },
         { key: "doc.extract", label: "Extraer de texto", tint: "#16a34a", icon: "code" },  // <<< NUEVO
 
-        // Utilidad / Operación
-        { key: "util.start", label: "Inicio", tint: "#0f766e", icon: "play" },
-        { key: "util.end", label: "Fin", tint: "#0f766e", icon: "stop" },
-        { key: "util.logger", label: "Logger", tint: "#0f766e", icon: "server" },
-        { key: "util.notify", label: "Notificar", tint: "#0f766e", icon: "bell" },
-        { key: "util.error", label: "Manejador de Error", tint: "#0f766e", icon: "alert" },
-        { key: "util.subflow", label: "Subflujo", tint: "#0f766e", icon: "workflow" },
-        // Tareas humanas
-        { key: "human.task", label: "Tarea humana", tint: "#0f766e", icon: "user" }
+        // Disparadores
+        { key: "trigger.webhook", label: "Webhook", tint: "#0ea5e9", icon: "globe" },
+        { key: "trigger.cron", label: "Programador (Cron)", tint: "#0ea5e9", icon: "clock" },
+        { key: "trigger.queue", label: "Disparador de Cola", tint: "#0ea5e9", icon: "queue" }
+        
     ];
 
     // ====== Grupos
     var GROUPS = [
-        { name: "Disparadores", items: ["trigger.webhook", "trigger.cron", "trigger.queue"] },
+        { name: "Utilidad / Operación", items: ["util.start", "util.end", "util.logger", "util.docTipo.resolve", "util.notify", "util.error", "util.subflow", "human.task"] },
         { name: "Control", items: ["control.if", "control.switch", "control.parallel", "control.join", "control.loop", "control.delay", "control.retry", "control.ratelimit"] },
         { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada", "doc.load"] },
         { name: "Transformación y Lógica", items: ["transform.map", "code.function", "code.script", "state.vars", "config.secrets", "ai.call", "doc.extract"] },
-        { name: "Utilidad / Operación", items: ["util.start", "util.end", "util.logger", "util.notify", "util.error", "util.subflow", "human.task"] }
+        { name: "Disparadores", items: ["trigger.webhook", "trigger.cron", "trigger.queue"] }
     ];
 
-    // ====== Plantillas de parámetros (aparecen en el Inspector → Insertar plantilla)
-    var PARAM_TEMPLATES = {
-        // Disparadores
-        "trigger.webhook": { path: "/hook/orden", secret: "cambiar-esto", method: "POST", auth: false },
-        "trigger.cron": { cron: "*/5 * * * *", zonaHoraria: "America/Argentina/Buenos_Aires" },
-        "trigger.queue": { broker: "rabbitmq", queue: "entrantes", ack: true },
+    //// ====== Plantillas de parámetros (aparecen en el Inspector → Insertar plantilla)
+    //var PARAM_TEMPLATES = {
+    //    // Disparadores
+    //    "trigger.webhook": { path: "/hook/orden", secret: "cambiar-esto", method: "POST", auth: false },
+    //    "trigger.cron": { cron: "*/5 * * * *", zonaHoraria: "America/Argentina/Buenos_Aires" },
+    //    "trigger.queue": { broker: "rabbitmq", queue: "entrantes", ack: true },
 
-        // Control
-        "control.if": { expression: "${payload.status} == 200" },
-        "control.switch": { casos: { ok: "${payload.ok}", error: "${payload.error}" }, default: "ok" },
-        "control.parallel": { ramas: 2, maxConcurrencia: 4 },
-        "control.join": { tipo: "all", timeoutMs: 30000 },
-        "control.loop": { forEach: "${items}", itemVar: "item", max: 100 },
-        "control.delay": { ms: 1000 },
-        "control.retry": { reintentos: 3, backoffMs: 500 },
-        "control.ratelimit": { porSegundos: 60, max: 100 },
+    //    // Control
+    //    "control.if": { expression: "${payload.status} == 200" },
+    //    "control.switch": { casos: { ok: "${payload.ok}", error: "${payload.error}" }, default: "ok" },
+    //    "control.parallel": { ramas: 2, maxConcurrencia: 4 },
+    //    "control.join": { tipo: "all", timeoutMs: 30000 },
+    //    "control.loop": { forEach: "${items}", itemVar: "item", max: 100 },
+    //    "control.delay": { ms: 1000 },
+    //    "control.retry": { reintentos: 3, backoffMs: 500 },
+    //    "control.ratelimit": { porSegundos: 60, max: 100 },
 
-        // Datos & Integraciones
-        "http.request": {
-            url: "https://api.example.com",
-            method: "GET",
-            headers: {},
-            query: {},
-            body: null,
-            timeoutMs: 10000
-        },
-        "data.sql": {
-            connection: "Server=.;Database=MiDb;Trusted_Connection=True;",
-            query: "SELECT TOP 10 * FROM dbo.Usuarios ORDER BY Id DESC",
-            parameters: {},
-            resultMode: "NonQuery" // NonQuery | Scalar | DataTable
-        },
-        "data.redis.get": { connection: "localhost:6379", key: "mi-clave" },
-        "data.redis.set": { connection: "localhost:6379", key: "mi-clave", value: "${payload}", ttlSeconds: 300 },
-        "file.read": {
-            path: "C:/data/entrada.json",
-            encoding: "utf-8",
-            salida: "archivo"
-        },
-        "file.write": {
-            path: "C:/data/salida.json",
-            encoding: "utf-8",
-            overwrite: true,
-            origen: "archivo"
-        },
-        "email.send": { smtp: "smtp.miempresa.com", from: "noreply@miempresa.com", to: ["ops@miempresa.com"], subject: "Asunto", html: "<b>Hola</b>" },
-        "chat.notify": { provider: "slack", webhookUrl: "https://hooks.slack.com/services/xxx", channel: "#general", message: "Hola", mention: [] },
-        "cloud.storage": { provider: "s3", bucket: "mi-bucket", key: "ruta/archivo", region: "us-east-1" },
-        "queue.publish": { broker: "rabbitmq", queue: "jobs", payload: {} },
-        "queue.consume": { broker: "rabbitmq", queue: "jobs", prefetch: 10 },
-        "ftp.get": { host: "ftp.miempresa.com", user: "usuario", password: "***", remotePath: "/in/archivo.csv", localPath: "C:/in/archivo.csv" },
-        "ftp.put": { host: "ftp.miempresa.com", user: "usuario", password: "***", localPath: "C:/out/archivo.csv", remotePath: "/out/archivo.csv" },
-        "doc.entrada": {
-            modo: "simulado",
-            extensiones: ["pdf", "docx"],
-            maxMB: 10,
-            salida: "documento"
-        },
-        "doc.load": {
-            path: "C:/documentos/entrada.pdf",
-            mode: "auto"
-            // salida fija en el handler:
-            //   input.filename
-            //   input.text
-        },
+    //    // Datos & Integraciones
+    //    "http.request": {
+    //        url: "https://api.example.com",
+    //        method: "GET",
+    //        headers: {},
+    //        query: {},
+    //        body: null,
+    //        timeoutMs: 10000
+    //    },
+    //    "data.sql": {
+    //        connection: "Server=.;Database=MiDb;Trusted_Connection=True;",
+    //        query: "SELECT TOP 10 * FROM dbo.Usuarios ORDER BY Id DESC",
+    //        parameters: {},
+    //        resultMode: "NonQuery" // NonQuery | Scalar | DataTable
+    //    },
+    //    "data.redis.get": { connection: "localhost:6379", key: "mi-clave" },
+    //    "data.redis.set": { connection: "localhost:6379", key: "mi-clave", value: "${payload}", ttlSeconds: 300 },
+    //    "file.read": {
+    //        path: "C:/data/entrada.json",
+    //        encoding: "utf-8",
+    //        salida: "archivo"
+    //    },
+    //    "file.write": {
+    //        path: "C:/data/salida.json",
+    //        encoding: "utf-8",
+    //        overwrite: true,
+    //        origen: "archivo"
+    //    },
+    //    "email.send": { smtp: "smtp.miempresa.com", from: "noreply@miempresa.com", to: ["ops@miempresa.com"], subject: "Asunto", html: "<b>Hola</b>" },
+    //    "chat.notify": { provider: "slack", webhookUrl: "https://hooks.slack.com/services/xxx", channel: "#general", message: "Hola", mention: [] },
+    //    "cloud.storage": { provider: "s3", bucket: "mi-bucket", key: "ruta/archivo", region: "us-east-1" },
+    //    "queue.publish": { broker: "rabbitmq", queue: "jobs", payload: {} },
+    //    "queue.consume": { broker: "rabbitmq", queue: "jobs", prefetch: 10 },
+    //    "ftp.get": { host: "ftp.miempresa.com", user: "usuario", password: "***", remotePath: "/in/archivo.csv", localPath: "C:/in/archivo.csv" },
+    //    "ftp.put": { host: "ftp.miempresa.com", user: "usuario", password: "***", localPath: "C:/out/archivo.csv", remotePath: "/out/archivo.csv" },
+    //    "doc.entrada": {
+    //        modo: "simulado",
+    //        extensiones: ["pdf", "docx"],
+    //        maxMB: 10,
+    //        salida: "documento"
+    //    },
+    //    "doc.load": {
+    //        path: "C:/documentos/entrada.pdf",
+    //        mode: "auto"
+    //        // salida fija en el handler:
+    //        //   input.filename
+    //        //   input.text
+    //    },
 
-        // Transformación & Lógica
-        "transform.map": { mapping: { "out.campo": "${in.campo}" } },
-        "code.function": { code: "return input;" },
-        "code.script": { language: "js", code: "return input;" },
-        "state.vars": { set: { clave: "valor" }, get: ["clave"] },
-        "config.secrets": { set: { API_KEY: "***" }, get: ["API_KEY"] },
-        "ai.call": { provider: "openai", model: "gpt-4o-mini", prompt: "Decí hola", temperature: 0.2, maxTokens: 256 },
-        "doc.extract": {
-            // De dónde lee el texto: por defecto input.text
-            origen: "input.text",
+    //    // Transformación & Lógica
+    //    "transform.map": { mapping: { "out.campo": "${in.campo}" } },
+    //    "code.function": { code: "return input;" },
+    //    "code.script": { language: "js", code: "return input;" },
+    //    "state.vars": { set: { clave: "valor" }, get: ["clave"] },
+    //    "config.secrets": { set: { API_KEY: "***" }, get: ["API_KEY"] },
+    //    "ai.call": { provider: "openai", model: "gpt-4o-mini", prompt: "Decí hola", temperature: 0.2, maxTokens: 256 },
+    //    "doc.extract": {
+    //        // De dónde lee el texto: por defecto input.text
+    //        origen: "input.text",
 
-            // Reglas legacy en JSON (las mismas que ponés en el Inspector → rulesJson)
-            rulesJson: `[
-                          { "campo": "Proveedor", "regex": "Proveedor:\\\\s*(.+)", "grupo": 1 },
-                          { "campo": "Fecha",     "regex": "Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})", "grupo": 1 }
-                        ]`
-        },
+    //        // Reglas legacy en JSON (las mismas que ponés en el Inspector → rulesJson)
+    //        rulesJson: `[
+    //                      { "campo": "Proveedor", "regex": "Proveedor:\\\\s*(.+)", "grupo": 1 },
+    //                      { "campo": "Fecha",     "regex": "Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})", "grupo": 1 }
+    //                    ]`
+    //    },
 
-        // Utilidad / Operación
-        "util.start": {},
-        "util.end": {},
-        "util.logger": { level: "Info", message: "Comenzó" },
-        "util.notify": { tipo: "email", destino: "ops@miempresa.com", mensaje: "Finalizó el flujo" },
-        "util.error": { capturar: true, volverAIntentar: false, notificar: true },
-        "util.subflow": { workflowId: "reemplazar-con-id" },
-        "human.task": {
-            titulo: "Tarea para ${wf.instanceId}",
-            descripcion: "Completar acción pendiente",
-            rol: "RRHH",
-            usuarioAsignado: "",
-            deadlineMinutes: 1440,
-            metadata: {
-                origen: "workflow",
-                instanciaId: "${wf.instanceId}"
-            }
-        }
-    };
+    //    // Utilidad / Operación
+    //    "util.start": {},
+    //    "util.end": {},
+    //    "util.logger": { level: "Info", message: "Comenzó" },
+    //    "util.docTipo.resolve": { docTipoCodigo: "NOTA_PEDIDO" }, // << NUEVO
+    //    "util.notify": { tipo: "email", destino: "ops@miempresa.com", mensaje: "Finalizó el flujo" },
+    //    "util.error": { capturar: true, volverAIntentar: false, notificar: true },
+    //    "util.subflow": { workflowId: "reemplazar-con-id" },
+    //    "human.task": {
+    //        titulo: "Tarea para ${wf.instanceId}",
+    //        descripcion: "Completar acción pendiente",
+    //        rol: "RRHH",
+    //        usuarioAsignado: "",
+    //        deadlineMinutes: 1440,
+    //        metadata: {
+    //            origen: "workflow",
+    //            instanciaId: "${wf.instanceId}"
+    //        }
+    //    }
+    //};
+
+    var PARAM_TEMPLATES = (window.PARAM_TEMPLATES || {});
 
     // Exponer en global
     global.WorkflowData = {

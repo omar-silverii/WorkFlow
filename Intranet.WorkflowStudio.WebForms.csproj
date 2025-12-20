@@ -270,8 +270,8 @@
     <Content Include="Content\bootstrap-grid.rtl.css.map" />
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
-    <Content Include="Scripts\inspector.control.delay.js" />
-    <Content Include="Scripts\inspector.logger.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.delay.js" />
+    <Content Include="Scripts\Inspectors\inspector.logger.js" />
     <Content Include="Scripts\Inspectors\inspector.chat.notify.js" />
     <Content Include="Scripts\Inspectors\inspector.core.js" />
     <Content Include="Scripts\Inspectors\inspector.data.sql.js" />
@@ -287,16 +287,19 @@
     <Content Include="Scripts\Inspectors\inspector.human.task.js" />
     <Content Include="Scripts\Inspectors\inspector.if.js" />
     <Content Include="Scripts\Inspectors\inspector.queue.publish.js" />
+    <Content Include="Scripts\Inspectors\inspector.util.docTipo.resolve.js" />
     <Content Include="Scripts\Inspectors\inspector.util.error.js" />
     <Content Include="Scripts\Inspectors\inspector.util.notify.js" />
+    <Content Include="Scripts\Inspectors\json.validator.js" />
     <Content Include="Scripts\workflow.catalog.js" />
     <Content Include="Scripts\workflow.demo.js" />
-    <Content Include="Scripts\workflow.inspector.file.read.js" />
-    <Content Include="Scripts\workflow.inspector.file.write.js" />
     <Content Include="Scripts\workflow.templates.js" />
     <Content Include="Scripts\workflow.ui.js" />
     <Content Include="Styles\workflow.ui.css" />
+    <Content Include="Styles\ws-theme.css" />
     <Content Include="WF_Definiciones.aspx" />
+    <Content Include="WF_DocTipo.aspx" />
+    <Content Include="WF_DocTipoReglas.aspx" />
     <Content Include="WF_Instancias.aspx" />
     <Content Include="WF_Tareas.aspx" />
     <Content Include="WF_Tarea_Detalle.aspx" />
@@ -361,22 +364,34 @@
     <Compile Include="Api\Score.ashx.cs">
       <DependentUpon>Score.ashx</DependentUpon>
     </Compile>
+    <Compile Include="App_Code\Handlers\HChatNotify.cs" />
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
     <Compile Include="App_Code\Handlers\HDocEntrada.cs" />
     <Compile Include="App_Code\Handlers\HDocExtract.cs" />
+    <Compile Include="App_Code\Handlers\HDocTipoResolve.cs" />
     <Compile Include="App_Code\Handlers\HEmailSend.cs" />
+    <Compile Include="App_Code\Handlers\HEnd.cs" />
+    <Compile Include="App_Code\Handlers\HError.cs" />
     <Compile Include="App_Code\Handlers\HFileRead.cs" />
     <Compile Include="App_Code\Handlers\HFileWrite.cs" />
     <Compile Include="App_Code\Handlers\HFtpPut.cs" />
     <Compile Include="App_Code\Handlers\HHttpRequest.cs" />
     <Compile Include="App_Code\Handlers\HHumanTask.cs" />
+    <Compile Include="App_Code\Handlers\HIf.cs" />
     <Compile Include="App_Code\Handlers\HLogger.cs" />
+    <Compile Include="App_Code\Handlers\HNotify.cs" />
     <Compile Include="App_Code\Handlers\HParallel.cs" />
     <Compile Include="App_Code\Handlers\HQueuePublish.cs" />
     <Compile Include="App_Code\Handlers\HQueueConsume.cs" />
     <Compile Include="App_Code\Handlers\HQueuePublishSql.cs" />
+    <Compile Include="App_Code\Handlers\HStart.cs" />
     <Compile Include="App_Code\Handlers\HUtilError.cs" />
     <Compile Include="App_Code\Handlers\HUtilNotify.cs" />
+    <Compile Include="App_Code\Handlers\ManejadorSwitch.cs" />
+    <Compile Include="App_Code\Handlers\ManejadorDelay.cs" />
+    <Compile Include="App_Code\Handlers\ManejadorLoop.cs" />
+    <Compile Include="App_Code\Handlers\ManejadorEmailSend.cs" />
+    <Compile Include="App_Code\Handlers\TemplateUtil.cs" />
     <Compile Include="App_Code\Manifest.cs" />
     <Compile Include="App_Code\ManifestService.cs" />
     <Compile Include="App_Code\MotorFlujoMinimo.cs" />
@@ -389,6 +404,7 @@
       <DependentUpon>Poliza_Bandeja.aspx</DependentUpon>
     </Compile>
     <Compile Include="Runtime\ManejadorSql.cs" />
+    <Compile Include="Runtime\WfNumbers.cs" />
     <Compile Include="Runtime\WorkflowRuntime.cs" />
     <Compile Include="App_Start\BundleConfig.cs" />
     <Compile Include="About.aspx.cs">
@@ -470,6 +486,20 @@
     </Compile>
     <Compile Include="WF_Definiciones.aspx.designer.cs">
       <DependentUpon>WF_Definiciones.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_DocTipo.aspx.cs">
+      <DependentUpon>WF_DocTipo.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_DocTipo.aspx.designer.cs">
+      <DependentUpon>WF_DocTipo.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_DocTipoReglas.aspx.cs">
+      <DependentUpon>WF_DocTipoReglas.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_DocTipoReglas.aspx.designer.cs">
+      <DependentUpon>WF_DocTipoReglas.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_Instancias.aspx.cs">
       <DependentUpon>WF_Instancias.aspx</DependentUpon>

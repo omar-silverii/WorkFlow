@@ -1,0 +1,17 @@
+EMPRESA ACME S.A.
+Nota de Pedido de Compras N°: NPC-2025-003812
+Fecha: 09/12/2025
+
+Solicitante: Juan Pérez (Legajo 2219)
+Sector: Compras Internas
+
+Item solicitado:
+Código: MAT-55819
+Descripción: Tornillos acero inoxidable 10mm
+Cantidad: 120 unidades
+Monto Estimado: 154.000,00
+
+Motivo:
+Reposición automática según stock mínimo.
+
+Aprobación requerida: Sí

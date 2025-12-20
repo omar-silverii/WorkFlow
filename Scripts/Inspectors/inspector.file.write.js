@@ -40,6 +40,21 @@
         inpOrigen.value = p.origen || 'archivo';
         const sOrigen = section('Origen en contexto (key, ej: payload, archivo, solicitud)', inpOrigen);
 
+        // 6) Contenido (opcional) - plantilla con ${...}
+        const taContent = el('textarea', 'textarea');
+        taContent.rows = 8;
+        taContent.wrap = 'off';
+        taContent.spellcheck = false;
+        taContent.style.fontFamily = 'Consolas, Monaco, monospace';
+        taContent.style.fontSize = '12px';
+        taContent.value = (p.content != null) ? String(p.content) : '';
+        const sContent = section('Contenido (opcional) — si se completa, ignora "origen"', taContent);
+
+        const hintContent = el('div', 'hint');
+        hintContent.innerHTML =
+            'Podés usar <b>${input.xxx}</b>. Ej: <code>codigo=${input.codigo} monto=${input.monto_estimado}</code>';
+        sContent.appendChild(hintContent);
+
         // Botones
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
@@ -61,6 +76,10 @@
                 const t = elNode.querySelector('.node__title');
                 if (t) t.textContent = node.label;
             }
+
+            const content = (taContent.value || '').trim();
+            if (content) node.params.content = content; // solo si hay contenido
+
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
             // === FIX: redraw edges after save ===
@@ -105,6 +124,7 @@
         body.appendChild(sEnc);
         body.appendChild(wrapOv);
         body.appendChild(sOrigen);
+        body.appendChild(sContent);
         body.appendChild(rowButtons(bSave, bDel));
     });
 })();
