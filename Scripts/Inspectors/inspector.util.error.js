@@ -27,6 +27,7 @@
         if (title) title.textContent = node.label || 'Manejador de Error';
         if (sub) sub.textContent = node.key || '';
 
+        // ✅ ESTÁNDAR ÚNICO: params
         var p = node.params || {};
 
         // === Etiqueta ===
@@ -34,7 +35,7 @@
         inpLbl.value = node.label || '';
         var sLbl = section('Etiqueta (label)', inpLbl);
 
-        // === Checkboxes (aceptando nombres viejos y nuevos) ===
+        // === Checkboxes (aceptando nombres viejos y nuevos EN LAS CLAVES) ===
         var capChecked =
             (typeof p.capturarErrores !== 'undefined') ? p.capturarErrores :
                 (typeof p.capturar !== 'undefined') ? p.capturar : false;
@@ -49,11 +50,11 @@
         var ckRetry = checkbox('Volver a intentar', retryChecked);
         var ckNotif = checkbox('Notificar', notifChecked);
 
-        // === Mensaje (NUEVO) ===
+        // === Mensaje ===
         var txtMsg = document.createElement('textarea');
         txtMsg.className = 'input';
         txtMsg.rows = 3;
-        txtMsg.placeholder = 'Mensaje de error. Ej: Fallo en prueba para instancia ${wf.instanceId}';
+        txtMsg.placeholder = 'Mensaje de error. Ej: Fallo en instancia ${wf.instanceId}';
         txtMsg.value = p.mensaje || '';
         var sMsg = section('Mensaje', txtMsg);
 
@@ -63,15 +64,15 @@
         bSave.onclick = function () {
             node.label = inpLbl.value || node.label || 'Manejador de Error';
 
+            // ✅ Guardar SOLO en params (esto es lo que exporta buildWorkflow)
             node.params = {
-                // nombres “nuevos”
                 capturarErrores: !!ckCap.input.checked,
                 reintentar: !!ckRetry.input.checked,
                 notificar: !!ckNotif.input.checked,
                 mensaje: txtMsg.value || ''
             };
 
-            // compatibilidad con nombres viejos
+            // compatibilidad por claves viejas (si algún handler legacy mira esas keys)
             node.params.capturar = node.params.capturarErrores;
             node.params.volverAIntentar = node.params.reintentar;
 
@@ -84,42 +85,33 @@
             }
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
-            setTimeout(() => {
+            setTimeout(function () {
                 try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
             }, 0);
         };
 
-        bDel.onclick = () => {
-            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
+        bDel.onclick = function () {
             if (Array.isArray(ctx.edges)) {
-                for (let i = ctx.edges.length - 1; i >= 0; i--) {
-                    const e = ctx.edges[i];
+                for (var i = ctx.edges.length - 1; i >= 0; i--) {
+                    var e = ctx.edges[i];
                     if (!e) continue;
-                    if (e.from === node.id || e.to === node.id) {
-                        ctx.edges.splice(i, 1);
-                    }
+                    if (e.from === node.id || e.to === node.id) ctx.edges.splice(i, 1);
                 }
             }
 
-            // Eliminar el nodo del array real
             if (Array.isArray(ctx.nodes)) {
-                for (let i = ctx.nodes.length - 1; i >= 0; i--) {
-                    const n = ctx.nodes[i];
-                    if (n && n.id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
+                for (var j = ctx.nodes.length - 1; j >= 0; j--) {
+                    var n = ctx.nodes[j];
+                    if (n && n.id === node.id) ctx.nodes.splice(j, 1);
                 }
             }
 
-            // Quitar del DOM y refrescar canvas
-            const elNode = ctx.nodeEl(node.id);
+            var elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
 
             ctx.drawEdges();
             ctx.select(null);
         };
-
 
         body.appendChild(sLbl);
         body.appendChild(ckCap.wrap);

@@ -24,6 +24,7 @@ namespace Intranet.WorkflowStudio.WebForms
             // Si nos llaman con ?defId=### abrimos esa definición y rehidratamos el canvas
             if (!IsPostBack)
             {
+                lblUser.Text = HttpContext.Current.User.Identity.Name;
                 var qs = Request.QueryString["defId"];
                 int defId;
                 if (int.TryParse(qs, out defId) && defId > 0)
@@ -441,7 +442,7 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
 
             try
             {
-                var wf = MotorDemo.FromJson(json);
+                var wf = WorkflowRunner.FromJson(json);
                 var logs = new List<string>();
                 var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 if (!string.IsNullOrWhiteSpace(json))
@@ -450,10 +451,10 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     seed["input"] = JsonConvert.DeserializeObject<object>(json);
                 }
                 System.Web.HttpContext.Current.Items["WF_SEED"] = seed; // NUEVO: para que el Contexto lo importe
-                await MotorDemo.EjecutarAsync(
+                await WorkflowRunner.EjecutarAsync(
                     wf,
                     s => logs.Add(s),
-                    handlersExtra: new IManejadorNodo[]
+                    handlers: new IManejadorNodo[]
                     {
                         new ManejadorSql(),
                         new HParallel(),

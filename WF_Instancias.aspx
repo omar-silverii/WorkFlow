@@ -5,9 +5,10 @@
     <title>Workflows - Instancias</title>
     <meta charset="utf-8" />
 
+    <link href="Content/bootstrap.min.css" rel="stylesheet" />
     <!-- Si preferís intranet 100% sin Internet, podés copiar bootstrap a Styles/bootstrap.min.css y usar esa ruta local.
          Por ahora, dejo tu CDN tal cual lo enviaste. -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+   <script src="Scripts/bootstrap.bundle.min.js"></script>
     <!-- <link rel="stylesheet" href="Styles/bootstrap.min.css" /> -->
 
     <style>
@@ -56,6 +57,11 @@
                             <asp:LinkButton ID="lnkVerDatos" runat="server" CommandName="VerDatos" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-info mr-1">Datos</asp:LinkButton>
                             <asp:LinkButton ID="lnkVerLog" runat="server" CommandName="VerLog" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-secondary mr-1">Log</asp:LinkButton>
                             <asp:LinkButton ID="lnkRetry" runat="server" CommandName="Reejecutar" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-warning">Re-ejecutar</asp:LinkButton>
+                            <asp:LinkButton ID="lnkHistorial" runat="server"
+                                CssClass="btn btn-sm btn-primary"
+                                OnClientClick='<%# "wfMostrarHistorialInst(" + Eval("Id") + "); return false;" %>'>
+                                Historial
+                            </asp:LinkButton>
                         </ItemTemplate>
                     </asp:TemplateField>
                 </Columns>
@@ -66,7 +72,141 @@
                 <h6 id="lblTituloDetalle" runat="server">Detalle</h6>
                 <pre id="preDetalle" runat="server" class="log-view"></pre>
             </asp:Panel>
+
+            <!-- Modal Historial de Escalamiento (por Instancia) -->
+            <div class="modal fade" id="mdlHistorialEsc" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Historial de escalamiento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div id="histEscLoading" class="py-3">Cargando...</div>
+                    <div id="histEscError" class="alert alert-danger d-none"></div>
+                    <div id="histEscBody" class="d-none"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
         </div>
     </form>
+
+    <script type="text/javascript">
+        async function wfMostrarHistorialInst(instanciaId) {
+        const modalEl = document.getElementById('mdlHistorialEsc');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+        const loading = document.getElementById('histEscLoading');
+        const err = document.getElementById('histEscError');
+        const body = document.getElementById('histEscBody');
+
+        loading.classList.remove('d-none');
+        err.classList.add('d-none');
+        body.classList.add('d-none');
+        body.innerHTML = '';
+
+        modal.show();
+
+        try {
+            const url = '/Api/Generico.ashx?action=instancia.escalamiento.historial&instanciaId=' + encodeURIComponent(instanciaId);
+            const res = await fetch(url, { cache: 'no-store' });
+            const data = await res.json();
+
+            if (!data || data.ok !== true) {
+            throw new Error((data && data.error) ? data.error : 'Respuesta inválida');
+            }
+
+            const items = data.items || [];
+
+            if (items.length === 0) {
+            body.innerHTML = '<div class="text-muted">No hay historial de escalamiento para esta instancia.</div>';
+            } else {
+            // Agrupar por RootId (cadena)
+            const groups = {};
+            for (const it of items) {
+                const k = String(it.rootId || it.id);
+                if (!groups[k]) groups[k] = [];
+                groups[k].push(it);
+            }
+
+            // Render
+            let html = '';
+            const roots = Object.keys(groups).sort((a,b)=> Number(b)-Number(a)); // últimos primero
+
+            for (const rk of roots) {
+                const arr = groups[rk];
+
+                // ordenar por nivel y fecha
+                arr.sort((a,b)=>{
+                const la = a.nivel || 0, lb = b.nivel || 0;
+                if (la !== lb) return la - lb;
+                return String(a.fechaCreacion||'').localeCompare(String(b.fechaCreacion||''));
+                });
+
+                html += `<div class="mb-3 p-3 border rounded">
+                <div class="fw-semibold mb-2">Cadena (rootId = ${escapeHtml(rk)})</div>`;
+
+                for (const it of arr) {
+                const badge = (it.estado || '').toLowerCase() === 'completada'
+                    ? '<span class="badge bg-success">Completada</span>'
+                    : '<span class="badge bg-warning text-dark">Pendiente</span>';
+
+                const resu = it.resultado ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(it.resultado)}</span>` : '';
+                const nivel = (it.nivel != null) ? it.nivel : 0;
+
+                html += `
+                    <div class="d-flex align-items-start mb-2">
+                    <div style="width:70px" class="text-muted small">Nivel ${nivel}</div>
+                    <div class="flex-grow-1 border rounded p-2">
+                        <div class="d-flex justify-content-between">
+                        <div>
+                            <span class="fw-semibold">#${it.id}</span>
+                            <span class="ms-2">${badge}${resu}</span>
+                            <span class="ms-2">Rol: <b>${escapeHtml(it.rolDestino||'')}</b></span>
+                            ${it.origenTareaId ? `<span class="ms-2 text-muted small">OrigenTareaId: ${it.origenTareaId}</span>` : ''}
+                        </div>
+                        <div class="text-muted small">
+                            ${escapeHtml(it.fechaCreacion||'')}${it.fechaCierre ? (' · ' + escapeHtml(it.fechaCierre)) : ''}
+                        </div>
+                        </div>
+                        <div class="mt-1">${escapeHtml(it.titulo||'')}</div>
+                        ${it.origenEscalamientoObj ? `
+                        <details class="mt-2">
+                            <summary class="small">origenEscalamiento</summary>
+                            <pre class="small bg-light p-2 rounded mb-0">${escapeHtml(JSON.stringify(it.origenEscalamientoObj, null, 2))}</pre>
+                        </details>` : ''
+                        }
+                    </div>
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            body.innerHTML = html;
+            }
+
+            loading.classList.add('d-none');
+            body.classList.remove('d-none');
+
+        } catch (e) {
+            loading.classList.add('d-none');
+            err.textContent = 'Error: ' + (e.message || e);
+            err.classList.remove('d-none');
+        }
+        }
+
+        function escapeHtml(s) {
+        return (s ?? '').toString()
+            .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+            .replaceAll('"','&quot;').replaceAll("'","&#039;");
+        }
+    </script>
+
 </body>
 </html>

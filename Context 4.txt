@@ -1,0 +1,160 @@
+📄 CONTEXTO DEL PROYECTO — “Workflow Studio” (RESUMEN OFICIAL)
+🧠 Objetivo
+
+Plataforma genérica de workflows empresariales en ASP.NET WebForms + SQL Server, con:
+
+Editor visual de grafos (nodos/edges en JSON)
+
+Motor de ejecución
+
+Tareas humanas
+
+Reanudación de instancias
+
+Bandejas por usuario/rol/scope
+
+Sin hardcode de procesos
+
+🏗️ Arquitectura
+
+UI: ASP.NET WebForms + Bootstrap 5
+
+Auth: Windows Authentication (AD)
+
+Usuario llega como DOMINIO\usuario
+
+DB: SQL Server (base única: Workflow)
+
+Motor: Runtime propio (WorkflowRunner / MotorFlujo)
+
+📦 Tablas DEFINITIVAS (no discutir)
+WF_Instancia
+
+Id
+
+WF_DefinicionId
+
+Estado
+
+DatosEntrada
+
+DatosContexto
+
+FechaInicio
+
+FechaFin
+
+CreadoPor
+
+TenantId
+
+ProcesoKey
+
+DocTipoId
+
+ScopeKey
+
+EmpresaKey
+
+WF_Tarea
+
+Id
+
+WF_InstanciaId
+
+NodoId
+
+NodoTipo
+
+Titulo
+
+Descripcion
+
+RolDestino
+
+UsuarioAsignado
+
+Estado
+
+Resultado
+
+FechaCreacion
+
+FechaVencimiento
+
+FechaCierre
+
+Datos
+
+ScopeKey
+
+AsignadoA
+
+Seguridad
+
+WF_User
+
+WF_UserPermiso
+
+WF_UsuarioRol
+
+WF_UsuarioScope
+
+🧩 Convenciones CLAVE (NO romper)
+
+InstanciaEstado ≠ TareaEstado
+
+Nunca usar nombres ambiguos (Estado solo)
+
+ProcesoKey viene de WF_Definicion.Codigo
+
+ScopeKey se resuelve por WF_ScopeRegla
+
+Todo es genérico, no existe “orden de compra” hardcodeado
+
+🗂️ Stored Procedures YA CREADOS
+
+WF_Gerente_EnCurso_MiAlcance
+
+WF_Gerente_Historial
+
+WF_Instancia_ActualizarBandejas
+
+WF_Tarea_Get
+(con alias InstanciaEstado / TareaEstado)
+
+🧑‍💼 UI Gerencia
+
+Página:
+
+WF_Gerente_Tareas.aspx
+
+Tabs:
+
+Mis tareas
+
+Por mi rol
+
+Mi alcance
+
+Todas:
+
+Navegan por QueryString
+
+Muestran usuario (OMARD\omard)
+
+Muestran contador de tareas
+
+⚙️ Motor
+
+human.task:
+
+Crea tarea si no existe
+
+Se detiene (wf.detener = true)
+
+Reanuda por wf.startNodeIdOverride
+
+Reanudación vía:
+
+WorkflowRuntime.ReanudarDesdeTareaAsync

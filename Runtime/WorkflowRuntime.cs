@@ -1,14 +1,15 @@
 ﻿using Intranet.WorkflowStudio.WebForms;
+using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;   // <<< para HttpContext
-using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
 
 namespace Intranet.WorkflowStudio.Runtime
 {
@@ -52,6 +53,7 @@ namespace Intranet.WorkflowStudio.Runtime
             public long InstanciaId { get; set; }
             public int DefinicionId { get; set; }
             public string DatosEntradaJson { get; set; }
+            public string NodoId { get; set; }   // <<< NUEVO
         }
 
         /// <summary>
@@ -61,12 +63,13 @@ namespace Intranet.WorkflowStudio.Runtime
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-SELECT  t.WF_InstanciaId,
-        i.WF_DefinicionId,
-        i.DatosEntrada
-FROM    dbo.WF_Tarea      t
-JOIN    dbo.WF_Instancia  i ON i.Id = t.WF_InstanciaId
-WHERE   t.Id = @Id;", cn))
+                                            SELECT  t.WF_InstanciaId,
+                                                    i.WF_DefinicionId,
+                                                    i.DatosEntrada,
+                                                    t.NodoId
+                                            FROM    dbo.WF_Tarea      t
+                                            JOIN    dbo.WF_Instancia  i ON i.Id = t.WF_InstanciaId
+                                            WHERE   t.Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
                 cn.Open();
@@ -80,7 +83,8 @@ WHERE   t.Id = @Id;", cn))
                     {
                         InstanciaId = dr.GetInt64(0),
                         DefinicionId = dr.GetInt32(1),
-                        DatosEntradaJson = dr.IsDBNull(2) ? null : dr.GetString(2)
+                        DatosEntradaJson = dr.IsDBNull(2) ? null : dr.GetString(2),
+                        NodoId = dr.IsDBNull(3) ? null : dr.GetString(3)   // <<< NUEVO
                     };
                 }
             }
@@ -111,14 +115,12 @@ WHERE   t.Id = @Id;", cn))
 
             long instId = CrearInstancia(defId, datosEntradaJson, usuario);
 
-            var wf = MotorDemo.FromJson(jsonDef);
+            var wf = WorkflowRunner.FromJson(jsonDef);
             var logs = new List<string>();
 
             // ================== 1) Seed para el motor (WF_SEED) ==================
-            // Esto permite que ContextoEjecucion tome wf.instanceId, input, etc.
             var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-            // Datos de entrada como objeto (si vienen en JSON)
             if (!string.IsNullOrWhiteSpace(datosEntradaJson))
             {
                 try
@@ -140,7 +142,6 @@ WHERE   t.Id = @Id;", cn))
             if (items != null)
             {
                 items["WF_SEED"] = seed;
-                // Limpio cualquier residuo previo de contexto
                 items["WF_CTX_ESTADO"] = null;
             }
 
@@ -148,7 +149,6 @@ WHERE   t.Id = @Id;", cn))
             Action<string> logAction = s =>
             {
                 logs.Add(s);
-                // NUEVO: también persistimos en WF_InstanciaLog
                 try
                 {
                     string nodoId = null;
@@ -168,7 +168,6 @@ WHERE   t.Id = @Id;", cn))
                 }
                 catch
                 {
-                    // Nunca romper la ejecución del workflow por un problema de logueo
                 }
             };
 
@@ -186,18 +185,17 @@ WHERE   t.Id = @Id;", cn))
                 new HControlDelay(),
                 new HFtpPut(),
                 new HEmailSend(),
-                new HQueuePublish(),
-                new HQueueConsume(),
+                
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),
                 new HDocTipoResolve()
             };
 
-            await MotorDemo.EjecutarAsync(
+            await WorkflowRunner.EjecutarAsync(
                 wf,
                 logAction,
-                handlersExtra,
+                handlers: handlersExtra,
                 ct: CancellationToken.None
             );
 
@@ -205,6 +203,9 @@ WHERE   t.Id = @Id;", cn))
             bool detenido = false;
             bool hayError = false;
             string mensajeError = null;
+
+            // <<< NOTA: estadoFinal queda disponible solo dentro del if, pero lo usamos ahí mismo >>>
+            object ctxPayload;
 
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
@@ -214,7 +215,6 @@ WHERE   t.Id = @Id;", cn))
                     detenido = true;
                 }
 
-                // NUEVO: detección de error de instancia
                 if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
                     ContextoEjecucion.ToBool(errVal))
                 {
@@ -225,38 +225,51 @@ WHERE   t.Id = @Id;", cn))
                 {
                     mensajeError = Convert.ToString(msgVal);
                 }
+
+                // ✅ NUEVO: guardamos logs + error (si lo hubo) + snapshot del estado
+                ctxPayload = (mensajeError != null)
+                    ? (object)new
+                    {
+                        logs,
+                        error = new { message = mensajeError },
+                        estado = estadoFinal
+                    }
+                    : (object)new
+                    {
+                        logs,
+                        estado = estadoFinal
+                    };
+            }
+            else
+            {
+                // Sin estado publicado (raro, pero posible si no hubo HttpContext)
+                ctxPayload = (mensajeError != null)
+                    ? (object)new
+                    {
+                        logs,
+                        error = new { message = mensajeError }
+                    }
+                    : (object)new { logs };
             }
 
-            // NUEVO: guardamos logs + error (si lo hubo) en DatosContexto
-            object ctxPayload = (mensajeError != null)
-                ? new
-                {
-                    logs,
-                    error = new { message = mensajeError }
-                }
-                : (object)new { logs };
-
-            string datosContexto =
-                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
+            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
 
             if (detenido)
             {
-                // La instancia queda EnCurso (no se marca Finalizado ni Error)
                 ActualizarInstanciaEnCurso(instId, datosContexto);
             }
             else if (hayError)
             {
-                // NUEVO: la instancia queda en Error
                 MarcarInstanciaError(instId, datosContexto);
             }
             else
             {
-                // Flujo terminó normalmente
                 CerrarInstanciaOk(instId, datosContexto);
             }
 
             return instId;
         }
+
 
         // ======================================================================
         //                      Helpers privados de Runtime
@@ -277,22 +290,59 @@ WHERE   t.Id = @Id;", cn))
 
         private static long CrearInstancia(int defId, string datos, string usuario)
         {
+            string procesoKey = null;
+            string scopeKey = null;
+            int? tenantId = null;
+            int? docTipoId = null;
+
+            // Leer metadata opcional desde datosEntradaJson (sin hardcodear negocio)
+            if (!string.IsNullOrWhiteSpace(datos))
+            {
+                try
+                {
+                    var jo = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(datos);
+                    if (jo != null)
+                    {
+                        procesoKey = (string)jo["procesoKey"];
+                        scopeKey = (string)jo["scopeKey"];
+
+                        var t = jo["tenantId"];
+                        if (t != null && int.TryParse(t.ToString(), out var xt)) tenantId = xt;
+
+                        var d = jo["docTipoId"];
+                        if (d != null && int.TryParse(d.ToString(), out var xd)) docTipoId = xd;
+                    }
+                }
+                catch
+                {
+                    // si el JSON no es válido, no frenamos la creación
+                }
+            }
+
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-INSERT INTO dbo.WF_Instancia
-    (WF_DefinicionId, Estado, FechaInicio, DatosEntrada, CreadoPor)
-VALUES
-    (@DefId, 'EnCurso', GETDATE(), @Datos, @User);
-SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
+                                            INSERT INTO dbo.WF_Instancia
+                                                (WF_DefinicionId, Estado, FechaInicio, DatosEntrada, CreadoPor,
+                                                 ProcesoKey, ScopeKey, TenantId, DocTipoId)
+                                            VALUES
+                                                (@DefId, 'EnCurso', GETDATE(), @Datos, @User,
+                                                 @ProcesoKey, @ScopeKey, @TenantId, @DocTipoId);
+                                            SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
             {
                 cmd.Parameters.Add("@DefId", SqlDbType.Int).Value = defId;
                 cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datos ?? DBNull.Value;
-                cmd.Parameters.Add("@User", SqlDbType.NVarChar, 100).Value =
-                    (object)usuario ?? "app";
+                cmd.Parameters.Add("@User", SqlDbType.NVarChar, 100).Value = (object)usuario ?? "app";
+
+                cmd.Parameters.Add("@ProcesoKey", SqlDbType.NVarChar, 50).Value = (object)procesoKey ?? DBNull.Value;
+                cmd.Parameters.Add("@ScopeKey", SqlDbType.NVarChar, 100).Value = (object)scopeKey ?? DBNull.Value;
+                cmd.Parameters.Add("@TenantId", SqlDbType.Int).Value = (object)tenantId ?? DBNull.Value;
+                cmd.Parameters.Add("@DocTipoId", SqlDbType.Int).Value = (object)docTipoId ?? DBNull.Value;
+
                 cn.Open();
                 return (long)cmd.ExecuteScalar();
             }
         }
+
 
         /// <summary>
         /// (Opcional) Insertar una línea en WF_InstanciaLog.
@@ -303,10 +353,10 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-INSERT INTO dbo.WF_InstanciaLog
-    (WF_InstanciaId, FechaLog, Nivel, Mensaje, NodoId, NodoTipo)
-VALUES
-    (@InstId, GETDATE(), @Nivel, @Msg, @NodoId, @NodoTipo);", cn))
+                                            INSERT INTO dbo.WF_InstanciaLog
+                                                (WF_InstanciaId, FechaLog, Nivel, Mensaje, NodoId, NodoTipo)
+                                            VALUES
+                                                (@InstId, GETDATE(), @Nivel, @Msg, @NodoId, @NodoTipo);", cn))
             {
                 cmd.Parameters.AddWithValue("@InstId", instId);
                 cmd.Parameters.AddWithValue("@Nivel", (object)nivel ?? DBNull.Value);
@@ -326,10 +376,10 @@ VALUES
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-UPDATE dbo.WF_Instancia
-SET Estado = 'EnCurso',
-    DatosContexto = @Ctx
-WHERE Id = @Id;", cn))
+                                            UPDATE dbo.WF_Instancia
+                                            SET Estado = 'EnCurso',
+                                                DatosContexto = @Ctx
+                                            WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -342,11 +392,11 @@ WHERE Id = @Id;", cn))
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-UPDATE dbo.WF_Instancia
-SET Estado = 'Finalizado',
-    FechaFin = GETDATE(),
-    DatosContexto = @Ctx
-WHERE Id = @Id;", cn))
+                                            UPDATE dbo.WF_Instancia
+                                            SET Estado = 'Finalizado',
+                                                FechaFin = GETDATE(),
+                                                DatosContexto = @Ctx
+                                            WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -360,11 +410,11 @@ WHERE Id = @Id;", cn))
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-UPDATE dbo.WF_Instancia
-SET Estado      = 'Error',
-    FechaFin    = ISNULL(FechaFin, GETDATE()),
-    DatosContexto = @Ctx
-WHERE Id = @Id;", cn))
+                                            UPDATE dbo.WF_Instancia
+                                            SET Estado      = 'Error',
+                                                FechaFin    = ISNULL(FechaFin, GETDATE()),
+                                                DatosContexto = @Ctx
+                                            WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -384,30 +434,48 @@ WHERE Id = @Id;", cn))
         /// para usarlas en expresiones (${...}) dentro del grafo.
         /// </summary>
         public static async Task ReanudarDesdeTareaAsync(
-            long tareaId,
-            string resultado,
-            string datosJson,
-            string usuario)
+             long tareaId,
+             string resultado,
+             string datosJson,
+             string usuario)
         {
             // 1) Info de instancia + definición
             var info = CargarInfoInstanciaPorTarea(tareaId);
 
-            // 2) Marcar la tarea como completada (usamos la sobrecarga con usuario)
+            // 2) Marcar la tarea como completada
             MarcarTareaCompletada(tareaId, resultado, usuario, datosJson);
 
-            // 3) Cargar JSON de definición
+            // 3) Definición
             string jsonDef = CargarJsonDefinicion(info.DefinicionId);
             if (string.IsNullOrWhiteSpace(jsonDef))
                 throw new InvalidOperationException("Definición no encontrada: " + info.DefinicionId);
 
-            var wf = MotorDemo.FromJson(jsonDef);
+            var wf = WorkflowRunner.FromJson(jsonDef);
+
+            string CalcularSiguienteNodo(WorkflowDef w, string fromNodeId)
+            {
+                if (w == null || string.IsNullOrWhiteSpace(fromNodeId) || w.Edges == null) return null;
+
+                var salientes = w.Edges
+                    .Where(e => string.Equals(e.From, fromNodeId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (salientes.Count == 0) return null;
+
+                var e1 = salientes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase))
+                         ?? salientes[0];
+
+                return e1.To;
+            }
+
             var logs = new List<string>();
 
-            // 4) Seed de contexto (igual que en CrearInstanciaYEjecutarAsync,
-            //    pero usando la instancia EXISTENTE)
-            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            // ================== 4) Seed BASE (rehidratar estado previo) ==================
+            // ✅ La clave: traer el "estado" guardado en WF_Instancia.DatosContexto
+            var seed = CargarSeedDesdeDatosContexto(info.InstanciaId);
 
-            if (!string.IsNullOrWhiteSpace(info.DatosEntradaJson))
+            // Si no había snapshot, al menos metemos input desde DatosEntrada (fallback)
+            if (!seed.ContainsKey("input") && !string.IsNullOrWhiteSpace(info.DatosEntradaJson))
             {
                 try
                 {
@@ -420,16 +488,15 @@ WHERE Id = @Id;", cn))
                 }
             }
 
+            // Aseguramos identidades mínimas (por si el snapshot no las tenía)
             seed["wf.instanceId"] = info.InstanciaId;
             seed["wf.definicionId"] = info.DefinicionId;
-            seed["wf.creadoPor"] = usuario ?? "app";
             seed["wf.reanudadoPor"] = usuario ?? "app";
 
-            // Info específica de la tarea humana (nombres "viejos" para compat)
+            // ================== 5) Inyectar info de tarea (pisando lo necesario) ==================
             seed["humanTask.id"] = tareaId;
             seed["humanTask.result"] = resultado ?? "";
 
-            // Alias genéricos
             seed["wf.tarea.id"] = tareaId;
             seed["wf.tarea.resultado"] = resultado ?? "";
             seed["tarea.id"] = tareaId;
@@ -441,9 +508,7 @@ WHERE Id = @Id;", cn))
                 {
                     var datosObj = JsonConvert.DeserializeObject<object>(datosJson);
 
-                    // Compatibilidad
                     seed["humanTask.data"] = datosObj;
-                    // Alias nuevos
                     seed["wf.tarea.datos"] = datosObj;
                     seed["tarea.datos"] = datosObj;
                 }
@@ -455,14 +520,37 @@ WHERE Id = @Id;", cn))
                 }
             }
 
+            // ================== 6) Start override (arrancar desde el nodo siguiente) ==================
+            var resumeFrom = CalcularSiguienteNodo(wf, info.NodoId);
+
+            if (!string.IsNullOrWhiteSpace(resumeFrom))
+            {
+                seed["wf.startNodeIdOverride"] = resumeFrom;
+                seed["wf.resume.taskNodeId"] = info.NodoId;
+                seed["wf.resume.fromNodeId"] = resumeFrom;
+            }
+
+            // ================== 🔴 LIMPIEZA CRÍTICA DE FLAGS DE CONTROL ==================
+            // ⛔ si no limpiás esto, el motor se vuelve a detener inmediatamente
+            seed["wf.detener"] = false;
+
+            // limpieza defensiva (recomendado)
+            seed.Remove("wf.currentNodeId");
+            seed.Remove("wf.currentNodeType");
+
+            // Si venís de una corrida con error, limpiarlo para no heredar flags
+            seed["wf.error"] = false;
+            seed.Remove("wf.error.message");
+
+            // ================== 7) Publicar seed al motor ==================
             var items = HttpContext.Current?.Items;
             if (items != null)
             {
                 items["WF_SEED"] = seed;
-                items["WF_CTX_ESTADO"] = null;    // limpia cualquier contexto previo
+                items["WF_CTX_ESTADO"] = null;
             }
 
-            // 5) Ejecutar el motor otra vez sobre la misma instancia
+            // ================== 7) Ejecutar motor ==================
             Action<string> logAction = s =>
             {
                 logs.Add(s);
@@ -482,14 +570,13 @@ WHERE Id = @Id;", cn))
                             nodoTipo = Convert.ToString(nt);
                     }
 
-                    // acá usamos la instancia EXISTENTE
                     GuardarLog(info.InstanciaId, "Info", s, nodoId, nodoTipo);
                 }
                 catch
                 {
-                    // silencio total ante errores de log
                 }
             };
+
             var handlersExtra = new IManejadorNodo[]
             {
                 new ManejadorSql(),
@@ -503,95 +590,83 @@ WHERE Id = @Id;", cn))
                 new HControlDelay(),
                 new HFtpPut(),
                 new HEmailSend(),
-                new HQueuePublish(),
-                new HQueueConsume(),
+                
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),
                 new HDocTipoResolve()
             };
 
-            await MotorDemo.EjecutarAsync(
+            await WorkflowRunner.EjecutarAsync(
                 wf,
                 logAction,
-                handlersExtra,
+                handlers: handlersExtra,
                 ct: CancellationToken.None
             );
 
-            // 6) Ver si el motor volvió a detenerse (otra human.task) o terminó / error
+            // ================== 8) Estado final + persistencia ==================
             bool detenido = false;
             bool hayError = false;
             string mensajeError = null;
+
+            object ctxPayload;
 
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
                 if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
                     ContextoEjecucion.ToBool(detVal))
-                {
                     detenido = true;
-                }
 
                 if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
                     ContextoEjecucion.ToBool(errVal))
-                {
                     hayError = true;
-                }
 
                 if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
-                {
                     mensajeError = Convert.ToString(msgVal);
-                }
-            }
 
-            object ctxPayload = (mensajeError != null)
-                ? new
-                {
-                    logs,
-                    error = new { message = mensajeError }
-                }
-                : (object)new { logs };
-
-            string datosContexto =
-                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
-
-            if (detenido)
-            {
-                // la instancia sigue viva (EnCurso)
-                ActualizarInstanciaEnCurso(info.InstanciaId, datosContexto);
-            }
-            else if (hayError)
-            {
-                // terminó con error
-                MarcarInstanciaError(info.InstanciaId, datosContexto);
+                ctxPayload = (mensajeError != null)
+                    ? (object)new { logs, error = new { message = mensajeError }, estado = estadoFinal }
+                    : (object)new { logs, estado = estadoFinal };
             }
             else
             {
-                // terminó normalmente
-                CerrarInstanciaOk(info.InstanciaId, datosContexto);
+                ctxPayload = (mensajeError != null)
+                    ? (object)new { logs, error = new { message = mensajeError } }
+                    : (object)new { logs };
             }
+
+            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
+
+            if (detenido)
+                ActualizarInstanciaEnCurso(info.InstanciaId, datosContexto);
+            else if (hayError)
+                MarcarInstanciaError(info.InstanciaId, datosContexto);
+            else
+                CerrarInstanciaOk(info.InstanciaId, datosContexto);
         }
 
+
         private static void MarcarTareaCompletada(
-    long tareaId,
-    string resultado,
-    string usuario,
-    string datosJson)
+            long tareaId,
+            string resultado,
+            string usuario,
+            string datosJson)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = @"
-UPDATE dbo.WF_Tarea
-SET Estado          = 'Completada',
-    Resultado       = @Resultado,
-    UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
-    FechaCierre     = GETDATE(),
-    Datos           = CASE 
-                        WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
-                        ELSE @Datos 
-                      END
-WHERE Id = @Id
-  AND Estado NOT IN ('Completada','Cancelada');";
+                                    UPDATE dbo.WF_Tarea
+                                    SET Estado          = 'Completada',
+                                        Resultado       = @Resultado,
+                                        UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
+                                        FechaCierre     = GETDATE(),
+                                        Datos           = CASE 
+                                                            WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
+                                                            ELSE @Datos 
+                                                          END
+                                    WHERE Id = @Id
+                                      AND Estado NOT IN ('Completada','Cancelada');";
 
                 cmd.Parameters.Add("@Resultado", SqlDbType.NVarChar, 50).Value = (object)resultado ?? DBNull.Value;
                 cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value = (object)usuario ?? DBNull.Value;
@@ -611,141 +686,55 @@ WHERE Id = @Id
         }
 
 
-        private static async Task ReanudarInstanciaAsync(
-            long instId,
-            int defId,
-            string datosEntradaJson,
-            string usuario)
+        private static string CargarDatosContextoInstancia(long instId)
         {
-            string jsonDef = CargarJsonDefinicion(defId);
-            if (string.IsNullOrWhiteSpace(jsonDef))
-                throw new InvalidOperationException("Definición no encontrada: " + defId);
-
-            var wf = MotorDemo.FromJson(jsonDef);
-            var logs = new List<string>();
-
-            // Seed de contexto
-            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(datosEntradaJson))
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+                                            SELECT DatosContexto
+                                            FROM dbo.WF_Instancia
+                                            WHERE Id = @Id;", cn))
             {
-                try
-                {
-                    var inputObj = JsonConvert.DeserializeObject<object>(datosEntradaJson);
-                    seed["input"] = inputObj;
-                }
-                catch
-                {
-                    seed["inputRaw"] = datosEntradaJson;
-                }
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
+                cn.Open();
+                var o = cmd.ExecuteScalar();
+                return (o == null || o == DBNull.Value) ? null : Convert.ToString(o);
             }
-
-            seed["wf.instanceId"] = instId;
-            seed["wf.definicionId"] = defId;
-            seed["wf.reanudadoPor"] = usuario ?? "app";
-
-            var items = System.Web.HttpContext.Current?.Items;
-            if (items != null)
-            {
-                items["WF_SEED"] = seed;
-                items["WF_CTX_ESTADO"] = null;
-            }
-
-            Action<string> logAction = s =>
-            {
-                logs.Add(s);
-
-                try
-                {
-                    string nodoId = null;
-                    string nodoTipo = null;
-
-                    var it = HttpContext.Current?.Items;
-                    if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
-                    {
-                        if (est.TryGetValue("wf.currentNodeId", out var nid))
-                            nodoId = Convert.ToString(nid);
-
-                        if (est.TryGetValue("wf.currentNodeType", out var nt))
-                            nodoTipo = Convert.ToString(nt);
-                    }
-
-                    GuardarLog(instId, "Info", s, nodoId, nodoTipo);
-                }
-                catch
-                {
-                    // no interrumpir el flujo por fallas de log
-                }
-            };
-
-            var handlersExtra = new IManejadorNodo[]
-            {
-                new ManejadorSql(),
-                new HParallel(),
-                new HJoin(),
-                new HUtilError(),
-                new HUtilNotify(),
-                new HFileRead(),
-                new HFileWrite(),
-                new HDocExtract(),
-                new HControlDelay(),
-                new HFtpPut(),  
-                new HEmailSend(),
-                new HQueuePublish(),
-                new HQueueConsume(),
-                new HQueuePublishSql(),
-                new HQueueConsumeSql(),
-                new HDocLoad(),
-                new HDocTipoResolve()
-            };
-
-            await MotorDemo.EjecutarAsync(
-                wf,
-                logAction,
-                handlersExtra,
-                ct: CancellationToken.None
-            );
-
-            bool detenido = false;
-            bool hayError = false;
-            string mensajeError = null;
-
-            if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
-            {
-                if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
-                    ContextoEjecucion.ToBool(detVal))
-                {
-                    detenido = true;
-                }
-
-                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
-                    ContextoEjecucion.ToBool(errVal))
-                {
-                    hayError = true;
-                }
-
-                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
-                {
-                    mensajeError = Convert.ToString(msgVal);
-                }
-            }
-
-            object ctxPayload = (mensajeError != null)
-                ? new
-                {
-                    logs,
-                    error = new { message = mensajeError }
-                }
-                : (object)new { logs };
-
-            string datosContexto =
-                JsonConvert.SerializeObject(ctxPayload, Formatting.None);
-
-            if (detenido)
-                ActualizarInstanciaEnCurso(instId, datosContexto);
-            else if (hayError)
-                MarcarInstanciaError(instId, datosContexto);
-            else
-                CerrarInstanciaOk(instId, datosContexto);
         }
+
+        /// <summary>
+        /// Lee WF_Instancia.DatosContexto y, si existe, devuelve el objeto "estado"
+        /// como Dictionary<string,object> para rehidratar WF_SEED.
+        /// Si no existe o falla, devuelve diccionario vacío.
+        /// </summary>
+        private static Dictionary<string, object> CargarSeedDesdeDatosContexto(long instId)
+        {
+            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                var json = CargarDatosContextoInstancia(instId);
+                if (string.IsNullOrWhiteSpace(json)) return seed;
+
+                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(json);
+                if (root == null) return seed;
+
+                var estadoTok = root["estado"];
+                if (estadoTok == null) return seed;
+
+                // Convertimos JObject -> Dictionary<string, object>
+                var dict = estadoTok.ToObject<Dictionary<string, object>>();
+                if (dict == null) return seed;
+
+                foreach (var kv in dict)
+                    seed[kv.Key] = kv.Value;
+
+                return seed;
+            }
+            catch
+            {
+                return seed;
+            }
+        }
+
     }
 }

@@ -1,0 +1,23 @@
+Estoy retomando un proyecto llamado “Workflow Studio”.
+
+Contexto:
+- Plataforma genérica de workflows empresariales
+- ASP.NET WebForms + SQL Server
+- Windows Authentication (usuario llega como DOMINIO\usuario)
+- Motor propio de workflows con nodos, edges y tareas humanas
+- NO hay procesos hardcodeados
+- Todo se resuelve por ProcesoKey / ScopeKey / Roles
+
+Convenciones obligatorias:
+- InstanciaEstado ≠ TareaEstado (nunca usar “Estado” genérico)
+- Tablas y SP ya definidos (no reinventar)
+- Base única: Workflow
+- Diseño profesional, genérico y escalable
+
+Estado actual:
+- Tareas humanas funcionando
+- Reanudación de instancias funcionando
+- Bandejas de gerente funcionando
+- Error de ThreadAbortException ya resuelto (Response.Redirect false)
+
+Quiero continuar desde acá, sin redefinir tablas ni romper convenciones.

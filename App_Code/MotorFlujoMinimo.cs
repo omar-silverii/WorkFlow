@@ -184,36 +184,15 @@ namespace Intranet.WorkflowStudio.WebForms
 
             curr[parts[parts.Length - 1]] = value;
         }
-
-        /// <summary>
-        /// Intenta convertir string a bool/int/long/decimal/datetime; si no, deja string.
-        /// </summary>
-        public static object Coerce(string s)
-        {
-            if (s == null) return null;
-
-            bool b;
-            if (bool.TryParse(s, out b)) return b;
-
-            long l;
-            if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out l)) return l;
-
-            decimal d;
-            if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out d)) return d;
-
-            DateTime dt;
-            if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out dt)) return dt;
-
-            return s;
-        }
     }
 
     // ===== Motor =====
     public class MotorFlujo
     {
         private readonly IDictionary<string, IManejadorNodo> _handlers;
+        private readonly IEstadoPublisher _estadoPublisher;
 
-        public MotorFlujo(IEnumerable<IManejadorNodo> handlers)
+        public MotorFlujo(IEnumerable<IManejadorNodo> handlers, IEstadoPublisher estadoPublisher = null)
         {
             var dict = new Dictionary<string, IManejadorNodo>(StringComparer.OrdinalIgnoreCase);
 
@@ -232,6 +211,7 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             _handlers = dict;
+            _estadoPublisher = estadoPublisher; // puede ser null
         }
 
         public static void Validar(WorkflowDef wf)
@@ -245,18 +225,78 @@ namespace Intranet.WorkflowStudio.WebForms
         }
 
         public async Task EjecutarAsync(
-            WorkflowDef wf,
-            Action<string> log,
-            CancellationToken ct = default(CancellationToken))
+    WorkflowDef wf,
+    Action<string> log,
+    CancellationToken ct = default(CancellationToken))
         {
             Validar(wf);
 
             var ctx = new ContextoEjecucion(log);
-            string actual = wf.StartNodeId;
+
+            // ===================== start override (resume) =====================
+            string actual = null;
+            bool resumeMode = false;
+
+            if (ctx.Estado != null &&
+                ctx.Estado.TryGetValue("wf.startNodeIdOverride", out var ov) &&
+                ov != null)
+            {
+                var ovId = Convert.ToString(ov);
+                if (!string.IsNullOrWhiteSpace(ovId) && wf.Nodes.ContainsKey(ovId))
+                {
+                    actual = ovId;
+                    resumeMode = true;
+
+                    // Log solo si es una reanudación real (tenemos el nodo de tarea)
+                    if (ctx.Estado.TryGetValue("wf.resume.taskNodeId", out var tnode) && tnode != null)
+                    {
+                        // Tomamos el tareaId desde el estado (ya lo estás guardando como tarea.id / wf.tarea.id)
+                        object tidObj = null;
+
+                        if (!ctx.Estado.TryGetValue("wf.tarea.id", out tidObj) || tidObj == null)
+                            ctx.Estado.TryGetValue("tarea.id", out tidObj);
+
+                        var tidStr = (tidObj == null) ? "?" : Convert.ToString(tidObj);
+
+                        ctx.Log($"[Motor] reanudando desde tareaId={tidStr}, nodo={Convert.ToString(tnode)} → arrancando en nodo {actual}");
+                        ctx.Log($"[Motor] start override: arrancando en nodo {actual}");
+                    }
+
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(actual))
+                actual = wf.StartNodeId;
+
+            // ✅ NUEVO: si estamos reanudando, nunca ejecutar util.start
+            // (por seguridad, aunque alguien lo haya puesto como override)
+            if (resumeMode &&
+                wf.Nodes.TryGetValue(actual, out var n0) &&
+                n0 != null &&
+                n0.Type != null &&
+                n0.Type.Equals("util.start", StringComparison.OrdinalIgnoreCase))
+            {
+                // buscamos la salida "always" desde start y saltamos
+                var salStart = (wf.Edges ?? new List<EdgeDef>())
+                    .Where(e => string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                var next =
+                    salStart.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                    salStart.FirstOrDefault();
+
+                if (next != null && !string.IsNullOrWhiteSpace(next.To) && wf.Nodes.ContainsKey(next.To))
+                {
+                    ctx.Log($"[Motor] resume: se omite util.start y se continúa en {next.To}");
+                    actual = next.To;
+                }
+            }
+            // ================================================================
+
             int guard = 0;
 
             // Publico estado inicial (por si algún nodo consulta WF_CTX_ESTADO)
-            PublishEstado(ctx, null, null);
+            _estadoPublisher?.Publish(ctx.Estado, null, null);
 
             while (!string.IsNullOrEmpty(actual) && guard++ < 2000)
             {
@@ -269,7 +309,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 var res = await manejador.EjecutarAsync(ctx, nodo, ct);
 
                 // Publicar estado luego de ejecutar cada nodo
-                PublishEstado(ctx, nodo.Id, nodo.Type);
+                _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
 
                 // Si algún nodo pidió detener (wf.detener = true), corto
                 if (ctx.Estado != null &&
@@ -284,11 +324,11 @@ namespace Intranet.WorkflowStudio.WebForms
                     ? res.Etiqueta
                     : "always";
 
-                var salientes = wf.Edges
+                var salientes = (wf.Edges ?? new List<EdgeDef>())
                     .Where(e => string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-                if (salientes.Count == 0) break; // fin del flujo si no hay salida
+                if (salientes.Count == 0) break;
 
                 var siguiente =
                     salientes.FirstOrDefault(e => string.Equals(e.Condition, etiqueta, StringComparison.OrdinalIgnoreCase)) ??
@@ -301,103 +341,11 @@ namespace Intranet.WorkflowStudio.WebForms
                     break;
             }
 
-            // Publico el estado final por las dudas
-            PublishEstado(ctx, null, null);
+            _estadoPublisher?.Publish(ctx.Estado, null, null);
         }
 
-        private static void PublishEstado(ContextoEjecucion ctx, string nodoId, string nodoTipo)
-        {
-            try
-            {
-                var items = System.Web.HttpContext.Current?.Items;
-                if (items == null || ctx == null || ctx.Estado == null)
-                    return;
 
-                if (!string.IsNullOrEmpty(nodoId))
-                    ctx.Estado["wf.currentNodeId"] = nodoId;
-
-                if (!string.IsNullOrEmpty(nodoTipo))
-                    ctx.Estado["wf.currentNodeType"] = nodoTipo;
-
-                items["WF_CTX_ESTADO"] = ctx.Estado;
-            }
-            catch
-            {
-                // nunca romper el motor por HttpContext
-            }
-        }
     }
 
-    // ===== Helper de demo =====
-    public static class MotorDemo
-    {
-        public static WorkflowDef FromJson(string json)
-        {
-            return JsonConvert.DeserializeObject<WorkflowDef>(json);
-        }
 
-        // Devuelve List<IManejadorNodo>
-        public static List<IManejadorNodo> CrearHandlersPorDefecto()
-        {
-            var list = new List<IManejadorNodo>
-            {
-                // básicos
-                new HStart(),
-                new HEnd(),
-                new HLogger(),
-                new HIf(),
-                new HDocEntrada(),
-                new HHttpRequest(),
-
-                // notify / chat / queue
-                new HNotify(),
-                new HChatNotify(),
-                new HQueuePublish(),
-                new HError(),
-
-                // tareas humanas
-                new HHumanTask(),
-
-                // control
-                new ManejadorSwitch(),
-                new ManejadorDelay(),
-                new ManejadorLoop(),
-
-                // email / file
-                new ManejadorEmailSend(),
-                new HFileWrite() // <-- IMPORTANTE: usá tu handler nuevo (content + fallback origen)
-            };
-
-            return list;
-        }
-
-        /// <summary>
-        /// Ejecuta con los handlers por defecto.
-        /// </summary>
-        public static async Task EjecutarAsync(
-            WorkflowDef wf,
-            Action<string> log,
-            CancellationToken ct = default(CancellationToken))
-        {
-            var handlers = CrearHandlersPorDefecto();
-            var motor = new MotorFlujo(handlers);
-            await motor.EjecutarAsync(wf, log ?? (_ => { }), ct);
-        }
-
-        /// <summary>
-        /// Igual que el anterior pero permitiendo agregar handlers extra (por ejemplo data.sql runtime).
-        /// </summary>
-        public static async Task EjecutarAsync(
-            WorkflowDef wf,
-            Action<string> log,
-            IEnumerable<IManejadorNodo> handlersExtra,
-            CancellationToken ct = default(CancellationToken))
-        {
-            var handlers = CrearHandlersPorDefecto();
-            if (handlersExtra != null) handlers.AddRange(handlersExtra);
-
-            var motor = new MotorFlujo(handlers);
-            await motor.EjecutarAsync(wf, log ?? (_ => { }), ct);
-        }
-    }
 }

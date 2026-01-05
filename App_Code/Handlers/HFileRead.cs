@@ -29,18 +29,26 @@ namespace Intranet.WorkflowStudio.WebForms
         public string TipoNodo => "file.read";
 
         public Task<ResultadoEjecucion> EjecutarAsync(
-            ContextoEjecucion ctx,
-            NodeDef nodo,
-            CancellationToken ct)
+    ContextoEjecucion ctx,
+    NodeDef nodo,
+    CancellationToken ct)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (nodo == null) throw new ArgumentNullException(nameof(nodo));
+
+            ct.ThrowIfCancellationRequested();
 
             var p = nodo.Parameters ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
             string pathTpl = GetString(p, "path");
             string encodingName = GetString(p, "encoding") ?? "utf-8";
             string salida = GetString(p, "salida") ?? "archivo";
+
+            // NUEVO: cache (default true)
+            bool useCache = true;
+            var useCacheRaw = GetString(p, "useCache");
+            if (!string.IsNullOrWhiteSpace(useCacheRaw) && bool.TryParse(useCacheRaw, out var bCache))
+                useCache = bCache;
 
             // NUEVO: modo de compresión y entrada de ZIP
             string zipModeRaw = GetString(p, "zipMode") ?? "auto";
@@ -53,12 +61,24 @@ namespace Intranet.WorkflowStudio.WebForms
                 ctx.Log("[file.read/error] " + msg);
                 ctx.Estado["file.read.lastError"] = msg;
                 ctx.Estado["wf.error"] = true;
-
-                return Task.FromResult(new ResultadoEjecucion
-                {
-                    Etiqueta = "error"
-                });
+                ctx.Estado["wf.error.message"] = msg;
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
             }
+
+            // ==== NUEVO: si venimos reanudando y ya existe el contenido, no releer ====
+            bool isResume =
+                ctx.Estado != null &&
+                ctx.Estado.TryGetValue("wf.startNodeIdOverride", out var ov) &&
+                ov != null;
+
+            if (useCache && isResume && ctx.Estado != null && ctx.Estado.ContainsKey(salida))
+            {
+                var cached = ctx.Estado[salida];
+                int len = (cached is string s) ? s.Length : 0;
+                ctx.Log($"[file.read] cache hit: '{salida}' ya existe en contexto (len={len}). Se omite lectura.");
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "always" });
+            }
+            // ======================================================================
 
             // Expandir variables ${...} en el path
             string path;
@@ -72,15 +92,14 @@ namespace Intranet.WorkflowStudio.WebForms
                 ctx.Log("[file.read/error] " + msg);
                 ctx.Estado["file.read.lastError"] = msg;
                 ctx.Estado["wf.error"] = true;
-
-                return Task.FromResult(new ResultadoEjecucion
-                {
-                    Etiqueta = "error"
-                });
+                ctx.Estado["wf.error.message"] = msg;
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
             }
 
             try
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (!File.Exists(path))
                 {
                     string msg = $"Archivo no encontrado: {path}";
@@ -88,11 +107,8 @@ namespace Intranet.WorkflowStudio.WebForms
                     ctx.Estado["file.read.lastError"] = msg;
                     ctx.Estado["file.read.exists"] = false;
                     ctx.Estado["wf.error"] = true;
-
-                    return Task.FromResult(new ResultadoEjecucion
-                    {
-                        Etiqueta = "error"
-                    });
+                    ctx.Estado["wf.error.message"] = msg;
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
                 }
 
                 Encoding enc;
@@ -106,7 +122,6 @@ namespace Intranet.WorkflowStudio.WebForms
                     ctx.Log($"[file.read] encoding desconocido '{encodingName}', usando UTF-8.");
                 }
 
-                // ==== NUEVO: lectura binaria + auto-detección ZIP/GZIP ====
                 ctx.Log($"[file.read] leyendo bytes de '{path}' (zipMode={zipModeRaw}).");
 
                 byte[] rawBytes = File.ReadAllBytes(path);
@@ -138,10 +153,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 ctx.Log($"[file.read] archivo leído: {path} (caracteres={contenido?.Length ?? 0}, compresión={usedCompression}).");
 
-                return Task.FromResult(new ResultadoEjecucion
-                {
-                    Etiqueta = "always"
-                });
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "always" });
             }
             catch (Exception ex)
             {
@@ -149,13 +161,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 ctx.Log("[file.read/error] " + msg);
                 ctx.Estado["file.read.lastError"] = msg;
                 ctx.Estado["wf.error"] = true;
-
-                return Task.FromResult(new ResultadoEjecucion
-                {
-                    Etiqueta = "error"
-                });
+                ctx.Estado["wf.error.message"] = msg;
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "error" });
             }
         }
+
 
         // === Helpers internos (igual estilo que HUtilError) ===
 

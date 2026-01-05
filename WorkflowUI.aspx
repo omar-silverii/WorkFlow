@@ -4,13 +4,16 @@
 <head runat="server">
   <title>Workflow UI</title>
   <meta charset="utf-8" />
-  <link rel="stylesheet" href="Styles/workflow.ui.css" />
+    <link rel="stylesheet" href="Content/bootstrap.min.css" />
+
+   <link rel="stylesheet" href="Styles/workflow.ui.css" />
 </head>
 <body>
   <form id="form1" runat="server" ClientIDMode="Static">
       <asp:ScriptManager ID="sm1" runat="server" EnablePageMethods="true" />
       <asp:HiddenField ID="hfWorkflow" runat="server" ClientIDMode="Static" ValidateRequestMode="Disabled" />
       <asp:HiddenField ID="hfDefId" runat="server" ClientIDMode="Static" />
+      
     <div class="layout">
       <!-- TOOLBOX -->
       <div class="panel">
@@ -23,16 +26,32 @@
 
       <!-- CANVAS -->
       <div class="panel canvas-wrap">
-        <div class="canvas-toolbar">
-          <input id="txtNombreWf" name="txtNombreWf" class="input" placeholder="Nombre del workflow" style="min-width:240px;margin-right:8px" />
-          <button type="button" class="btn" id="btnDemo">Demo</button>
-          <button type="button" class="btn" id="btnDemoEmision">Demo Emisión</button>
-          <button type="button" class="btn" id="btnConectar">Conectar</button>
-          <button type="button" class="btn" id="btnJSON">Export JSON</button>
-          <button type="button" class="btn" id="btnSaveSql">Guardar en SQL</button>
-          <button type="button" class="btn" id="btnClear">Limpiar</button>
-          <!-- NUEVO: botón para mostrar/ocultar el panel de prueba -->
-          <button type="button" class="btn" id="btnToggleTest">Probar motor (C#)</button>
+        <div class="canvas-toolbar wf-toolbar">
+    
+            <!-- Nombre (más chico) -->
+            <input id="txtNombreWf" name="txtNombreWf"
+                   class="input wf-name"
+                   placeholder="Nombre del workflow" />
+
+            <!-- Grupo de acciones (encerrado/agrupado) -->
+            <div class="wf-actions-box" role="group" aria-label="Acciones">
+                <button type="button" class="btn" id="btnConectar">Conectar</button>
+                <button type="button" class="btn" id="btnJSON">Export JSON</button>
+                <button type="button" class="btn" id="btnSaveSql">Guardar en SQL</button>
+                <button type="button" class="btn" id="btnClear">Limpiar</button>
+                <button type="button" class="btn" id="btnToggleTest">Probar motor</button>
+            </div>
+
+            <!-- Definiciones (estilo bootstrap-like) -->
+            <button type="button" id="btnIrDef" class="btn btn-outline-primary">
+                Definiciones
+            </button>
+
+            <!-- Usuario como en WF_Gerente_Tareas -->
+            <div class="wf-userpill">
+                Usuario: <asp:Label ID="lblUser" runat="server" />
+            </div>
+
         </div>
         <div id="canvas" class="canvas" tabindex="0" aria-label="Canvas de workflow">
           <svg id="edgesSvg" class="edges" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -219,6 +238,21 @@
                     }
                 });
             })();
+
+            (function () {
+                var b = document.getElementById('btnIrDef');
+                if (!b) return;
+
+                b.addEventListener('click', function () {
+                    var id = document.getElementById('hfDefId')?.value;
+                    if (id && id !== '') {
+                        window.location.href = 'WF_Definiciones.aspx?defId=' + encodeURIComponent(id);
+                    } else {
+                        window.location.href = 'WF_Definiciones.aspx';
+                    }
+                });
+            })();
+
         </script>
 
  </body>

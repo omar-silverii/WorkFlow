@@ -26,12 +26,12 @@
 
 <body>
     <form id="form1" runat="server">
-
+      
         <!-- Topbar -->
         <nav class="navbar navbar-expand-lg ws-topbar sticky-top">
             <div class="container-fluid px-3 px-md-4">
                 <a class="navbar-brand fw-bold" href="Default.aspx">
-                    Workflow Studio <span class="ws-pill ms-2">Intranet</span>
+                    Workflow Studio <span class="ws-pill ms-2">Intranet</span>                    
                 </a>
 
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#wsNav"
@@ -234,7 +234,7 @@
                 <div class="mt-4 ws-muted" style="font-size:12px;">
                     Workflow Studio • UI WebForms + SQL • Diseño minimal y profesional
                 </div>
-            </div>
+          
 
 
         </main>

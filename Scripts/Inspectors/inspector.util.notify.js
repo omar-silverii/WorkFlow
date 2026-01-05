@@ -1,41 +1,59 @@
-﻿; (() => {
+﻿(() => {
     const { register, helpers } = window.WF_Inspector;
     const { el, section, rowButtons, btn } = helpers;
 
     register('util.notify', (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
-        const { body, title, sub } = dom; body.innerHTML = '';
+        const { body, title, sub } = dom;
+        body.innerHTML = '';
+
         if (title) title.textContent = node.label || 'Notify';
         if (sub) sub.textContent = node.key || '';
 
+        // ✅ ESTÁNDAR ÚNICO
         const p = node.params || {};
 
-        const inpLbl = el('input', 'input'); inpLbl.value = node.label || '';
+        const inpLbl = el('input', 'input');
+        inpLbl.value = node.label || '';
         const sLbl = section('Etiqueta (label)', inpLbl);
 
         const selTpl = el('select', 'input');
         (function () {
             const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['util.notify.templates']) || {};
-            const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = '— Elegir —'; selTpl.appendChild(opt0);
-            Object.keys(pack).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = (pack[k].label || k); selTpl.appendChild(o); });
+            const opt0 = document.createElement('option');
+            opt0.value = '';
+            opt0.textContent = '— Elegir —';
+            selTpl.appendChild(opt0);
+
+            Object.keys(pack).forEach(k => {
+                const o = document.createElement('option');
+                o.value = k;
+                o.textContent = (pack[k].label || k);
+                selTpl.appendChild(o);
+            });
         })();
         const sTpl = section('Plantilla', selTpl);
 
         const selTipo = el('select', 'input');
         ['email', 'sms', 'webhook'].forEach(t => {
-            const o = document.createElement('option'); o.value = t; o.textContent = t;
+            const o = document.createElement('option');
+            o.value = t;
+            o.textContent = t;
             if ((p.tipo || 'email') === t) o.selected = true;
             selTipo.appendChild(o);
         });
         const sTipo = section('Tipo', selTipo);
 
-        const inpDestino = el('input', 'input'); inpDestino.value = p.destino || '';
+        const inpDestino = el('input', 'input');
+        inpDestino.value = p.destino || '';
         const sDes = section('Destino', inpDestino);
 
-        const inpAsunto = el('input', 'input'); inpAsunto.value = p.asunto || '';
+        const inpAsunto = el('input', 'input');
+        inpAsunto.value = p.asunto || '';
         const sAsu = section('Asunto', inpAsunto);
 
-        const taMsg = el('textarea', 'textarea'); taMsg.value = p.mensaje || '';
+        const taMsg = el('textarea', 'textarea');
+        taMsg.value = p.mensaje || '';
         const sMsg = section('Mensaje', taMsg);
 
         const bTpl = btn('Insertar plantilla');
@@ -45,7 +63,8 @@
         bTpl.onclick = () => {
             const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['util.notify.templates']) || {};
             const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['util.notify']) || {};
-            const tpl = selTpl.value && pack[selTpl.value] ? pack[selTpl.value] : def;
+            const tpl = (selTpl.value && pack[selTpl.value]) ? pack[selTpl.value] : def;
+
             selTipo.value = tpl.tipo || 'email';
             inpDestino.value = tpl.destino || '';
             inpAsunto.value = tpl.asunto || '';
@@ -53,40 +72,46 @@
         };
 
         bSave.onclick = () => {
-            node.label = inpLbl.value || node.label;
-            node.params = { tipo: selTipo.value, destino: inpDestino.value || '', asunto: inpAsunto.value || '', mensaje: taMsg.value || '' };
+            node.label = inpLbl.value || node.label || 'Notify';
+
+            // ✅ GUARDAR EN params (esto es lo que exporta buildWorkflow)
+            node.params = {
+                tipo: selTipo.value,
+                destino: inpDestino.value || '',
+                asunto: inpAsunto.value || '',
+                mensaje: taMsg.value || ''
+            };
+
             ensurePosition(node);
-            const elNode = nodeEl(node.id); if (elNode) elNode.querySelector('.node__title').textContent = node.label;
+
+            const elNode = nodeEl(node.id);
+            if (elNode) {
+                const t = elNode.querySelector('.node__title');
+                if (t) t.textContent = node.label;
+            }
+
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
             setTimeout(() => {
-                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+                try { ctx.drawEdges(); } catch (e) { }
             }, 0);
         };
 
         bDel.onclick = () => {
-            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
-                    if (!e) continue;
-                    if (e.from === node.id || e.to === node.id) {
+                    if (e && (e.from === node.id || e.to === node.id))
                         ctx.edges.splice(i, 1);
-                    }
                 }
             }
 
-            // Eliminar el nodo del array real
             if (Array.isArray(ctx.nodes)) {
                 for (let i = ctx.nodes.length - 1; i >= 0; i--) {
                     const n = ctx.nodes[i];
-                    if (n && n.id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
+                    if (n && n.id === node.id) ctx.nodes.splice(i, 1);
                 }
             }
 
-            // Quitar del DOM y refrescar canvas
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
 
@@ -94,9 +119,12 @@
             ctx.select(null);
         };
 
-
-        body.appendChild(sLbl); body.appendChild(sTpl);
-        body.appendChild(sTipo); body.appendChild(sDes); body.appendChild(sAsu); body.appendChild(sMsg);
+        body.appendChild(sLbl);
+        body.appendChild(sTpl);
+        body.appendChild(sTipo);
+        body.appendChild(sDes);
+        body.appendChild(sAsu);
+        body.appendChild(sMsg);
         body.appendChild(rowButtons(bTpl, bSave, bDel));
     });
 })();

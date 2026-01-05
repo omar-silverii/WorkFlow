@@ -159,7 +159,7 @@ CREATE TABLE dbo.WF_Tarea
 CREATE INDEX IX_WF_Tarea_Instancia_Estado ON dbo.WF_Tarea (WF_InstanciaId, Estado);
 CREATE INDEX IX_WF_Tarea_Usuario_Estado   ON dbo.WF_Tarea (UsuarioAsignado, Estado);
 CREATE INDEX IX_WF_Tarea_Rol_Estado       ON dbo.WF_Tarea (RolDestino, Estado);
-
+CREATE INDEX IX_WF_Tarea_Instancia_Nodo   ON dbo.WF_Tarea (WF_InstanciaId, NodoId, NodoTipo, Estado) INCLUDE (FechaCreacion, FechaCierre, Resultado);
 END
 GO
 
@@ -262,8 +262,102 @@ BEGIN
         ON dbo.WF_DocTipoReglaExtract(DocTipoId, Activo, Orden);
 END
 GO
-/*
 
+IF OBJECT_ID('dbo.WF_UsuarioRol','U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_UsuarioRol
+(
+    Usuario  nvarchar(100) NOT NULL,
+    Rol      nvarchar(100) NOT NULL,
+    CONSTRAINT PK_WF_UsuarioRol PRIMARY KEY (Usuario, Rol)
+);
+END
+GO
+
+IF OBJECT_ID('dbo.WF_UsuarioScope','U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_UsuarioScope
+(
+    Usuario  nvarchar(100) NOT NULL,
+    ScopeKey nvarchar(100) NOT NULL,
+    CONSTRAINT PK_WF_UsuarioScope PRIMARY KEY (Usuario, ScopeKey)
+);
+END
+GO
+IF OBJECT_ID('dbo.WF_ScopeRegla','U') IS NULL
+BEGIN
+CREATE TABLE dbo.WF_ScopeRegla(
+    Id              int IDENTITY(1,1) PRIMARY KEY,
+    WF_DefinicionId int NULL,                 -- NULL = aplica a todas
+    CampoJson       nvarchar(200) NOT NULL,   -- ej: '$.estado.input.sector'
+    MatchTipo       nvarchar(20)  NOT NULL,   -- 'equals' | 'contains'
+    MatchValor      nvarchar(200) NOT NULL,
+    ScopeKey        nvarchar(50)  NOT NULL
+);
+END
+GO
+/*
+ALTER TABLE dbo.WF_Instancia
+ADD
+    TenantId   INT NULL,
+    ProcesoKey NVARCHAR(50) NULL,
+    DocTipoId  INT NULL,
+    ScopeKey   NVARCHAR(100) NULL;
+GO
+CREATE INDEX IX_WF_Instancia_Estado_Scope
+ON dbo.WF_Instancia (Estado, ScopeKey)
+INCLUDE (WF_DefinicionId, FechaInicio, FechaFin, CreadoPor, ProcesoKey, DocTipoId);
+GO
+
+CREATE INDEX IX_WF_Instancia_Proceso_Fecha
+ON dbo.WF_Instancia (ProcesoKey, FechaInicio)
+INCLUDE (Estado, ScopeKey, WF_DefinicionId);
+GO
+
+/* =========================
+   WF_Instancia: columnas
+   ========================= */
+ALTER TABLE dbo.WF_Instancia
+ADD
+    TenantId   INT NULL,
+    ProcesoKey NVARCHAR(50) NULL,
+    DocTipoId  INT NULL,
+    ScopeKey   NVARCHAR(100) NULL;
+	EmpresaKey nvarchar(100) NULL;
+GO
+
+/* Índices útiles para bandejas / dashboard */
+CREATE INDEX IX_WF_Instancia_Estado_Scope
+ON dbo.WF_Instancia (Estado, ScopeKey)
+INCLUDE (WF_DefinicionId, FechaInicio, FechaFin, CreadoPor, ProcesoKey, DocTipoId);
+GO
+
+CREATE INDEX IX_WF_Instancia_Proceso
+ON dbo.WF_Instancia (ProcesoKey, FechaInicio)
+INCLUDE (Estado, ScopeKey, WF_DefinicionId);
+GO
+
+
+/* =========================
+   WF_Tarea: columnas
+   ========================= */
+ALTER TABLE dbo.WF_Tarea
+ADD
+    ScopeKey   NVARCHAR(100) NULL,
+    AsignadoA  NVARCHAR(100) NULL;   -- ej: DOMAIN\usuario
+GO
+
+/* Índices para bandeja de tareas */
+CREATE INDEX IX_WF_Tarea_Estado_Rol_Scope
+ON dbo.WF_Tarea (Estado, RolDestino, ScopeKey)
+INCLUDE (WF_InstanciaId, NodoId, FechaCreacion, FechaVencimiento, UsuarioAsignado, AsignadoA);
+GO
+
+CREATE INDEX IX_WF_Tarea_AsignadoA_Estado
+ON dbo.WF_Tarea (AsignadoA, Estado, FechaCreacion)
+INCLUDE (WF_InstanciaId, NodoId, RolDestino, ScopeKey);
+GO
+-----------------------
 ALTER TABLE dbo.WF_DocTipoReglaExtract
 ADD TipoDato   NVARCHAR(30)  NULL,
     Ejemplo    NVARCHAR(500) NULL,
@@ -375,19 +469,37 @@ VALUES
         {"name":"monto","group":"monto", "type":"decimal"}
     ]'
 );
+
+INSERT INTO dbo.WF_ScopeRegla (WF_DefinicionId, CampoJson, MatchTipo, MatchValor, ScopeKey)
+VALUES
+(66, '$.estado.input.sector', 'contains', 'Compras',  'COMPRAS'),
+(66, '$.estado.input.sector', 'contains', 'Finanzas', 'FINANZAS'),
+(66, '$.estado.input.sector', 'contains', 'Gerencia', 'GERENCIA');
+GO
+
+
 */
+{"StartNodeId":"n1","Nodes":{"n1":{"Id":"n1","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":270,"y":78}}},"n2":{"Id":"n2","Type":"file.read","Label":"Archivo: Leer","Parameters":{"path":"c:\\temp\\NP_001.txt","encoding":"utf-8","salida":"archivo","position":{"x":264,"y":184}}},"n5":{"Id":"n5","Type":"human.task","Label":"Tarea humana","Parameters":{"position":{"x":264,"y":288}}},"n6":{"Id":"n6","Type":"util.notify","Label":"Notificar","Parameters":{"tipo":"email","destino":"","asunto":"","mensaje":"Acordarse de empresa ${input.empresa}","position":{"x":272,"y":400}}},"n7":{"Id":"n7","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":272,"y":520}}}},"Edges":[{"Id":"e8","From":"n1","To":"n2","Condition":"always"},{"Id":"e9","From":"n2","To":"n5","Condition":"always"},{"Id":"e10","From":"n5","To":"n6","Condition":"always"},{"Id":"e11","From":"n6","To":"n7","Condition":"always"}],"Meta":{"Name":"Prueba TH 1"}}
 
-
+{"StartNodeId":"n1","Nodes":{"n1":{"Id":"n1","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":1016,"y":64}}},"n2":{"Id":"n2","Type":"util.notify","Label":"Solicitud de compra","Parameters":{"titulo":"Solicitud de compra","mensaje":"Usuario=${input.usuarioId}, Tipo=${input.tipo}, Item=${input.codigoItem}, Importe=${input.monto}","canal":"log","nivel":"info","position":{"x":24,"y":112}}},"n3":{"Id":"n3","Type":"control.if","Label":"¿Material o servicio?","Parameters":{"expression":"${input.tipo} == \"MATERIAL\"","position":{"x":24,"y":208}}},"n4":{"Id":"n4","Type":"http.request","Label":"Comprobar inventario ERP","Parameters":{"method":"GET","url":"https://erp.interno/api/inventario?item=${input.codigoItem}","headers":{},"body":"","destino":"erp.stock","position":{"x":16,"y":312}}},"n5":{"Id":"n5","Type":"control.if","Label":"¿Hay stock?","Parameters":{"expression":"${erp.stock.cantidadDisponible} > 0","position":{"x":32,"y":408}}},"n6":{"Id":"n6","Type":"util.notify","Label":"Atender y actualizar stock","Parameters":{"titulo":"Atender solicitud","mensaje":"Reserva stock para item=${input.codigoItem}, cant=${input.cantidad}","canal":"log","nivel":"info","position":{"x":24,"y":512}}},"n7":{"Id":"n7","Type":"control.delay","Label":"Esperar actualización","Parameters":{"seconds":300,"position":{"x":24,"y":616}}},"n8":{"Id":"n8","Type":"util.notify","Label":"Comprobar presupuestos anteriores","Parameters":{"titulo":"Comprobar presupuestos anteriores","mensaje":"Revisar presupuestos previos para item=${input.codigoItem}","canal":"log","nivel":"info","position":{"x":480,"y":216}}},"n9":{"Id":"n9","Type":"util.notify","Label":"Hacer al menos 3 presupuestos","Parameters":{"titulo":"Hacer al menos 3 presupuestos","mensaje":"Item=${input.codigoItem}, se requieren al menos 3 presupuestos.","canal":"log","nivel":"info","position":{"x":464,"y":384}}},"n10":{"Id":"n10","Type":"control.if","Label":"¿Compra autorizada?","Parameters":{"expression":"${input.autorizada} == \"Sí\"","position":{"x":920,"y":368}}},"n11":{"Id":"n11","Type":"control.if","Label":"¿Monto > 1000?","Parameters":{"expression":"${input.monto} > 1000","position":{"x":920,"y":496}}},"n12":{"Id":"n12","Type":"queue.publish","Label":"Autorización de compra","Parameters":{"queue":"AUTORIZACION_COMPRA","broker":"sql","correlationId":"${wf.instanceId}","priority":10,"payload":{"usuarioId":"${input.usuarioId}","monto":"${input.monto}","codigoItem":"${input.codigoItem}","descripcion":"${input.descripcion}"},"position":{"x":632,"y":616}}},"n13":{"Id":"n13","Type":"util.notify","Label":"Contrato de compra","Parameters":{"titulo":"Contrato de compra","mensaje":"Preparar contrato para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":920,"y":744}}},"n14":{"Id":"n14","Type":"util.error","Label":"Error / No autorizada","Parameters":{"mensaje":"Compra NO autorizada para usuario ${input.usuarioId}, monto=${input.monto}","capturar":true,"notificar":true,"volverAIntentar":false,"position":{"x":456,"y":520}}},"n17":{"Id":"n17","Type":"util.notify","Label":"Proceso de compra","Parameters":{"titulo":"Proceso de compra","mensaje":"Iniciar proceso de compra para item=${input.codigoItem}, monto=${input.monto}","canal":"log","nivel":"info","position":{"x":440,"y":736}}},"n15":{"Id":"n15","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":32,"y":736}}},"n27":{"Id":"n27","Type":"doc.extract","Label":"Extraer de texto","Parameters":{"origen":"input.text","rulesJson":"[\n  { \"campo\": \"Fecha\",       \"regex\": \"Fecha:\\\\s*(\\\\d{2}/\\\\d{2}/\\\\d{4})\",              \"grupo\": 1 },\n\n  { \"campo\": \"usuarioId\",   \"regex\": \"Legajo\\\\s*(\\\\d+)\",                              \"grupo\": 1 },\n  { \"campo\": \"Solicitante\", \"regex\": \"Solicitante:\\\\s*(.+?)\\\\s*\\\\(Legajo\",           \"grupo\": 1 },\n\n  { \"campo\": \"codigoItem\",  \"regex\": \"Código:\\\\s*([A-Z0-9-]+)\",                       \"grupo\": 1 },\n\n  { \"campo\": \"Descripcion\", \"regex\": \"Descripción:\\\\s*(.+?)\\\\s*Cantidad:\",           \"grupo\": 1 },\n\n  { \"campo\": \"Cantidad\",    \"regex\": \"Cantidad:\\\\s*(\\\\d+)\",                           \"grupo\": 1 },\n\n  { \"campo\": \"monto\",       \"regex\": \"Monto Estimado:\\\\s*([^\\\\r\\\\n]+)\",              \"grupo\": 1 },\n\n  { \"campo\": \"autorizada\",  \"regex\": \"Aprobación requerida:\\\\s*(Sí|No)\",             \"grupo\": 1 }\n]","position":{"x":376,"y":112}}},"n31":{"Id":"n31","Type":"doc.load","Label":"Documento: Cargar archivo","Parameters":{"path":"C:\\temp\\Nota de Pedido de Compras.docx","mode":"auto","position":{"x":696,"y":56}}}},"Edges":[{"Id":"efix1","From":"n2","To":"n3","Condition":"always"},{"Id":"efix2","From":"n3","To":"n4","Condition":"true"},{"Id":"efix3","From":"n3","To":"n8","Condition":"false"},{"Id":"efix4","From":"n4","To":"n5","Condition":"always"},{"Id":"efix5","From":"n5","To":"n6","Condition":"true"},{"Id":"efix6","From":"n5","To":"n9","Condition":"false"},{"Id":"efix7","From":"n6","To":"n7","Condition":"always"},{"Id":"efix8","From":"n7","To":"n15","Condition":"always"},{"Id":"efix9","From":"n8","To":"n10","Condition":"always"},{"Id":"efix10","From":"n9","To":"n10","Condition":"always"},{"Id":"efix11","From":"n10","To":"n11","Condition":"true"},{"Id":"efix12","From":"n10","To":"n14","Condition":"false"},{"Id":"efix13","From":"n11","To":"n12","Condition":"true"},{"Id":"efix14","From":"n11","To":"n13","Condition":"false"},{"Id":"efix15","From":"n12","To":"n13","Condition":"always"},{"Id":"efix16","From":"n13","To":"n17","Condition":"always"},{"Id":"efix17","From":"n17","To":"n15","Condition":"always"},{"Id":"efix18","From":"n14","To":"n15","Condition":"always"},{"Id":"efix21","From":"n27","To":"n2","Condition":"always"},{"Id":"e32","From":"n1","To":"n31","Condition":"always"},{"Id":"e33","From":"n31","To":"n27","Condition":"always"}],"Meta":null}
+{"StartNodeId":"n_start","Nodes":{"n_start":{"Id":"n_start","Type":"util.start","Label":"Inicio","Parameters":{"position":{"x":120,"y":120}}},"n_load":{"Id":"n_load","Type":"doc.load","Label":"Cargar Nota de Pedido","Parameters":{"path":"C:\\temp\\NP_001.txt","position":{"x":160,"y":130}}},"n_extract":{"Id":"n_extract","Type":"doc.extract","Label":"Extraer datos (NP)","Parameters":{"useDbRules":true,"docTipoId":1,"position":{"x":200,"y":140}}},"n_if_monto_valido":{"Id":"n_if_monto_valido","Type":"control.if","Label":"¿Monto válido?","Parameters":{"expression":"${input.montoEstimado} > 0","position":{"x":240,"y":150}}},"n_error_monto":{"Id":"n_error_monto","Type":"util.error","Label":"Monto inválido","Parameters":{"message":"Monto inválido en Nota de Pedido. Instancia ${wf.instanceId}","position":{"x":280,"y":160}}},"n_if_mayor":{"Id":"n_if_mayor","Type":"control.if","Label":"¿Monto > 100000?","Parameters":{"expression":"${input.montoEstimado} > 100000","position":{"x":320,"y":170}}},"n_ht_jefe":{"Id":"n_ht_jefe","Type":"human.task","Label":"Aprobación Jefe de Área","Parameters":{"title":"Aprobación compra menor","options":"aprobado,rechazado","position":{"x":328,"y":472}}},"n_if_jefe":{"Id":"n_if_jefe","Type":"control.if","Label":"¿Jefe aprueba?","Parameters":{"expression":"${tarea.resultado} == \"aprobado\"","position":{"x":352,"y":328}}},"n_ht_gerencia":{"Id":"n_ht_gerencia","Type":"human.task","Label":"Aprobación Gerencia","Parameters":{"title":"Aprobación Gerencia (compra mayor)","options":"aprobado,rechazado","position":{"x":720,"y":584}}},"n_if_gerencia":{"Id":"n_if_gerencia","Type":"control.if","Label":"¿Gerencia aprueba?","Parameters":{"expression":"${tarea.resultado} == \"aprobado\"","position":{"x":480,"y":210}}},"n_ht_finanzas":{"Id":"n_ht_finanzas","Type":"human.task","Label":"Aprobación Finanzas","Parameters":{"title":"Aprobación Finanzas","options":"aprobado,rechazado","position":{"x":520,"y":220}}},"n_if_finanzas":{"Id":"n_if_finanzas","Type":"control.if","Label":"¿Finanzas aprueba?","Parameters":{"expression":"${tarea.resultado} == \"aprobado\"","position":{"x":560,"y":230}}},"n_write_oc_simple":{"Id":"n_write_oc_simple","Type":"file.write","Label":"Generar OC simple","Parameters":{"path":"C:\\temp\\OC_${wf.instanceId}.txt","content":"EMPRESA ${input.empresa}\r\n\r\nORDEN DE COMPRA Nº OC-${wf.instanceId}\r\nFecha: ${input.fecha}\r\n\r\nDetalle:\r\nCódigo: ${input.codigo}\r\nDescripción: ${input.descripcion}\r\nCantidad: ${input.cantidad}\r\nTotal: ${input.montoEstimado}\r\n\r\nAutorizado por: Jefe de Área","position":{"x":600,"y":240}}},"n_write_oc_alta":{"Id":"n_write_oc_alta","Type":"file.write","Label":"Generar OC alta","Parameters":{"path":"C:\\temp\\OC_ALTA_${wf.instanceId}.txt","content":"EMPRESA ${input.empresa}\r\n\r\nORDEN DE COMPRA (ALTA) Nº OC-${wf.instanceId}\r\nFecha: ${input.fecha}\r\n\r\nDetalle:\r\nCódigo: ${input.codigo}\r\nDescripción: ${input.descripcion}\r\nCantidad: ${input.cantidad}\r\nTotal: ${input.montoEstimado}\r\n\r\nAprobaciones: Gerencia + Finanzas","position":{"x":640,"y":250}}},"n_notify_ok":{"Id":"n_notify_ok","Type":"util.notify","Label":"Notificar OK","Parameters":{"message":"Orden de Compra generada. Instancia ${wf.instanceId}","position":{"x":680,"y":260}}},"n_notify_rechazo":{"Id":"n_notify_rechazo","Type":"util.notify","Label":"Notificar rechazo","Parameters":{"message":"Solicitud rechazada. Instancia ${wf.instanceId}","position":{"x":944,"y":376}}},"n_end":{"Id":"n_end","Type":"util.end","Label":"Fin","Parameters":{"position":{"x":936,"y":64}}}},"Edges":[{"Id":"efix1","From":"n_load","To":"n_extract","Condition":"always"},{"Id":"efix2","From":"n_extract","To":"n_if_monto_valido","Condition":"always"},{"Id":"efix3","From":"n_if_monto_valido","To":"n_if_mayor","Condition":"true"},{"Id":"efix4","From":"n_if_monto_valido","To":"n_error_monto","Condition":"false"},{"Id":"efix5","From":"n_error_monto","To":"n_end","Condition":"always"},{"Id":"efix6","From":"n_if_mayor","To":"n_ht_gerencia","Condition":"true"},{"Id":"efix7","From":"n_if_mayor","To":"n_ht_jefe","Condition":"false"},{"Id":"efix8","From":"n_ht_jefe","To":"n_if_jefe","Condition":"always"},{"Id":"efix9","From":"n_if_jefe","To":"n_write_oc_simple","Condition":"true"},{"Id":"efix10","From":"n_if_jefe","To":"n_notify_rechazo","Condition":"false"},{"Id":"efix11","From":"n_ht_gerencia","To":"n_if_gerencia","Condition":"always"},{"Id":"efix12","From":"n_if_gerencia","To":"n_ht_finanzas","Condition":"true"},{"Id":"efix13","From":"n_if_gerencia","To":"n_notify_rechazo","Condition":"false"},{"Id":"efix14","From":"n_ht_finanzas","To":"n_if_finanzas","Condition":"always"},{"Id":"efix15","From":"n_if_finanzas","To":"n_write_oc_alta","Condition":"true"},{"Id":"efix16","From":"n_if_finanzas","To":"n_notify_rechazo","Condition":"false"},{"Id":"efix17","From":"n_write_oc_simple","To":"n_notify_ok","Condition":"always"},{"Id":"efix18","From":"n_write_oc_alta","To":"n_notify_ok","Condition":"always"},{"Id":"efix19","From":"n_notify_ok","To":"n_end","Condition":"always"},{"Id":"efix20","From":"n_notify_rechazo","To":"n_end","Condition":"always"}],"Meta":{"Name":"NC 1"}}
 SELECT * FROM WF_DocumentoTipo WHERE Codigo='NPC'
 
 SELECT * FROM WF_DocumentoPlantilla
 
-SELECT * FROM WF_Definicion
+SELECT * FROM WF_Definicion where id = 66
 SELECT * FROM WF_instancia
 SELECT * FROM WF_instanciaLog
-SELECT * FROM WF_DocTipoReglaExtract
-
+SELECT * FROM WF_DocTipoReglaExtract where docTipoId = 1
+NOTA_PEDIDO = 1
   SELECT Id, ISNULL(Activo, 0) AS Activo, ISNULL(JsonDef, '') AS JsonDef  FROM dbo.WF_Definicion WITH (READPAST);
+
+
+  SELECT COUNT(*) AS CantInst, MIN(Id) MinId, MAX(Id) MaxId
+FROM dbo.WF_Instancia;
+
+SELECT COUNT(*) AS CantTareas, MIN(Id) MinId, MAX(Id) MaxId
+FROM dbo.WF_Tarea;
 
 /*
 delete from WF_instanciaLog where WF_InstanciaId >= 135

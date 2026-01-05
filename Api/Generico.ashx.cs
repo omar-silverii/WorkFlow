@@ -43,11 +43,597 @@ namespace Api
                 case "dashboard.kpis":
                     DashboardKpis(ctx);
                     break;
+                case "worker.escalamiento.run":
+                    WorkerEscalamientoRun(ctx);
+                    break;
+                case "tarea.historial":
+                    TareaHistorial(ctx);
+                    break;
+                case "instancia.escalamiento.historial":
+                    InstanciaEscalamientoHistorial(ctx);
+                    break;
                 default:
                     ctx.Response.Write("{\"error\":\"acción no soportada\"}");
                     break;
             }
         }
+
+        private void InstanciaEscalamientoHistorial(HttpContext ctx)
+        {
+            var raw = (ctx.Request["instanciaId"] ?? "").Trim();
+            if (!long.TryParse(raw, out var instanciaId) || instanciaId <= 0)
+            {
+                WriteJson(ctx, new { ok = false, error = "instanciaId inválido" });
+                return;
+            }
+
+            var items = new List<object>();
+
+            using (var cn = new SqlConnection(Cs()))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+;WITH Base AS (
+    SELECT
+        t.Id,
+        t.WF_InstanciaId,
+        t.OrigenTareaId,
+        t.Titulo,
+        t.RolDestino,
+        t.Estado,
+        t.Resultado,
+        t.FechaCreacion,
+        t.FechaCierre,
+        t.Datos,
+        JSON_QUERY(ISNULL(t.Datos,'{}'), '$.origenEscalamiento') AS OrigenEscObj
+    FROM dbo.WF_Tarea t WITH (READPAST)
+    WHERE t.WF_InstanciaId = @InstanciaId
+),
+Roots AS (
+    -- raíces = tareas que tienen al menos un hijo
+    SELECT b.Id
+    FROM Base b
+    WHERE EXISTS (SELECT 1 FROM Base c WHERE c.OrigenTareaId = b.Id)
+),
+CTE AS (
+    -- anchor: raíces
+    SELECT
+        b.Id,
+        b.OrigenTareaId,
+        b.Titulo,
+        b.RolDestino,
+        b.Estado,
+        b.Resultado,
+        b.FechaCreacion,
+        b.FechaCierre,
+        b.Datos,
+        b.OrigenEscObj,
+        b.Id AS RootId,
+        CAST(0 AS int) AS Nivel
+    FROM Base b
+    INNER JOIN Roots r ON r.Id = b.Id
+
+    UNION ALL
+
+    -- recursivo: hijos
+    SELECT
+        c.Id,
+        c.OrigenTareaId,
+        c.Titulo,
+        c.RolDestino,
+        c.Estado,
+        c.Resultado,
+        c.FechaCreacion,
+        c.FechaCierre,
+        c.Datos,
+        c.OrigenEscObj,
+        p.RootId,
+        p.Nivel + 1
+    FROM Base c
+    INNER JOIN CTE p ON c.OrigenTareaId = p.Id
+)
+SELECT
+    Id, OrigenTareaId, RootId, Nivel,
+    Titulo, RolDestino, Estado, Resultado,
+    CONVERT(varchar(19), FechaCreacion, 120) AS FechaCreacion,
+    CONVERT(varchar(19), FechaCierre, 120) AS FechaCierre,
+    OrigenEscObj
+FROM CTE
+ORDER BY RootId DESC, Nivel ASC, FechaCreacion ASC, Id ASC
+OPTION (MAXRECURSION 100);";
+
+                cmd.Parameters.AddWithValue("@InstanciaId", instanciaId);
+
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        string origenObj = dr.IsDBNull(10) ? null : dr.GetString(10);
+
+                        items.Add(new
+                        {
+                            id = dr.GetInt64(0),
+                            origenTareaId = dr.IsDBNull(1) ? (long?)null : dr.GetInt64(1),
+                            rootId = dr.GetInt64(2),
+                            nivel = dr.GetInt32(3),
+                            titulo = dr.IsDBNull(4) ? "" : dr.GetString(4),
+                            rolDestino = dr.IsDBNull(5) ? "" : dr.GetString(5),
+                            estado = dr.IsDBNull(6) ? "" : dr.GetString(6),
+                            resultado = dr.IsDBNull(7) ? null : dr.GetString(7),
+                            fechaCreacion = dr.IsDBNull(8) ? "" : dr.GetString(8),
+                            fechaCierre = dr.IsDBNull(9) ? null : dr.GetString(9),
+                            origenEscalamientoObj = string.IsNullOrWhiteSpace(origenObj) ? null : (object)origenObj
+                        });
+                    }
+                }
+            }
+
+            // OJO: origenEscalamientoObj viene como string JSON -> lo devolvemos tal cual,
+            // el JS lo intenta JSON.parse al renderizar (si preferís lo parseo acá con JObject).
+            WriteJson(ctx, new { ok = true, instanciaId = instanciaId, items = items });
+        }
+
+
+
+
+        private void TareaHistorial(HttpContext ctx)
+        {
+            var raw = (ctx.Request["tareaId"] ?? "").Trim();
+            long tareaId = 0;
+            long.TryParse(raw, out tareaId);
+
+            if (tareaId <= 0)
+            {
+                WriteJson(ctx, new { ok = false, error = "tareaId inválido" });
+                return;
+            }
+
+            var items = new List<object>();
+
+            using (var cn = new SqlConnection(Cs()))
+            using (var cmd = new SqlCommand("dbo.WF_Tarea_Historial", cn))
+            {
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@TareaId", tareaId);
+
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        // columnas según el SELECT del SP
+                        items.Add(new
+                        {
+                            id = Convert.ToInt64(dr["Id"]),
+                            wfInstanciaId = Convert.ToInt64(dr["WF_InstanciaId"]),
+                            titulo = Convert.ToString(dr["Titulo"]),
+                            rolDestino = Convert.ToString(dr["RolDestino"]),
+                            estado = Convert.ToString(dr["Estado"]),
+                            resultado = Convert.ToString(dr["Resultado"]),
+                            fechaCreacion = Convert.ToString(dr["FechaCreacion"]),
+                            fechaCierre = Convert.ToString(dr["FechaCierre"]),
+                            origenTareaId = dr["OrigenTareaId"] == DBNull.Value ? (long?)null : Convert.ToInt64(dr["OrigenTareaId"]),
+                            nivel = Convert.ToInt32(dr["Nivel"]),
+                            origenEscalamiento = dr["OrigenEscalamientoObj"] == DBNull.Value ? null : Convert.ToString(dr["OrigenEscalamientoObj"])
+                        });
+                    }
+                }
+            }
+
+            WriteJson(ctx, new { ok = true, tareaId = tareaId, historial = items });
+        }
+
+        private string ResolverRolEscalado(SqlConnection cn, string rolActual, string scopeKey)
+        {
+            if (cn == null) throw new ArgumentNullException(nameof(cn));
+            if (string.IsNullOrWhiteSpace(rolActual)) return null;
+
+            // 1) Traer roleMap desde WF_Setting
+            //    Preferimos un override por ScopeKey si viene, y si no, el global (ScopeKey NULL).
+            string json = null;
+
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT TOP (1) Value
+FROM dbo.WF_Setting WITH (READPAST)
+WHERE Activo = 1
+  AND SettingKey = 'wf.escalamiento.roleMap'
+  AND (
+        (@ScopeKey IS NOT NULL AND ScopeKey = @ScopeKey)
+     OR (ScopeKey IS NULL)
+  )
+ORDER BY CASE WHEN ScopeKey IS NULL THEN 1 ELSE 0 END ASC;";  // primero el específico, después global
+
+                cmd.Parameters.AddWithValue("@ScopeKey",
+                    string.IsNullOrWhiteSpace(scopeKey) ? (object)DBNull.Value : scopeKey);
+
+                json = Convert.ToString(cmd.ExecuteScalar());
+            }
+
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            // 2) Parse JSON a diccionario case-insensitive
+            //    Ej: { "RRHH":"GERENCIA" }
+            try
+            {
+                var map = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(json)
+                          ?? new Dictionary<string, string>();
+
+                // case-insensitive lookup
+                foreach (var kv in map)
+                {
+                    if (string.Equals(kv.Key?.Trim(), rolActual.Trim(), StringComparison.OrdinalIgnoreCase))
+                        return (kv.Value ?? "").Trim();
+                }
+
+                return null;
+            }
+            catch
+            {
+                // JSON inválido en setting
+                return null;
+            }
+        }
+
+
+        private void WorkerEscalamientoRun(HttpContext ctx)
+        {
+            int processed = 0;
+            long msgId = 0;
+            string payloadJson = null;
+
+            long tareaId = 0;
+            long instanciaId = 0;
+            string rolDestino = null;
+            string scopeKey = null;
+            string titulo = null;
+            string fechaVenc = null;
+            string escaladoEn = null;
+
+            string nuevoRol = null;
+            long tareaNuevaId = 0;
+            bool escaladoReal = false;
+            bool alreadyExisted = false;
+
+            bool notifEnqueued = false;
+            bool queueReverted = false;
+
+            string error = null;
+
+            // ✅ MODO TEST: si viene tareaId, consumimos sólo ese mensaje (CorrelationId)
+            string tareaIdParamRaw = (ctx.Request["tareaId"] ?? "").Trim();
+            long tareaIdTarget = 0;
+            long.TryParse(tareaIdParamRaw, out tareaIdTarget);
+
+            var cs = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+
+            using (var cn = new SqlConnection(cs))
+            {
+                cn.Open();
+
+                // 1) Tomar 1 mensaje de WF_Queue (ATÓMICO)
+                using (var tx = cn.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
+                using (var cmd = cn.CreateCommand())
+                {
+                    cmd.Transaction = tx;
+
+                    if (tareaIdTarget > 0)
+                    {
+                        cmd.CommandText = @"
+;WITH cte AS (
+    SELECT TOP (1)
+        Id, Payload, Processed, ProcessedAt, Attempts, LastError
+    FROM dbo.WF_Queue WITH (ROWLOCK, READPAST, UPDLOCK)
+    WHERE Queue = @Queue
+      AND Processed = 0
+      AND CorrelationId = @CorrelationId
+      AND (DueAt IS NULL OR DueAt <= GETDATE())
+    ORDER BY Priority DESC, CreatedAt DESC, Id DESC
+)
+UPDATE cte
+   SET Processed = 1,
+       ProcessedAt = GETDATE(),
+       Attempts = Attempts + 1,
+       LastError = NULL
+OUTPUT inserted.Id, inserted.Payload;";
+                        cmd.Parameters.AddWithValue("@Queue", "wf.escalamiento");
+                        cmd.Parameters.AddWithValue("@CorrelationId", tareaIdTarget.ToString());
+                    }
+                    else
+                    {
+                        cmd.CommandText = @"
+;WITH cte AS (
+    SELECT TOP (1)
+        Id, Payload, Processed, ProcessedAt, Attempts, LastError
+    FROM dbo.WF_Queue WITH (ROWLOCK, READPAST, UPDLOCK)
+    WHERE Queue = @Queue
+      AND Processed = 0
+      AND (DueAt IS NULL OR DueAt <= GETDATE())
+    ORDER BY Priority DESC, CreatedAt, Id
+)
+UPDATE cte
+   SET Processed = 1,
+       ProcessedAt = GETDATE(),
+       Attempts = Attempts + 1,
+       LastError = NULL
+OUTPUT inserted.Id, inserted.Payload;";
+                        cmd.Parameters.AddWithValue("@Queue", "wf.escalamiento");
+                    }
+
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            msgId = Convert.ToInt64(dr[0]);
+                            payloadJson = dr.IsDBNull(1) ? null : Convert.ToString(dr[1]);
+                        }
+                    }
+
+                    tx.Commit();
+                }
+
+                if (msgId == 0)
+                {
+                    WriteJson(ctx, new
+                    {
+                        ok = true,
+                        processed = 0,
+                        message = (tareaIdTarget > 0)
+                            ? ("No hay mensajes en wf.escalamiento para tareaId=" + tareaIdTarget)
+                            : "No hay mensajes en wf.escalamiento"
+                    });
+                    return;
+                }
+
+                // Helper local: revertir mensaje de cola para reintento
+                Action<string> RevertQueue = (string err) =>
+                {
+                    try
+                    {
+                        using (var cmd = cn.CreateCommand())
+                        {
+                            cmd.CommandText = @"
+UPDATE dbo.WF_Queue
+   SET Processed = 0,
+       ProcessedAt = NULL,
+       LastError = @Err
+ WHERE Id = @Id;";
+                            cmd.Parameters.AddWithValue("@Err", (object)(err ?? "") ?? "");
+                            cmd.Parameters.AddWithValue("@Id", msgId);
+                            cmd.ExecuteNonQuery();
+                        }
+                        queueReverted = true;
+                    }
+                    catch
+                    {
+                        // si esto falla, no rompemos la respuesta del API
+                    }
+                };
+
+                // 2) Parse payload
+                try
+                {
+                    var j = JObject.Parse(payloadJson ?? "{}");
+
+                    long.TryParse(Convert.ToString(j["tareaId"] ?? ""), out tareaId);
+                    long.TryParse(Convert.ToString(j["instanciaId"] ?? ""), out instanciaId);
+
+                    rolDestino = Convert.ToString(j["rolDestino"] ?? "");
+                    scopeKey = Convert.ToString(j["scopeKey"] ?? "");
+                    titulo = Convert.ToString(j["titulo"] ?? "");
+                    fechaVenc = Convert.ToString(j["fechaVencimiento"] ?? "");
+                    escaladoEn = Convert.ToString(j["escaladoEn"] ?? "");
+                }
+                catch (Exception ex)
+                {
+                    error = "Payload inválido: " + ex.Message;
+                    RevertQueue(error);
+                    WriteJson(ctx, new
+                    {
+                        ok = false,
+                        processed = 0,
+                        msgId,
+                        error,
+                        queueReverted
+                    });
+                    return;
+                }
+
+                if (tareaId <= 0)
+                {
+                    error = "Payload sin tareaId válido.";
+                    RevertQueue(error);
+                    WriteJson(ctx, new
+                    {
+                        ok = false,
+                        processed = 0,
+                        msgId,
+                        tareaId,
+                        error,
+                        queueReverted
+                    });
+                    return;
+                }
+
+                // 3) ESCALAMIENTO REAL (primero)  ✅
+                try
+                {
+                    nuevoRol = ResolverRolEscalado(cn, rolDestino, scopeKey);
+
+                    if (string.IsNullOrWhiteSpace(nuevoRol))
+                    {
+                        error = "No hay rol de escalamiento para rolDestino='" + (rolDestino ?? "") + "'";
+                        RevertQueue(error);
+                    }
+                    else
+                    {
+                        // ya existía?
+                        using (var cmdChk = cn.CreateCommand())
+                        {
+                            cmdChk.CommandText = @"
+SELECT TOP (1) Id
+FROM dbo.WF_Tarea WITH (READPAST)
+WHERE OrigenTareaId = @Orig
+ORDER BY Id DESC;";
+                            cmdChk.Parameters.AddWithValue("@Orig", tareaId);
+                            var x = cmdChk.ExecuteScalar();
+                            alreadyExisted = (x != null && x != DBNull.Value);
+                        }
+
+                        using (var cmdEsc = cn.CreateCommand())
+                        {
+                            cmdEsc.CommandText = "dbo.WF_Tarea_Escalar_CrearNueva";
+                            cmdEsc.CommandType = System.Data.CommandType.StoredProcedure;
+
+                            cmdEsc.Parameters.AddWithValue("@TareaIdOriginal", tareaId);
+                            cmdEsc.Parameters.AddWithValue("@NuevoRolDestino", nuevoRol);
+                            cmdEsc.Parameters.AddWithValue("@Motivo", "SLA vencido");
+                            cmdEsc.Parameters.AddWithValue("@Usuario", "system");
+
+                            using (var dr = cmdEsc.ExecuteReader())
+                            {
+                                if (dr.Read())
+                                {
+                                    if (!dr.IsDBNull(1)) tareaNuevaId = Convert.ToInt64(dr[1]);
+                                }
+                            }
+                        }
+
+                        escaladoReal = (tareaNuevaId > 0);
+
+                        if (!escaladoReal)
+                        {
+                            error = "Escalamiento ejecutado pero no devolvió TareaNuevaId.";
+                            RevertQueue(error);
+                        }
+                    }
+                }
+                catch (Exception exEsc)
+                {
+                    error = "Error escalamiento real: " + exEsc.Message;
+                    RevertQueue(error);
+                }
+
+                // Si falló escalamiento real, no encolamos notificación (así no duplicás notifs)
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    WriteJson(ctx, new
+                    {
+                        ok = false,
+                        processed = 0,
+                        consumedQueue = "wf.escalamiento",
+                        producedQueue = "wf.notificaciones",
+                        msgId,
+                        tareaId,
+                        instanciaId,
+                        rolDestino,
+                        nuevoRol,
+                        escaladoReal,
+                        tareaNuevaId,
+                        alreadyExisted,
+                        error,
+                        queueReverted
+                    });
+                    return;
+                }
+
+                // 4) Encolar notificación (idempotente por msgId) ✅
+                try
+                {
+                    var notifPayload =
+                        "{"
+                        + "\"tipo\":\"SLA_ESCALADO\","
+                        + "\"msgId\":" + msgId + ","
+                        + "\"tareaId\":\"" + tareaId + "\","
+                        + "\"instanciaId\":\"" + instanciaId + "\","
+                        + "\"rolDestino\":\"" + (rolDestino ?? "") + "\","
+                        + "\"scopeKey\":\"" + (scopeKey ?? "") + "\","
+                        + "\"titulo\":\"" + (titulo ?? "") + "\","
+                        + "\"fechaVencimiento\":\"" + (fechaVenc ?? "") + "\","
+                        + "\"escaladoEn\":\"" + (escaladoEn ?? "") + "\""
+                        + "}";
+
+                    using (var cmd2 = cn.CreateCommand())
+                    {
+                        cmd2.CommandText = @"
+IF NOT EXISTS (
+    SELECT 1
+    FROM dbo.WF_Queue WITH (READPAST)
+    WHERE Queue = @Queue
+      AND CorrelationId = @CorrelationId
+      AND ISJSON(Payload) = 1
+      AND JSON_VALUE(Payload,'$.tipo') = 'SLA_ESCALADO'
+      AND JSON_VALUE(Payload,'$.msgId') = @MsgId
+)
+BEGIN
+    INSERT INTO dbo.WF_Queue
+        (Queue, CorrelationId, Payload, CreatedAt, DueAt, Priority, Processed, Attempts)
+    VALUES
+        (@Queue, @CorrelationId, @Payload, GETDATE(), NULL, @Priority, 0, 0);
+END";
+
+                        cmd2.Parameters.AddWithValue("@Queue", "wf.notificaciones");
+                        cmd2.Parameters.AddWithValue("@CorrelationId", (object)tareaId);
+                        cmd2.Parameters.AddWithValue("@Payload", (object)notifPayload ?? "{}");
+                        cmd2.Parameters.AddWithValue("@Priority", 5);
+                        cmd2.Parameters.AddWithValue("@MsgId", msgId.ToString());
+
+                        cmd2.ExecuteNonQuery();
+                        notifEnqueued = true;
+                    }
+                }
+                catch (Exception exNotif)
+                {
+                    // Si falla la notificación, NO revertimos escalamiento real.
+                    // Pero sí dejamos LastError en el mensaje (para que quede auditado).
+                    try
+                    {
+                        using (var cmdErr = cn.CreateCommand())
+                        {
+                            cmdErr.CommandText = @"
+UPDATE dbo.WF_Queue
+   SET LastError = @Err
+ WHERE Id = @Id;";
+                            cmdErr.Parameters.AddWithValue("@Err", "Error notificación: " + exNotif.Message);
+                            cmdErr.Parameters.AddWithValue("@Id", msgId);
+                            cmdErr.ExecuteNonQuery();
+                        }
+                    }
+                    catch { }
+                }
+
+                processed = 1;
+            }
+
+            WriteJson(ctx, new
+            {
+                ok = true,
+                processed = processed,
+                consumedQueue = "wf.escalamiento",
+                producedQueue = "wf.notificaciones",
+                msgId = msgId,
+                tareaId = tareaId,
+                instanciaId = instanciaId,
+                rolDestino = rolDestino,
+                nuevoRol = nuevoRol,
+                escaladoReal = escaladoReal,
+                tareaNuevaId = tareaNuevaId,
+                alreadyExisted = alreadyExisted,
+                notifEnqueued = notifEnqueued,
+                queueReverted = queueReverted,
+                error = (string)null
+            });
+        }
+
+
+
+
+
+
+
 
         // =====================================================
         // GET /Api/Generico.ashx?action=doctipo.list

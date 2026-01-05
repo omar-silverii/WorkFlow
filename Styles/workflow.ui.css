@@ -373,3 +373,62 @@ body {
     stroke: #fff;
     stroke-width: 3;
 }
+/* ===== Toolbar layout ===== */
+.wf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Nombre más chico */
+.wf-name {
+    width: 260px;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+/* Caja que agrupa botones */
+.wf-actions-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid rgba(0,0,0,.10);
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(16,24,40,.06);
+}
+
+/* Botón Definiciones estilo "Bootstrap outline" (sin bootstrap) */
+.btn.btn-outline-primary {
+    background: #fff;
+    border: 1px solid rgba(13,110,253,.35);
+    color: #0d6efd;
+}
+
+    .btn.btn-outline-primary:hover {
+        background: rgba(13,110,253,.08);
+    }
+
+/* Pill Usuario como en Gerente */
+.wf-userpill {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(13,110,253,.10);
+    color: #0d6efd;
+    border: 1px solid rgba(13,110,253,.20);
+    white-space: nowrap;
+    margin-left: auto; /* empuja a la derecha si hay espacio */
+}
+
+/* ===== Toolbox search no se corta ===== */
+.toolbox__search {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.toolbox__header {
+    box-sizing: border-box;
+}

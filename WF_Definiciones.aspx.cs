@@ -18,8 +18,57 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (!IsPostBack)
             {
-                CargarGrid();
+                int defId;
+                if (int.TryParse(Request.QueryString["defId"], out defId))
+                {
+                    CargarGridYPosicionar(defId);
+                }
+                else
+                {
+                    CargarGrid();
+                }
             }
+        }
+
+        private void CargarGridYPosicionar(int defId)
+        {
+            string sql = @"
+        SELECT Id, Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor
+        FROM dbo.WF_Definicion
+        ORDER BY Codigo, Version DESC";
+
+            DataTable dt = new DataTable();
+
+            using (SqlConnection cn = new SqlConnection(Cnn))
+            using (SqlCommand cmd = new SqlCommand(sql, cn))
+            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+            {
+                da.Fill(dt);
+            }
+
+            // Buscar índice de la fila con ese Id
+            int rowIndex = -1;
+            for (int i = 0; i < dt.Rows.Count; i++)
+            {
+                if (Convert.ToInt32(dt.Rows[i]["Id"]) == defId)
+                {
+                    rowIndex = i;
+                    break;
+                }
+            }
+
+            if (rowIndex >= 0)
+            {
+                int pageSize = gvDef.PageSize;
+                gvDef.PageIndex = rowIndex / pageSize;
+            }
+            else
+            {
+                gvDef.PageIndex = 0;
+            }
+
+            gvDef.DataSource = dt;
+            gvDef.DataBind();
         }
 
         private void CargarGrid()

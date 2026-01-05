@@ -300,9 +300,11 @@
     <Content Include="WF_Definiciones.aspx" />
     <Content Include="WF_DocTipo.aspx" />
     <Content Include="WF_DocTipoReglas.aspx" />
+    <Content Include="WF_Gerente_Tareas.aspx" />
     <Content Include="WF_Instancias.aspx" />
     <Content Include="WF_Tareas.aspx" />
     <Content Include="WF_Tarea_Detalle.aspx" />
+    <Content Include="WF_Tarea_Ver.aspx" />
     <Content Include="WorkflowUI.aspx" />
     <Content Include="App_Data\manifests\seguro_alta.json" />
     <Content Include="App_Data\workflows\seguro_alta.json" />
@@ -403,8 +405,11 @@
     <Compile Include="Poliza_Bandeja.aspx.designer.cs">
       <DependentUpon>Poliza_Bandeja.aspx</DependentUpon>
     </Compile>
+    <Compile Include="Runtime\EstadoPublisher.cs" />
+    <Compile Include="Runtime\EstadoPublisherWebForms.cs" />
     <Compile Include="Runtime\ManejadorSql.cs" />
     <Compile Include="Runtime\WfNumbers.cs" />
+    <Compile Include="Runtime\WorkflowRunner.cs" />
     <Compile Include="Runtime\WorkflowRuntime.cs" />
     <Compile Include="App_Start\BundleConfig.cs" />
     <Compile Include="About.aspx.cs">
@@ -501,6 +506,13 @@
     <Compile Include="WF_DocTipoReglas.aspx.designer.cs">
       <DependentUpon>WF_DocTipoReglas.aspx</DependentUpon>
     </Compile>
+    <Compile Include="WF_Gerente_Tareas.aspx.cs">
+      <DependentUpon>WF_Gerente_Tareas.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Gerente_Tareas.aspx.designer.cs">
+      <DependentUpon>WF_Gerente_Tareas.aspx</DependentUpon>
+    </Compile>
     <Compile Include="WF_Instancias.aspx.cs">
       <DependentUpon>WF_Instancias.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
@@ -521,6 +533,13 @@
     </Compile>
     <Compile Include="WF_Tarea_Detalle.aspx.designer.cs">
       <DependentUpon>WF_Tarea_Detalle.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_Tarea_Ver.aspx.cs">
+      <DependentUpon>WF_Tarea_Ver.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Tarea_Ver.aspx.designer.cs">
+      <DependentUpon>WF_Tarea_Ver.aspx</DependentUpon>
     </Compile>
     <Compile Include="WorkflowUI.aspx.cs">
       <DependentUpon>WorkflowUI.aspx</DependentUpon>
