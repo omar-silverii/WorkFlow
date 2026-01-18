@@ -142,30 +142,31 @@
    </form>
 
     <!-- JS de la IU -->
-    <script src="Scripts/workflow.catalog.js?v=dev6"></script>
-    <script src="Scripts/workflow.templates.js?v=dev4"></script>    
-    <script src="Scripts/workflow.ui.js"></script>
+    <script src="Scripts/workflow.catalog.js?v=dev200"></script>
+    <script src="Scripts/workflow.templates.js?v=dev200"></script>    
+    <script src="Scripts/workflow.ui.js?v=dev200"></script>
     <!-- Inspectores -->
-    <script src="Scripts/inspectors/json.validator.js"></script>
-    <script src="Scripts/inspectors/inspector.core.js"></script>
-    <script src="Scripts/inspectors/inspector.file.read.js"></script>
-    <script src="Scripts/inspectors/inspector.file.write.js"></script>    
-    <script src="Scripts/inspectors/inspector.doc.extract.js"></script>
-    <script src="Scripts/inspectors/inspector.edge.js"></script>
-    <script src="Scripts/inspectors/inspector.http.request.js"></script>
-    <script src="Scripts/inspectors/inspector.if.js"></script>
-    <script src="Scripts/inspectors/inspector.logger.js"></script>
-    <script src="Scripts/inspectors/inspector.human.task.js"></script>
-    <script src="Scripts/inspectors/inspector.data.sql.js"></script>
-    <script src="Scripts/inspectors/inspector.util.notify.js"></script>
-    <script src="Scripts/inspectors/inspector.chat.notify.js"></script>
-    <script src="Scripts/inspectors/inspector.queue.publish.js"></script>
-    <script src="Scripts/inspectors/inspector.doc.entrada.js"></script>
-    <script src="Scripts/inspectors/inspector.doc.load.js"></script>
-    <script src="Scripts/inspectors/inspector.util.docTipo.resolve.js?v=dev5"></script>
-    <script src="Scripts/inspectors/inspector.util.error.js"></script>
-    <script src="Scripts/inspectors/inspector.ftp.put.js"></script>
-    <script src="Scripts/inspectors/inspector.email.send.js"></script>
+    <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.core.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.file.read.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.file.write.js?v=dev200"></script>    
+    <script src="Scripts/inspectors/inspector.doc.extract.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.edge.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.http.request.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.if.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.util.subflow.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.logger.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.human.task.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.data.sql.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.util.notify.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.chat.notify.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.queue.publish.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.doc.entrada.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.doc.load.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.util.docTipo.resolve.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.util.error.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.ftp.put.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.email.send.js?v=dev200"></script>
 
     <!-- (Opcional) Demos -->
     <script src="Scripts/workflow.demo.js"></script>

@@ -290,6 +290,7 @@
     <Content Include="Scripts\Inspectors\inspector.util.docTipo.resolve.js" />
     <Content Include="Scripts\Inspectors\inspector.util.error.js" />
     <Content Include="Scripts\Inspectors\inspector.util.notify.js" />
+    <Content Include="Scripts\Inspectors\inspector.util.subflow.js" />
     <Content Include="Scripts\Inspectors\json.validator.js" />
     <Content Include="Scripts\workflow.catalog.js" />
     <Content Include="Scripts\workflow.demo.js" />
@@ -313,6 +314,8 @@
     <Content Include="Api\Score.ashx" />
     <Content Include="Api\Cliente.ashx" />
     <Content Include="Api\Generico.ashx" />
+    <Content Include="Api\ChatWebhookMock.ashx" />
+    <Content Include="Api\WfDefiniciones.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -351,6 +354,9 @@
     <Content Include="Site.Mobile.Master" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Api\ChatWebhookMock.ashx.cs">
+      <DependentUpon>ChatWebhookMock.ashx</DependentUpon>
+    </Compile>
     <Compile Include="Api\Cliente.ashx.cs">
       <DependentUpon>Cliente.ashx</DependentUpon>
     </Compile>
@@ -365,6 +371,9 @@
     </Compile>
     <Compile Include="Api\Score.ashx.cs">
       <DependentUpon>Score.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WfDefiniciones.ashx.cs">
+      <DependentUpon>WfDefiniciones.ashx</DependentUpon>
     </Compile>
     <Compile Include="App_Code\Handlers\HChatNotify.cs" />
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
@@ -387,6 +396,7 @@
     <Compile Include="App_Code\Handlers\HQueueConsume.cs" />
     <Compile Include="App_Code\Handlers\HQueuePublishSql.cs" />
     <Compile Include="App_Code\Handlers\HStart.cs" />
+    <Compile Include="App_Code\Handlers\HSubFlow.cs" />
     <Compile Include="App_Code\Handlers\HUtilError.cs" />
     <Compile Include="App_Code\Handlers\HUtilNotify.cs" />
     <Compile Include="App_Code\Handlers\ManejadorSwitch.cs" />

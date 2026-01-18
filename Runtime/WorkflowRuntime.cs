@@ -99,6 +99,190 @@ namespace Intranet.WorkflowStudio.Runtime
             MarcarTareaCompletada(tareaId, resultado, usuario: null, datosJson: datosJson);
         }
 
+        public static async Task EjecutarInstanciaExistenteAsync(long instId, string usuario, CancellationToken ct)
+        {
+            // 1) Leer definición + datos entrada desde WF_Instancia
+            int defId;
+            string datosEntrada;
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+        SELECT WF_DefinicionId, DatosEntrada
+        FROM dbo.WF_Instancia
+        WHERE Id = @Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    if (!dr.Read())
+                        throw new InvalidOperationException("Instancia no encontrada: " + instId);
+
+                    defId = dr.GetInt32(0);
+                    datosEntrada = dr.IsDBNull(1) ? null : dr.GetString(1);
+                }
+            }
+
+            string jsonDef = CargarJsonDefinicion(defId);
+            if (string.IsNullOrWhiteSpace(jsonDef))
+                throw new InvalidOperationException("Definición no encontrada: " + defId);
+
+            var wf = WorkflowRunner.FromJson(jsonDef);
+            var logs = new List<string>();
+
+            // 2) Seed igual que CrearInstanciaYEjecutarAsync, pero usando instId existente
+            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(datosEntrada))
+            {
+                try
+                {
+                    var inputObj = JsonConvert.DeserializeObject<object>(datosEntrada);
+                    seed["input"] = inputObj;
+                }
+                catch
+                {
+                    seed["inputRaw"] = datosEntrada;
+                }
+            }
+
+            seed["wf.instanceId"] = instId;
+            seed["wf.definicionId"] = defId;
+            seed["wf.creadoPor"] = usuario ?? "app";
+
+            // init depth/callstack para subflows
+            seed["wf.depth"] = 0;
+            seed["wf.callStack"] = new string[0];
+
+            // RootInstanciaId desde tabla (si existe)
+            try
+            {
+                using (var cn = new SqlConnection(Cnn))
+                using (var cmd = new SqlCommand("SELECT RootInstanciaId, Depth FROM dbo.WF_Instancia WHERE Id=@Id", cn))
+                {
+                    cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
+                    cn.Open();
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            var root = dr.IsDBNull(0) ? (long?)null : dr.GetInt64(0);
+                            var depth = dr.IsDBNull(1) ? (int?)null : dr.GetInt32(1);
+
+                            if (root.HasValue) seed["wf.rootInstanceId"] = root.Value;
+                            if (depth.HasValue) seed["wf.depth"] = depth.Value;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            var items = HttpContext.Current?.Items;
+            if (items != null)
+            {
+                items["WF_SEED"] = seed;
+                items["WF_CTX_ESTADO"] = null;
+            }
+
+            Action<string> logAction = s =>
+            {
+                logs.Add(s);
+                try
+                {
+                    string nodoId = null;
+                    string nodoTipo = null;
+
+                    var it = HttpContext.Current?.Items;
+                    if (it != null && it["WF_CTX_ESTADO"] is IDictionary<string, object> est)
+                    {
+                        if (est.TryGetValue("wf.currentNodeId", out var nid))
+                            nodoId = Convert.ToString(nid);
+
+                        if (est.TryGetValue("wf.currentNodeType", out var nt))
+                            nodoTipo = Convert.ToString(nt);
+                    }
+
+                    GuardarLog(instId, "Info", s, nodoId, nodoTipo);
+                }
+                catch { }
+            };
+
+            var handlersExtra = new IManejadorNodo[]
+            {
+        new ManejadorSql(),
+        new HParallel(),
+        new HJoin(),
+        new HUtilError(),
+        new HUtilNotify(),
+        new HFileRead(),
+        new HFileWrite(),
+        new HDocExtract(),
+        new HControlDelay(),
+        new HFtpPut(),
+        new HEmailSend(),
+
+        new HQueuePublishSql(),
+        new HQueueConsumeSql(),
+        new HDocLoad(),
+        new HDocTipoResolve(),
+
+        // ✅ IMPORTANTE: si vas a usar chat.notify dentro del subflow:
+        new HChatNotify(),
+
+        // ✅ y el propio subflow si el hijo llama a nietos:
+        new HSubflow()
+            };
+
+            await WorkflowRunner.EjecutarAsync(
+                wf,
+                logAction,
+                handlers: handlersExtra,
+                ct: ct
+            );
+
+            // 3) Persistencia final igual que CrearInstanciaYEjecutarAsync
+            bool detenido = false;
+            bool hayError = false;
+            string mensajeError = null;
+
+            object ctxPayload;
+
+            if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
+            {
+                if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
+                    ContextoEjecucion.ToBool(detVal))
+                    detenido = true;
+
+                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
+                    ContextoEjecucion.ToBool(errVal))
+                    hayError = true;
+
+                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
+                    mensajeError = Convert.ToString(msgVal);
+
+                ctxPayload = (mensajeError != null)
+                    ? (object)new { logs, error = new { message = mensajeError }, estado = estadoFinal }
+                    : (object)new { logs, estado = estadoFinal };
+            }
+            else
+            {
+                ctxPayload = (mensajeError != null)
+                    ? (object)new { logs, error = new { message = mensajeError } }
+                    : (object)new { logs };
+            }
+
+            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
+
+            if (detenido)
+                ActualizarInstanciaEnCurso(instId, datosContexto);
+            else if (hayError)
+                MarcarInstanciaError(instId, datosContexto);
+            else
+                CerrarInstanciaOk(instId, datosContexto);
+        }
+
+
+
         /// <summary>
         /// Crea una instancia de workflow, setea el seed (WF_SEED) y ejecuta el motor.
         /// Si el flujo termina normal => WF_Instancia.Estado = 'Finalizado'.
@@ -173,7 +357,7 @@ namespace Intranet.WorkflowStudio.Runtime
 
             // ================== 3) Ejecutar motor con handlers por defecto + SQL ==================
             var handlersExtra = new IManejadorNodo[]
-            {
+            {                
                 new ManejadorSql(),
                 new HParallel(),
                 new HJoin(),
@@ -185,7 +369,7 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HControlDelay(),
                 new HFtpPut(),
                 new HEmailSend(),
-                
+                new HChatNotify(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),
@@ -579,6 +763,7 @@ namespace Intranet.WorkflowStudio.Runtime
 
             var handlersExtra = new IManejadorNodo[]
             {
+                
                 new ManejadorSql(),
                 new HParallel(),
                 new HJoin(),
@@ -590,7 +775,7 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HControlDelay(),
                 new HFtpPut(),
                 new HEmailSend(),
-                
+                new HChatNotify(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),

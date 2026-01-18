@@ -9,22 +9,40 @@
         if (sub) sub.textContent = node.key || '';
 
         const p = node.params || {};
-        const inpLbl = el('input', 'input'); inpLbl.value = node.label || '';
+
+        const inpLbl = el('input', 'input');
+        inpLbl.value = node.label || '';
         const sLbl = section('Etiqueta (label)', inpLbl);
 
         const selTpl = el('select', 'input');
         (function () {
             const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['chat.notify.templates']) || {};
-            const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = '— Elegir —'; selTpl.appendChild(opt0);
-            Object.keys(pack).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = (pack[k].label || k); selTpl.appendChild(o); });
+            const opt0 = document.createElement('option');
+            opt0.value = '';
+            opt0.textContent = '— Elegir —';
+            selTpl.appendChild(opt0);
+            Object.keys(pack).forEach(k => {
+                const o = document.createElement('option');
+                o.value = k;
+                o.textContent = (pack[k].label || k);
+                selTpl.appendChild(o);
+            });
         })();
         const sTpl = section('Plantilla', selTpl);
 
-        const inpCanal = el('input', 'input'); inpCanal.value = p.canal || '';
+        const inpCanal = el('input', 'input');
+        inpCanal.value = p.canal || '';
         const sCanal = section('Canal', inpCanal);
 
-        const taMsg = el('textarea', 'textarea'); taMsg.value = p.mensaje || '';
+        const taMsg = el('textarea', 'textarea');
+        taMsg.value = p.mensaje || '';
         const sMsg = section('Mensaje', taMsg);
+
+        // ✅ NUEVO: webhookUrl
+        const inpWebhook = el('input', 'input');
+        inpWebhook.value = p.webhookUrl || '';
+        inpWebhook.placeholder = '/Api/ChatWebhookMock.ashx (o URL completa)';
+        const sWebhook = section('Webhook URL (opcional)', inpWebhook);
 
         const bTpl = btn('Insertar plantilla');
         const bSave = btn('Guardar');
@@ -34,45 +52,50 @@
             const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['chat.notify.templates']) || {};
             const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['chat.notify']) || {};
             const tpl = selTpl.value && pack[selTpl.value] ? pack[selTpl.value] : def;
+
             inpCanal.value = tpl.canal || '';
             taMsg.value = tpl.mensaje || '';
+            // si la plantilla no trae webhookUrl, no pisamos lo que haya escrito el usuario
+            if (tpl.webhookUrl != null) inpWebhook.value = tpl.webhookUrl || '';
         };
 
         bSave.onclick = () => {
             node.label = inpLbl.value || node.label;
-            node.params = { canal: inpCanal.value || '', mensaje: taMsg.value || '' };
+
+            node.params = {
+                canal: inpCanal.value || '',
+                mensaje: taMsg.value || '',
+                webhookUrl: inpWebhook.value || ''
+            };
+
             ensurePosition(node);
-            const elNode = nodeEl(node.id); if (elNode) elNode.querySelector('.node__title').textContent = node.label;
+
+            const elNode = nodeEl(node.id);
+            if (elNode) elNode.querySelector('.node__title').textContent = node.label;
+
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
+
             setTimeout(() => {
                 try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
             }, 0);
         };
 
         bDel.onclick = () => {
-            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
                     if (!e) continue;
-                    if (e.from === node.id || e.to === node.id) {
-                        ctx.edges.splice(i, 1);
-                    }
+                    if (e.from === node.id || e.to === node.id) ctx.edges.splice(i, 1);
                 }
             }
 
-            // Eliminar el nodo del array real
             if (Array.isArray(ctx.nodes)) {
                 for (let i = ctx.nodes.length - 1; i >= 0; i--) {
                     const n = ctx.nodes[i];
-                    if (n && n.id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
+                    if (n && n.id === node.id) ctx.nodes.splice(i, 1);
                 }
             }
 
-            // Quitar del DOM y refrescar canvas
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
 
@@ -80,9 +103,11 @@
             ctx.select(null);
         };
 
-
-        body.appendChild(sLbl); body.appendChild(sTpl);
-        body.appendChild(sCanal); body.appendChild(sMsg);
+        body.appendChild(sLbl);
+        body.appendChild(sTpl);
+        body.appendChild(sCanal);
+        body.appendChild(sMsg);
+        body.appendChild(sWebhook);
         body.appendChild(rowButtons(bTpl, bSave, bDel));
     });
 })();

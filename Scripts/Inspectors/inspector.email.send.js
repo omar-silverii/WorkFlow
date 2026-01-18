@@ -22,20 +22,13 @@
         const sFrom = section('De (from)', inpFrom);
 
         const inpTo = el('input', 'input');
-        // admitimos string o array
-        if (Array.isArray(p.to)) {
-            inpTo.value = p.to.join(',');
-        } else {
-            inpTo.value = p.to || '';
-        }
+        if (Array.isArray(p.to)) inpTo.value = p.to.join(',');
+        else inpTo.value = p.to || '';
         const sTo = section('Para (to, CSV)', inpTo);
 
         const inpCc = el('input', 'input');
-        if (Array.isArray(p.cc)) {
-            inpCc.value = p.cc.join(',');
-        } else {
-            inpCc.value = p.cc || '';
-        }
+        if (Array.isArray(p.cc)) inpCc.value = p.cc.join(',');
+        else inpCc.value = p.cc || '';
         const sCc = section('CC (opcional, CSV)', inpCc);
 
         const inpSubject = el('input', 'input');
@@ -48,7 +41,7 @@
         txtBody.value = p.body || '';
         const sBody = section('Cuerpo', txtBody);
 
-        // --- Opciones de envío ---
+        // --- Modo simulado/real ---
         const selModo = el('select', 'input');
         ['simulado', 'real'].forEach(m => {
             const o = document.createElement('option');
@@ -59,6 +52,22 @@
         });
         const sModo = section('Modo', selModo);
 
+        // --- Checkbox helper ---
+        function checkbox(label, checked) {
+            const wrap = el('div', 'section');
+            const id = 'chk_' + Math.random().toString(36).slice(2);
+            wrap.innerHTML = '<label><input type="checkbox" id="' + id + '"> ' + label + '</label>';
+            const ck = wrap.querySelector('#' + id);
+            ck.checked = !!checked;
+            return { wrap, input: ck };
+        }
+
+        // ✅ NUEVO: Usar web.config
+        const ckWebConfig = checkbox('Usar web.config (mailSettings)', !!p.useWebConfig);
+        // default ON si no hay host definido
+        if (p.useWebConfig == null && !p.host) ckWebConfig.input.checked = true;
+
+        // --- Opciones SMTP (solo si NO usamos web.config) ---
         const inpHost = el('input', 'input');
         inpHost.value = p.host || '';
         const sHost = section('SMTP Host (ej: smtp.miempresa.com)', inpHost);
@@ -72,24 +81,30 @@
 
         const inpUser = el('input', 'input');
         inpUser.value = p.user || '';
-        const sUser = section('Usuario (opcional, si requiere auth)', inpUser);
+        const sUser = section('Usuario (opcional)', inpUser);
 
         const inpPass = el('input', 'input');
         inpPass.type = 'password';
         inpPass.value = p.password || '';
         const sPass = section('Password', inpPass);
 
-        function checkbox(label, checked) {
-            const wrap = el('div', 'section');
-            const id = 'chk_' + Math.random().toString(36).slice(2);
-            wrap.innerHTML = '<label><input type="checkbox" id="' + id + '"> ' + label + '</label>';
-            const ck = wrap.querySelector('#' + id);
-            ck.checked = !!checked;
-            return { wrap, input: ck };
-        }
-
         const ckHtml = checkbox('Cuerpo en HTML', p.isHtml !== false); // default TRUE
         const ckSsl = checkbox('Usar SSL (TLS/SSL)', !!p.enableSsl);
+
+        function setSmtpEnabled(enabled) {
+            inpHost.disabled = !enabled;
+            inpPort.disabled = !enabled;
+            inpUser.disabled = !enabled;
+            inpPass.disabled = !enabled;
+            ckSsl.input.disabled = !enabled;
+        }
+
+        // aplicar al entrar
+        setSmtpEnabled(!ckWebConfig.input.checked);
+
+        ckWebConfig.input.addEventListener('change', () => {
+            setSmtpEnabled(!ckWebConfig.input.checked);
+        });
 
         // --- Botones ---
         const bSave = btn('Guardar');
@@ -105,6 +120,15 @@
                     .filter(Boolean);
             }
 
+            const usarWebConfig = !!ckWebConfig.input.checked;
+
+            // Si usamos web.config, NO queremos guardar credenciales/host del nodo
+            const host = usarWebConfig ? '' : (inpHost.value || '');
+            const port = usarWebConfig ? 25 : (parseInt(inpPort.value, 10) || 25);
+            const user = usarWebConfig ? '' : (inpUser.value || '');
+            const password = usarWebConfig ? '' : (inpPass.value || '');
+            const enableSsl = usarWebConfig ? false : !!ckSsl.input.checked;
+
             node.params = Object.assign({}, node.params, {
                 from: inpFrom.value || '',
                 to: splitCsv(inpTo.value),
@@ -112,12 +136,17 @@
                 subject: inpSubject.value || '',
                 body: txtBody.value || '',
                 modo: selModo.value || 'simulado',
-                host: inpHost.value || '',
-                port: parseInt(inpPort.value, 10) || 25,
-                user: inpUser.value || '',
-                password: inpPass.value || '',
+
+                // ✅ NUEVO
+                useWebConfig: usarWebConfig,
+
+                // SMTP nodo (solo si no web.config)
+                host: host,
+                port: port,
+                user: user,
+                password: password,
                 isHtml: !!ckHtml.input.checked,
-                enableSsl: !!ckSsl.input.checked
+                enableSsl: enableSsl
             });
 
             ensurePosition(node);
@@ -125,32 +154,22 @@
             if (elNode) elNode.querySelector('.node__title').textContent = node.label;
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
-            setTimeout(() => {
-                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
-            }, 0);
+            setTimeout(() => { try { ctx.drawEdges(); } catch (e) { } }, 0);
         };
 
         bDel.onclick = () => {
-            // === IMPORTANTE: mutar arrays con splice, NO reasignar ===
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
-                    if (e && (e.from === node.id || e.to === node.id)) {
-                        ctx.edges.splice(i, 1);
-                    }
+                    if (e && (e.from === node.id || e.to === node.id)) ctx.edges.splice(i, 1);
                 }
             }
-
             if (Array.isArray(ctx.nodes)) {
                 for (let i = ctx.nodes.length - 1; i >= 0; i--) {
                     const n = ctx.nodes[i];
-                    if (n && n.id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
+                    if (n && n.id === node.id) ctx.nodes.splice(i, 1);
                 }
             }
-
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
             ctx.drawEdges();
@@ -164,12 +183,16 @@
         body.appendChild(sSubject);
         body.appendChild(sBody);
         body.appendChild(sModo);
+
+        body.appendChild(ckWebConfig.wrap); // ✅ NUEVO
+
         body.appendChild(sHost);
         body.appendChild(sPort);
         body.appendChild(sUser);
         body.appendChild(sPass);
         body.appendChild(ckHtml.wrap);
         body.appendChild(ckSsl.wrap);
+
         body.appendChild(rowButtons(bSave, bDel));
     });
 })();

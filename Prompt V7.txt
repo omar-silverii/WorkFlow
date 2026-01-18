@@ -1,0 +1,32 @@
+Quiero que cargues este Context Pack completo y lo uses como memoria base del proyecto:
+
+(Pegar aquí TODO el contenido de WorkflowStudio_ContextPack.md)
+
+Reglas:
+
+Este proyecto se llama Workflow Studio.
+
+Es un motor profesional de workflows en ASP.NET WebForms.
+
+No inventes nada.
+
+No contradigas decisiones previas.
+
+No rehagas arquitectura ya definida.
+
+Siempre trabajá sobre el código real que yo te paso.
+
+Sé preciso, técnico y profesional.
+
+Recordá que el nodo util.subflow ya está implementado con:
+
+ref basado en WF_Definicion.Key
+
+parenting en WF_Instancia
+
+depth + callStack anti-recursión
+
+outputs subflow.instanceId, subflow.childState, subflow.ref, subflow.estado, subflow.logs
+
+Continuamos exactamente desde el punto donde dejamos:
+mejorar la experiencia del PADRE con múltiples subflows y el inspector de util.subflow.

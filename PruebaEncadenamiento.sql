@@ -344,3 +344,177 @@ FROM dbo.WF_Tarea
 WHERE JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') = '10071'
 ORDER BY Id DESC;
 
+SELECT Id, RolDestino, Estado,
+       JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') AS OrigenTareaId,
+       Datos
+FROM dbo.WF_Tarea
+WHERE Id = 10072;
+
+SELECT OBJECT_DEFINITION(OBJECT_ID(N'dbo.WF_Tarea_Escalar_CrearNueva')) AS SP_Texto;
+
+DECLARE @Nueva bigint;
+
+INSERT INTO dbo.WF_Tarea
+(WF_InstanciaId, NodoId, NodoTipo, Titulo, Descripcion, RolDestino, Estado, FechaCreacion, FechaVencimiento, Datos, ScopeKey)
+VALUES
+(1, 'N_TEST', 'human.task', 'PRUEBA SLA RRHH 2', 'test', 'RRHH', 'Pendiente', GETDATE(), DATEADD(MINUTE, -5, GETDATE()), N'{}', '');
+
+SET @Nueva = SCOPE_IDENTITY();
+SELECT @Nueva AS TareaIdCreada;
+
+SELECT TOP 10
+  Id, Estado, RolDestino, FechaCreacion,
+  JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') AS OrigenTareaId,
+  Datos
+FROM dbo.WF_Tarea
+WHERE JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') IS NOT NULL
+ORDER BY Id DESC;
+
+
+UPDATE dbo.WF_Tarea
+SET Datos =
+    JSON_MODIFY(
+      JSON_MODIFY(ISNULL(Datos,'{}'), '$.origenEscalamiento.tareaId', '10071'),
+      '$.origenEscalamiento.motivo', 'SLA vencido'
+    )
+WHERE Id = 10072;
+
+EXEC sp_helptext N'dbo.WF_Tarea_Escalar_CrearNueva';
+
+
+
+--/////////////////////////////////////////////////////////////////////////////////
+
+Prueba limpia y 100% controlada (sin “descontrol”)
+
+La forma profesional de probar esto es: dejamos 1 solo mensaje pendiente en wf.escalamiento, y lo consumimos.
+
+Paso 0: vaciar la cola de escalamiento (solo para test)
+
+(no borro nada; lo marco procesado para que no lo agarre el worker)
+
+UPDATE dbo.WF_Queue
+SET Processed = 1,
+    ProcessedAt = ISNULL(ProcessedAt, GETDATE())
+WHERE Queue = 'wf.escalamiento'
+  AND Processed = 0;
+
+Paso 1: creás una tarea vencida de prueba (RRHH)
+DECLARE @TareaId bigint;
+
+INSERT INTO dbo.WF_Tarea
+(WF_InstanciaId, NodoId, NodoTipo, Titulo, Descripcion, RolDestino, Estado, FechaCreacion, FechaVencimiento, Datos, ScopeKey)
+VALUES
+(1, 'N_TEST', 'human.task', 'PRUEBA SLA RRHH CONTROLADA', 'test', 'RRHH', 'Pendiente', GETDATE(), DATEADD(MINUTE,-10,GETDATE()), N'{}', '');
+
+SET @TareaId = SCOPE_IDENTITY();
+SELECT @TareaId AS TareaIdCreada;
+
+Paso 2: corrés el SP que encola (WF_Tarea_Escalar_Pendientes)
+EXEC dbo.WF_Tarea_Escalar_Pendientes;
+
+Paso 3: confirmás que hay 1 solo mensaje pendiente y cuál es
+SELECT TOP 10 Id, Queue, CorrelationId, Payload, CreatedAt, Priority, Processed
+FROM dbo.WF_Queue
+WHERE Queue='wf.escalamiento'
+ORDER BY Id DESC;
+
+SELECT COUNT(*) AS Pendientes
+FROM dbo.WF_Queue
+WHERE Queue='wf.escalamiento' AND Processed=0;
+
+
+✅ Debe dar Pendientes = 1.
+
+Paso 4: ahora sí, corrés el worker (tu endpoint)
+
+Ahí el worker no puede agarrar otro mensaje, porque no hay otro pendiente.
+
+Paso 5: verificás qué creó el SP (la tarea nueva con origenEscalamiento)
+
+Tomás el Id original (el TareaIdCreada del paso 1) y corrés:
+
+DECLARE @Orig bigint = 10077;
+
+SELECT TOP 20
+  Id, Estado, RolDestino, Resultado, FechaCreacion, FechaCierre,
+  JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') AS OrigenTareaId,
+  Datos
+FROM dbo.WF_Tarea
+WHERE Id = @Orig
+   OR JSON_VALUE(ISNULL(Datos,'{}'),'$.origenEscalamiento.tareaId') = CAST(@Orig AS nvarchar(50))
+ORDER BY Id DESC;
+
+
+✅ Resultado esperado:
+
+La original: Estado = Completada, Resultado = Escalada, FechaCierre != NULL
+
+Una nueva: Estado = Pendiente, RolDestino = GERENCIA (porque tu setting RRHH -> GERENCIA), y OrigenTareaId = @Orig
+
+
+--//////////////////////////////////////////////////////////////
+{"escalamientoEncolado":"true","escalamientoEncoladoEn":"2026-01-01T20:40:53.183","escalamientoEncoladoMotivo":"SLA vencido","escalado":"true","escaladoEn":"2026-01-01T21:02:22.453","escaladoMotivo":"SLA vencido","escaladoPor":"system"}
+SELECT
+  SettingKey, ScopeKey, Value, Activo
+FROM dbo.WF_Setting
+WHERE SettingKey = 'wf.escalamiento.roleMap'
+ORDER BY CASE WHEN ScopeKey IS NULL THEN 1 ELSE 0 END, ScopeKey;
+
+INSERT INTO dbo.WF_Setting (SettingKey, ScopeKey, Value, Activo)
+VALUES ('wf.escalamiento.roleMap', '', '{ "RRHH":"GERENCIA" }', 1);
+
+SELECT
+  Id,
+  Estado,
+  RolDestino,
+  FechaCreacion,
+  ISJSON(Datos) AS DatosEsJson,
+  JSON_VALUE(CASE WHEN ISJSON(Datos)=1 THEN Datos ELSE N'{}' END, '$.origenEscalamiento.tareaId') AS OrigenJson,
+  Datos
+FROM dbo.WF_Tarea
+WHERE Id IN (10077,10078);
+
+sp_help WF_Tarea
+
+
+
+SELECT TOP 50
+  Id, Estado, RolDestino, Resultado, FechaCreacion, FechaCierre,
+  OrigenTareaId,
+  JSON_VALUE(CASE WHEN ISJSON(Datos)=1 THEN Datos ELSE N'{}' END,'$.origenEscalamiento.tareaId') AS OrigenJson,
+  Datos
+FROM dbo.WF_Tarea
+WHERE Id = @Orig
+   OR OrigenTareaId = @Orig
+   OR JSON_VALUE(CASE WHEN ISJSON(Datos)=1 THEN Datos ELSE N'{}' END,'$.origenEscalamiento.tareaId') = CAST(@Orig AS nvarchar(50))
+ORDER BY Id DESC;
+
+
+
+DECLARE @Orig bigint = 10078;
+
+SELECT TOP 50
+  Id, Estado, RolDestino, Resultado, FechaCreacion, FechaCierre,
+  OrigenTareaId,
+  JSON_VALUE(CASE WHEN ISJSON(Datos)=1 THEN Datos ELSE N'{}' END,'$.origenEscalamiento.tareaId') AS OrigenJson,
+  Datos
+FROM dbo.WF_Tarea
+WHERE Id = @Orig OR OrigenTareaId = @Orig
+ORDER BY Id DESC;
+
+
+DECLARE @Orig bigint = 10076;
+
+SELECT TOP 50
+  Id, Estado, RolDestino, Resultado, FechaCreacion, FechaCierre,
+  OrigenTareaId,
+  JSON_VALUE(CASE WHEN ISJSON(Datos)=1 THEN Datos ELSE N'{}' END,'$.origenEscalamiento.tareaId') AS OrigenJson,
+  Datos
+FROM dbo.WF_Tarea
+WHERE Id = @Orig OR OrigenTareaId = @Orig
+ORDER BY Id DESC;
+
+
+
+{"ok":true,"processed":1,"consumedQueue":"wf.escalamiento","producedQueue":"wf.notificaciones","msgId":49,"tareaId":10073,"instanciaId":1,"rolDestino":"RRHH","nuevoRol":"GERENCIA","escaladoReal":true,"tareaNuevaId":10075,"error":null}

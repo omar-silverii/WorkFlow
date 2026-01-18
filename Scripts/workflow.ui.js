@@ -11,10 +11,13 @@
     var DATA = window.WorkflowData || {};
     var CATALOG = DATA.CATALOG || [];
     var GROUPS = DATA.GROUPS || [];
-   
     var ICONS = DATA.ICONS || {};
-    var PARAM_TEMPLATES = DATA.PARAM_TEMPLATES || {};
-    window.PARAM_TEMPLATES = PARAM_TEMPLATES;
+
+    // ✅ FIX: NO pisar templates. Usar el global si existe.
+    //    (workflow.templates.js llena window.PARAM_TEMPLATES)
+    var PARAM_TEMPLATES = window.PARAM_TEMPLATES || DATA.PARAM_TEMPLATES || {};
+    window.PARAM_TEMPLATES = PARAM_TEMPLATES; // asegura referencia global (pero NO lo vacía)
+
 
     // PACK movido a /Scripts/workflow.templates.js
 

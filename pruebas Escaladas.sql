@@ -55,7 +55,7 @@ Pegá esto cambiando @Orig por el Id original:
 {"ok":true,"processed":1,"consumedQueue":"wf.escalamiento","producedQueue":"wf.notificaciones","msgId":55,"tareaId":10079,"instanciaId":1,"rolDestino":"RRHH","nuevoRol":"GERENCIA","escaladoReal":true,"tareaNuevaId":10080,"alreadyExisted":false,"notifEnqueued":true,"queueReverted":false,"error":null}
 */
 
-DECLARE @Orig bigint = 10079;
+DECLARE @Orig bigint = 10083;
 
 -- 1) Debe quedar la original Completada/Escalada
 SELECT Id, Estado, Resultado, RolDestino, FechaCreacion, FechaCierre, OrigenTareaId, Datos
@@ -74,6 +74,31 @@ FROM dbo.WF_Queue
 WHERE Queue='wf.notificaciones'
   AND CorrelationId = CAST(@Orig AS nvarchar(100))
 ORDER BY Id DESC;
+
+
+--Que el mensaje de escalamiento consumido quedó procesado
+--Esperado: Processed=1, ProcessedAt con hora, Attempts>=1, LastError NULL.
+DECLARE @Orig bigint = 10083;
+
+SELECT TOP 5 Id, Queue, CorrelationId, Processed, ProcessedAt, Attempts, LastError, CreatedAt
+FROM dbo.WF_Queue
+WHERE Queue='wf.escalamiento'
+  AND CorrelationId = CAST(@Orig AS nvarchar(100))
+ORDER BY Id DESC;
+
+--Que la nueva tarea NO heredó flags de “escalado” (y sí tiene auditoría)
+--Esperado: OrigenTareaId = 10079 EscaladoFlag debería ser NULL (porque la nueva no está “escalada”, solo creada por escalamiento
+--OrigenJson debería ser 10079
+DECLARE @Orig bigint = 10083;
+
+SELECT 
+  t2.Id,
+  t2.OrigenTareaId,
+  JSON_VALUE(ISNULL(t2.Datos,'{}'),'$.origenEscalamiento.tareaId') AS OrigenJson,
+  JSON_VALUE(ISNULL(t2.Datos,'{}'),'$.escalado') AS EscaladoFlag
+FROM dbo.WF_Tarea t2
+WHERE t2.OrigenTareaId = @Orig;
+
 ------------------------------------------------------------------------------------------------------------
 
 
@@ -163,3 +188,255 @@ COMMIT;
 
 SELECT 'OK - Limpieza completada' AS Resultado;
 */
+
+
+
+SELECT DB_NAME() AS DbActual;
+
+SELECT 
+  p.name,
+  p.modify_date
+FROM sys.procedures p
+WHERE p.name = 'WF_Tarea_Escalar_CrearNueva';
+
+SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.WF_Tarea_Escalar_CrearNueva')) AS DefSP;
+
+
+
+DECLARE @Orig bigint = 10083;
+
+SELECT
+  t2.Id,
+  t2.OrigenTareaId,
+  JSON_VALUE(t2.Datos,'$.origenEscalamiento.tareaId') AS OrigenJson,
+  JSON_QUERY(t2.Datos,'$.origenEscalamiento') AS OrigenObj,
+  t2.Datos
+FROM dbo.WF_Tarea t2
+WHERE t2.OrigenTareaId = @Orig;
+
+
+
+Drop procedure WF_Tarea_Escalar_CrearNueva
+GO
+Create PROCEDURE [dbo].[WF_Tarea_Escalar_CrearNueva]
+    @TareaIdOriginal  bigint,
+    @NuevoRolDestino  nvarchar(200),
+    @Motivo           nvarchar(200) = NULL,
+    @Usuario          nvarchar(200) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @Ahora datetime = GETDATE();
+
+    BEGIN TRAN;
+
+    DECLARE
+        @WF_InstanciaId bigint,
+        @NodoId nvarchar(100),
+        @NodoTipo nvarchar(200),
+        @Titulo nvarchar(400),
+        @Descripcion nvarchar(max),
+        @ScopeKey nvarchar(200),
+        @FechaVencimiento datetime,
+        @Datos nvarchar(max),
+        @RolDestinoOriginal nvarchar(200);
+
+    SELECT
+        @WF_InstanciaId = t.WF_InstanciaId,
+        @NodoId = t.NodoId,
+        @NodoTipo = t.NodoTipo,
+        @Titulo = t.Titulo,
+        @Descripcion = t.Descripcion,
+        @ScopeKey = t.ScopeKey,
+        @FechaVencimiento = t.FechaVencimiento,
+        @Datos = t.Datos,
+        @RolDestinoOriginal = t.RolDestino
+    FROM dbo.WF_Tarea t WITH (UPDLOCK, ROWLOCK)
+    WHERE t.Id = @TareaIdOriginal;
+
+    IF @WF_InstanciaId IS NULL
+    BEGIN
+        ROLLBACK;
+        RAISERROR('Tarea no encontrada: %d', 16, 1, @TareaIdOriginal);
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM dbo.WF_Tarea WHERE Id=@TareaIdOriginal AND Estado <> 'Pendiente')
+    BEGIN
+        ROLLBACK;
+        RAISERROR('La tarea ya no está Pendiente.', 16, 1);
+        RETURN;
+    END
+
+    DECLARE @JsonBase nvarchar(max) =
+        CASE WHEN ISJSON(@Datos) = 1 THEN @Datos ELSE N'{}' END;
+
+    -- 1) Cerrar original
+    UPDATE dbo.WF_Tarea
+       SET Estado = 'Completada',
+           Resultado = 'Escalada',
+           FechaCierre = @Ahora,
+           Datos = JSON_MODIFY(
+                    JSON_MODIFY(
+                      JSON_MODIFY(
+                        JSON_MODIFY(@JsonBase, '$.escalado', 'true'),
+                        '$.escaladoEn', CONVERT(varchar(33), @Ahora, 126)
+                      ),
+                      '$.escaladoMotivo', ISNULL(@Motivo,'SLA vencido')
+                    ),
+                    '$.escaladoPor', ISNULL(@Usuario,'system')
+                  )
+     WHERE Id = @TareaIdOriginal;
+
+    -- 2) JSON nueva tarea
+    DECLARE @JsonNueva nvarchar(max) = @JsonBase;
+
+    -- limpiar flags del original
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalado', NULL);
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoEn', NULL);
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoMotivo', NULL);
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoPor', NULL);
+
+    -- NO heredar “encolado” del original
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncolado', NULL);
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncoladoEn', NULL);
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncoladoMotivo', NULL);
+
+    -- ✅ ORIGEN como objeto completo (robusto)
+    DECLARE @OrigenObj nvarchar(max) =
+        N'{' +
+        N'"tareaId":"' + CONVERT(nvarchar(50), @TareaIdOriginal) + N'",' +
+        N'"motivo":"' + STRING_ESCAPE(ISNULL(@Motivo,'SLA vencido'), 'json') + N'",' +
+        N'"rolOriginal":"' + STRING_ESCAPE(ISNULL(@RolDestinoOriginal,''), 'json') + N'",' +
+        N'"rolNuevo":"' + STRING_ESCAPE(ISNULL(@NuevoRolDestino,''), 'json') + N'",' +
+        N'"creadaEn":"' + CONVERT(nvarchar(33), @Ahora, 126) + N'",' +
+        N'"creadaPor":"' + STRING_ESCAPE(ISNULL(@Usuario,'system'), 'json') + N'"' +
+        N'}';
+
+    SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.origenEscalamiento', JSON_QUERY(@OrigenObj));
+
+    -- si por alguna razón quedara inválido, cortamos (no insertamos basura)
+    IF ISJSON(@JsonNueva) <> 1
+    BEGIN
+        ROLLBACK;
+        RAISERROR('JsonNueva inválido luego de construir origenEscalamiento.', 16, 1);
+        RETURN;
+    END
+
+    -- 3) Crear nueva tarea
+    DECLARE @NuevaTareaId bigint;
+
+    INSERT INTO dbo.WF_Tarea
+        (WF_InstanciaId, NodoId, NodoTipo, Titulo, Descripcion,
+         RolDestino, UsuarioAsignado, Estado, Resultado,
+         FechaCreacion, FechaVencimiento, FechaCierre, Datos, ScopeKey, AsignadoA,
+         OrigenTareaId)
+    VALUES
+        (@WF_InstanciaId, @NodoId, @NodoTipo, @Titulo, @Descripcion,
+         @NuevoRolDestino, NULL, 'Pendiente', NULL,
+         @Ahora, NULL, NULL,
+         @JsonNueva,
+         @ScopeKey, NULL,
+         @TareaIdOriginal);
+
+    SET @NuevaTareaId = SCOPE_IDENTITY();
+
+    COMMIT;
+
+    SELECT
+        @TareaIdOriginal AS TareaOriginalId,
+        @NuevaTareaId    AS TareaNuevaId,
+        @RolDestinoOriginal AS RolOriginal,
+        @NuevoRolDestino AS RolNuevo;
+END
+
+
+
+
+
+
+
+
+CREATE OR ALTER PROCEDURE dbo.WF_Tarea_Historial
+    @TareaId bigint
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @TareaId IS NULL OR @TareaId <= 0
+    BEGIN
+        SELECT CAST(0 AS int) AS ok, 'TareaId inválido' AS error;
+        RETURN;
+    END
+
+    ;WITH BackChain AS (
+        -- arrancamos desde la tarea indicada
+        SELECT
+            t.Id,
+            t.OrigenTareaId,
+            0 AS lvl
+        FROM dbo.WF_Tarea t
+        WHERE t.Id = @TareaId
+
+        UNION ALL
+
+        -- subimos hacia la raíz
+        SELECT
+            t2.Id,
+            t2.OrigenTareaId,
+            bc.lvl + 1
+        FROM dbo.WF_Tarea t2
+        INNER JOIN BackChain bc ON bc.OrigenTareaId = t2.Id
+    ),
+    Root AS (
+        SELECT TOP (1) Id AS RootId
+        FROM BackChain
+        ORDER BY lvl DESC
+    ),
+    FwdChain AS (
+        -- desde raíz hacia adelante
+        SELECT
+            t.Id,
+            t.OrigenTareaId,
+            0 AS nivel
+        FROM dbo.WF_Tarea t
+        CROSS JOIN Root r
+        WHERE t.Id = r.RootId
+
+        UNION ALL
+
+        -- siguiente tarea: la que tenga OrigenTareaId = Id actual
+        SELECT
+            t2.Id,
+            t2.OrigenTareaId,
+            fc.nivel + 1
+        FROM dbo.WF_Tarea t2
+        INNER JOIN FwdChain fc ON t2.OrigenTareaId = fc.Id
+    )
+    SELECT
+        1 AS ok,
+        t.Id,
+        t.WF_InstanciaId,
+        t.NodoId,
+        t.NodoTipo,
+        t.Titulo,
+        t.RolDestino,
+        t.Estado,
+        t.Resultado,
+        t.FechaCreacion,
+        t.FechaVencimiento,
+        t.FechaCierre,
+        t.AsignadoA,
+        t.ScopeKey,
+        t.OrigenTareaId,
+        fc.nivel AS Nivel,
+        JSON_QUERY(t.Datos, '$.origenEscalamiento') AS OrigenEscalamientoObj,
+        t.Datos
+    FROM FwdChain fc
+    JOIN dbo.WF_Tarea t ON t.Id = fc.Id
+    ORDER BY fc.nivel ASC
+    OPTION (MAXRECURSION 100);
+END
+GO

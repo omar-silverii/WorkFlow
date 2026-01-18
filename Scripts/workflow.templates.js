@@ -199,6 +199,16 @@
         maxMB: 10,
     });
 
+    merge('util.subflow', { ref: '', input: {} });
+
+    mergeGroup('util.subflow.templates', {
+        demo_subflow: {
+            label: 'Demo: llamar subflow por Key',
+            ref: 'DEMO.SUBFLOW',
+            input: { clienteId: '${input.clienteId}', nota: 'llamado desde PADRE' }
+        }
+    });
+
     merge('util.error', { capturar: true, volverAIntentar: false, notificar: true });
     merge('util.start', {});
     merge('util.end', {});

@@ -138,7 +138,8 @@ namespace Intranet.WorkflowStudio.WebForms
                     msg.Body = body ?? string.Empty;
                     msg.IsBodyHtml = isHtml;
 
-                    using (var client = CreateSmtpClient(host, port, user, password, enableSsl))
+                    bool useWebConfig = GetBool(p, "useWebConfig", defaultValue: false);
+                    using (var client = CreateSmtpClient(host, port, user, password, enableSsl, useWebConfig))
                     {
                         ct.ThrowIfCancellationRequested();
                         client.Send(msg);   // sync, .NET 4.0 safe
@@ -164,20 +165,15 @@ namespace Intranet.WorkflowStudio.WebForms
 
         // ===== Helpers SMTP =====
 
-        private static SmtpClient CreateSmtpClient(string host, int port, string user, string password, bool enableSsl)
+        private static SmtpClient CreateSmtpClient(string host, int port, string user, string password, bool enableSsl, bool useWebConfig)
         {
-            SmtpClient client;
-
-            if (string.IsNullOrWhiteSpace(host))
+            // ✅ Si se pide web.config, NO pisamos nada: mailSettings manda.
+            if (useWebConfig || string.IsNullOrWhiteSpace(host))
             {
-                // Usa <system.net><mailSettings> del web.config
-                client = new SmtpClient();
-            }
-            else
-            {
-                client = new SmtpClient(host, port);
+                return new SmtpClient(); // usa <system.net><mailSettings> del web.config
             }
 
+            var client = new SmtpClient(host, port);
             client.EnableSsl = enableSsl;
 
             if (!string.IsNullOrWhiteSpace(user))
@@ -187,12 +183,12 @@ namespace Intranet.WorkflowStudio.WebForms
             }
             else
             {
-                // En muchos intranets se usa auth integrada
                 client.UseDefaultCredentials = true;
             }
 
             return client;
         }
+
 
         // ===== Helpers de lectura de parámetros =====
 

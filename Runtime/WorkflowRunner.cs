@@ -42,6 +42,7 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HEnd(),
                 new HLogger(),
                 new HIf(),
+                new HSubflow(),
 
                 // básicos que ya usás
                 new HNotify(),
