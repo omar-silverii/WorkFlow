@@ -179,7 +179,8 @@ WHERE  Id       = @Id;", cn))
                 {
                     // ===== INSERT: nueva definición =====
                     string pref = esEmision ? "EMISION-" : "WF-";
-                    string codigo = pref + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                    string key = pref + DateTime.Now.ToString("yyyyMMdd-HHmmss");   // Key estable (antes quedaba NULL)
+                    string codigo = key;                                            // mantenemos Codigo igual por compatibilidad
                     int version = 1;
                     string creadoPor = (User != null && User.Identity != null && User.Identity.IsAuthenticated)
                                         ? User.Identity.Name
@@ -187,11 +188,12 @@ WHERE  Id       = @Id;", cn))
 
                     using (var cmd = new SqlCommand(@"
 INSERT INTO dbo.WF_Definicion
-    (Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef)
+    ([Key], Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef)
 VALUES
-    (@Codigo, @Nombre, @Version, 1, GETDATE(), @CreadoPor, @JsonDef);
+    (@Key, @Codigo, @Nombre, @Version, 1, GETDATE(), @CreadoPor, @JsonDef);
 SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     {
+                        cmd.Parameters.Add("@Key", SqlDbType.NVarChar, 80).Value = key; // ajustá tamaño si tu columna difiere
                         cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 50).Value = codigo;
                         cmd.Parameters.Add("@Nombre", SqlDbType.NVarChar, 200).Value = nombre;
                         cmd.Parameters.Add("@Version", SqlDbType.Int).Value = version;

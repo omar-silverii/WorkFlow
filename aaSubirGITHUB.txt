@@ -1,0 +1,9 @@
+Crear el tag:
+git tag -a v0.1-human-tasks-ok -m "Workflow Studio con tareas humanas funcionando"
+Subir el tag a GitHub:
+git push origin v0.1-human-tasks-ok
+
+git status             # para ver qué cambió
+git add .              # agrega todos los cambios
+git commit -m "Lo que hiciste hoy" 
+git push origin main   # lo sube a GitHub

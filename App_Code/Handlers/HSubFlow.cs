@@ -23,6 +23,7 @@ namespace Intranet.WorkflowStudio.WebForms
     ///   - input: object o JSON string (opcional) => DatosEntrada del subflow
     ///   - usuario: string (opcional) => CreadoPor en instancia hija (si no, usa wf.creadoPor / "app")
     ///   - maxDepth: int (opcional, default 10) => corte anti-recursión
+    ///   - as: string (opcional) => alias para outputs: subflows.<alias>.*
     ///
     /// Outputs en ctx.Estado:
     ///   - subflow.instanceId
@@ -30,6 +31,9 @@ namespace Intranet.WorkflowStudio.WebForms
     ///   - subflow.logs     (logs del hijo, si existe)
     ///   - subflow.childState ("Finalizado"/"EnCurso"/"Error" de WF_Instancia hija)
     ///   - subflow.ref      (ref ejecutado)
+    ///
+    /// Extras (si viene as):
+    ///   - subflows.<as>.instanceId / childState / ref / estado / logs
     ///
     /// Etiquetas:
     ///   - always / error
@@ -107,17 +111,6 @@ namespace Intranet.WorkflowStudio.WebForms
                     depth: childDepth
                 );
 
-                // Ejecutar motor usando WorkflowRuntime pero SIN crear otra instancia (ya la creamos)
-                // => necesitamos un método para ejecutar sobre instancia existente:
-                // Si no lo tenés, hacemos workaround: usar CrearInstanciaYEjecutarAsync y luego UPDATE parenting.
-                //
-                // ✅ Workaround mínimo (cero cambios grandes): usar CrearInstanciaYEjecutarAsync y luego
-                // actualizar parenting en esa hija. PERO ya tenemos childInstId creado.
-                //
-                // Mejor opción: ejecutar "manual": cargar JsonDef y llamar WorkflowRunner.EjecutarAsync
-                // replicando lo de WorkflowRuntime, pero manteniendo instId fijo.
-                //
-                // Como ya tenés mucho en WorkflowRuntime, hacemos lo mínimo:
                 await WorkflowRuntime.EjecutarInstanciaExistenteAsync(childInstId, usuario, ct);
 
                 // --- 7) Leer resultado del hijo ---
@@ -125,12 +118,47 @@ namespace Intranet.WorkflowStudio.WebForms
                 string childDatosContexto;
                 LeerInstancia(childInstId, out childEstado, out childDatosContexto);
 
-                // --- 8) Outputs al padre ---
+                // Alias (opcional) para outputs subflows.<alias>.*
+                string alias = ctx.ExpandString(GetString(p, "as") ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(alias))
+                {
+                    alias = alias.Replace(" ", "");
+
+                    // Validación mínima profesional: identifier seguro para path
+                    // - empieza con letra o _
+                    // - luego letras/números/_
+                    // (evita '.', '/', '\', espacios, etc.)
+                    if (!(alias.Length > 0 &&
+                          (char.IsLetter(alias[0]) || alias[0] == '_') &&
+                          alias.All(ch => char.IsLetterOrDigit(ch) || ch == '_')))
+                    {
+                        ctx.Log("[util.subflow/error] Alias inválido. Use letras/números/_ y que no empiece con número.");
+                        return new ResultadoEjecucion { Etiqueta = "error" };
+                    }
+                }
+
+                // --- 8) Outputs al padre (compatibilidad + múltiples subflows) ---
+                var payloadEstado = ExtractEstado(childDatosContexto);
+                var payloadLogs = ExtractLogs(childDatosContexto);
+
+                // Compatibilidad: último subflow ejecutado
                 ContextoEjecucion.SetPath(ctx.Estado, "subflow.instanceId", childInstId);
                 ContextoEjecucion.SetPath(ctx.Estado, "subflow.childState", childEstado);
                 ContextoEjecucion.SetPath(ctx.Estado, "subflow.ref", refKey ?? "");
-                ContextoEjecucion.SetPath(ctx.Estado, "subflow.estado", ExtractEstado(childDatosContexto));
-                ContextoEjecucion.SetPath(ctx.Estado, "subflow.logs", ExtractLogs(childDatosContexto));
+                ContextoEjecucion.SetPath(ctx.Estado, "subflow.estado", payloadEstado);
+                ContextoEjecucion.SetPath(ctx.Estado, "subflow.logs", payloadLogs);
+
+                // Múltiples subflows: si viene alias, también escribir en subflows.<alias>.*
+                if (!string.IsNullOrWhiteSpace(alias))
+                {
+                    string basePath = "subflows." + alias;
+
+                    ContextoEjecucion.SetPath(ctx.Estado, basePath + ".instanceId", childInstId);
+                    ContextoEjecucion.SetPath(ctx.Estado, basePath + ".childState", childEstado);
+                    ContextoEjecucion.SetPath(ctx.Estado, basePath + ".ref", refKey ?? "");
+                    ContextoEjecucion.SetPath(ctx.Estado, basePath + ".estado", payloadEstado);
+                    ContextoEjecucion.SetPath(ctx.Estado, basePath + ".logs", payloadLogs);
+                }
 
                 // --- 9) actualizar callStack y depth del padre (solo en memoria del ctx) ---
                 if (!string.IsNullOrWhiteSpace(refKey))
@@ -310,7 +338,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
         }
-
 
         private static string TryGetEstadoString(ContextoEjecucion ctx, string path)
         {

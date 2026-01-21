@@ -148,7 +148,7 @@
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.core.js?v=dev200"></script>
-    <script src="Scripts/inspectors/inspector.file.read.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.file.read.js?v=dev201"></script>
     <script src="Scripts/inspectors/inspector.file.write.js?v=dev200"></script>    
     <script src="Scripts/inspectors/inspector.doc.extract.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.edge.js?v=dev200"></script>

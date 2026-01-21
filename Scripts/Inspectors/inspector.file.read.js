@@ -44,6 +44,16 @@
         const sSalida = section('Salida (key en contexto)', inpSalida);
 
         // =======================
+        // 4b) Parsear como JSON
+        // =======================
+        const inpAsJson = el('input', 'input');
+        inpAsJson.type = 'checkbox';
+        inpAsJson.checked = !!p.asJson;  // default false
+        const wrapAsJson = el('div', 'section');
+        wrapAsJson.innerHTML = `<div class="label">Interpretar contenido como JSON (asJson)</div>`;
+        wrapAsJson.appendChild(inpAsJson);
+
+        // =======================
         // 5) Botones
         // =======================
         const bSave = btn('Guardar');
@@ -57,7 +67,8 @@
             node.params = {
                 path: inpPath.value || '',
                 encoding: inpEnc.value || 'utf-8',
-                salida: inpSalida.value || 'archivo'
+                salida: inpSalida.value || 'archivo',
+                asJson: !!inpAsJson.checked
             };
 
             // Asegurar que tenga posición persistida
@@ -116,6 +127,7 @@
         body.appendChild(sPath);
         body.appendChild(sEnc);
         body.appendChild(sSalida);
+        body.appendChild(wrapAsJson);
         body.appendChild(rowButtons(bSave, bDel));
     });
 })();
