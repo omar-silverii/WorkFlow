@@ -1,87 +1,108 @@
-﻿using System;
+﻿// App_Code/Handlers/HControlDelay.cs
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// Nodo "control.delay"
-    /// - Lee segundos (o ms) desde parámetros.
-    /// - Hace un Task.Delay.
-    /// - Loguea lo que está haciendo.
-    /// - Siempre devuelve Etiqueta = "always".
+    /// control.delay: pausa la ejecución por un tiempo.
+    ///
+    /// Parámetros:
+    ///   - ms      : int (opcional) milisegundos
+    ///   - seconds : int/decimal (opcional) segundos (si no viene ms)
+    ///   - message : string (opcional) texto para log
+    ///
+    /// Regla:
+    ///   - Si viene ms, se usa ms.
+    ///   - Si no viene ms y viene seconds, se usa seconds.
+    ///   - Si no viene ninguno o es <= 0, no duerme.
+    ///
+    /// Etiquetas:
+    ///   - always
     /// </summary>
     public class HControlDelay : IManejadorNodo
     {
         public string TipoNodo => "control.delay";
 
-        public async Task<ResultadoEjecucion> EjecutarAsync(
-            ContextoEjecucion ctx,
-            NodeDef nodo,
-            CancellationToken ct)
+        public async Task<ResultadoEjecucion> EjecutarAsync(ContextoEjecucion ctx, NodeDef nodo, CancellationToken ct)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (nodo == null) throw new ArgumentNullException(nameof(nodo));
 
+            ct.ThrowIfCancellationRequested();
+
             var p = nodo.Parameters ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-            // ms tiene prioridad; segundos es un atajo amigable.
-            int ms = 0;
+            int ms = GetInt(p, "ms", 0);
 
-            if (TryGetInt(p, "ms", out var msParam))
-                ms = msParam;
-            else if (TryGetInt(p, "segundos", out var s))
-                ms = s * 1000;
-
-            if (ms < 0) ms = 0;
-
-            string mensaje = null;
-            if (p.TryGetValue("mensaje", out var rawMsg) && rawMsg != null)
-                mensaje = Convert.ToString(rawMsg);
-
-            if (!string.IsNullOrWhiteSpace(mensaje))
+            if (ms <= 0)
             {
-                var expanded = ctx.ExpandString(mensaje);
-                ctx.Log($"[control.delay] {expanded} (espera={ms} ms)");
+                // seconds puede venir como string, int o decimal. Lo soportamos.
+                var secObj = GetObj(p, "seconds");
+                if (secObj != null)
+                {
+                    var secStr = Convert.ToString(secObj);
+                    if (!string.IsNullOrWhiteSpace(secStr))
+                    {
+                        // aceptar "1.5" con punto o coma
+                        if (double.TryParse(secStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var s1) ||
+                            double.TryParse(secStr, NumberStyles.Any, CultureInfo.GetCultureInfo("es-AR"), out s1))
+                        {
+                            ms = (int)Math.Round(s1 * 1000.0);
+                        }
+                    }
+                }
             }
+
+            string msg = GetString(p, "message");
+            if (!string.IsNullOrWhiteSpace(msg))
+                msg = ctx.ExpandString(msg);
+
+            if (ms <= 0)
+            {
+                ctx.Log("[control.delay] sin demora (ms<=0).");
+                return new ResultadoEjecucion { Etiqueta = "always" };
+            }
+
+            // clamp razonable para evitar overflow/locuras
+            if (ms > 24 * 60 * 60 * 1000) ms = 24 * 60 * 60 * 1000;
+
+            if (!string.IsNullOrWhiteSpace(msg))
+                ctx.Log($"[control.delay] {msg} (ms={ms}).");
             else
-            {
-                ctx.Log($"[control.delay] Esperando {ms} ms...");
-            }
+                ctx.Log($"[control.delay] durmiendo {ms} ms...");
 
-            if (ms > 0)
-            {
-                await Task.Delay(ms, ct);
-            }
+            await Task.Delay(ms, ct);
 
-            return new ResultadoEjecucion
-            {
-                Etiqueta = "always"
-            };
+            ctx.Log("[control.delay] OK.");
+            return new ResultadoEjecucion { Etiqueta = "always" };
         }
 
-        private static bool TryGetInt(IDictionary<string, object> p, string key, out int value)
+        // ===================== helpers =====================
+
+        private static object GetObj(IDictionary<string, object> p, string key)
         {
-            value = 0;
-            if (p == null) return false;
+            if (p != null && p.TryGetValue(key, out var v)) return v;
+            return null;
+        }
 
-            if (!p.TryGetValue(key, out var raw) || raw == null)
-                return false;
+        private static string GetString(IDictionary<string, object> p, string key)
+        {
+            if (p != null && p.TryGetValue(key, out var v) && v != null)
+                return Convert.ToString(v);
+            return null;
+        }
 
-            if (raw is int i)
+        private static int GetInt(IDictionary<string, object> p, string key, int def)
+        {
+            if (p != null && p.TryGetValue(key, out var v) && v != null)
             {
-                value = i;
-                return true;
+                if (int.TryParse(Convert.ToString(v), out var i)) return i;
             }
-
-            if (int.TryParse(Convert.ToString(raw), out var parsed))
-            {
-                value = parsed;
-                return true;
-            }
-
-            return false;
+            return def;
         }
     }
 }

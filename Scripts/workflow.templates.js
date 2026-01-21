@@ -90,6 +90,13 @@
         score_ge_700: { label: 'payload.score >= 700', expression: '${payload.score} >= 700' },
     });
 
+    // --- DELEY ---
+    window.PARAM_TEMPLATES = window.PARAM_TEMPLATES || {};
+    window.PARAM_TEMPLATES['control.delay'] = {
+        ms: 1000,
+        message: 'Esperando...'
+    };
+
     // --- LOGGER ---
     merge('util.logger', { level: 'Info', message: 'Mensaje' });
     mergeGroup('util.logger.templates', {

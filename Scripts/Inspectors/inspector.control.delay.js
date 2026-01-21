@@ -11,87 +11,100 @@
         if (sub) sub.textContent = node.key || '';
 
         const p = node.params || {};
+        const tpl = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.delay']) || {};
 
-        // Etiqueta
+        // Label
         const inpLbl = el('input', 'input');
         inpLbl.value = node.label || '';
         const sLbl = section('Etiqueta (label)', inpLbl);
 
-        // Segundos (más amigable que ms)
-        const inpSeg = el('input', 'input');
-        inpSeg.type = 'number';
-        inpSeg.min = '0';
-        inpSeg.value =
-            p.segundos != null
-                ? p.segundos
-                : (p.ms != null ? Math.round(p.ms / 1000) : 1);
-        const sSeg = section('Demora (segundos)', inpSeg);
+        // ms
+        const inpMs = el('input', 'input');
+        inpMs.type = 'number';
+        inpMs.min = '0';
+        inpMs.step = '1';
+        inpMs.placeholder = 'Ej: 1500';
+        inpMs.value = (p.ms != null ? p.ms : (tpl.ms != null ? tpl.ms : 1000));
+        const sMs = section('Milisegundos (ms)', inpMs);
 
-        // Mensaje opcional
-        const txtMsg = document.createElement('textarea');
-        txtMsg.className = 'input';
-        txtMsg.rows = 3;
-        txtMsg.value = p.mensaje || 'Esperando antes de continuar...';
-        const sMsg = section('Mensaje (opcional, admite ${...})', txtMsg);
+        // seconds (opcional)
+        const inpSec = el('input', 'input');
+        inpSec.type = 'text';
+        inpSec.placeholder = 'Ej: 1.5 (opcional, si no usás ms)';
+        inpSec.value = (p.seconds != null ? String(p.seconds) : (tpl.seconds != null ? String(tpl.seconds) : ''));
+        const sSec = section('Segundos (seconds) (opcional)', inpSec);
+
+        // message
+        const inpMsg = el('input', 'input');
+        inpMsg.placeholder = 'Ej: Esperando respuesta...';
+        inpMsg.value = (p.message != null ? String(p.message) : (tpl.message != null ? String(tpl.message) : ''));
+        const sMsg = section('Mensaje de log (opcional)', inpMsg);
 
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
 
         bSave.onclick = () => {
-            const seg = parseInt(inpSeg.value, 10);
-            const segundos = isNaN(seg) || seg < 0 ? 0 : seg;
+            node.label = inpLbl.value || node.label || 'Demora';
 
-            node.label = inpLbl.value || node.label || 'Delay';
-            node.params = Object.assign({}, node.params, {
-                segundos: segundos,
-                ms: segundos * 1000,
-                mensaje: txtMsg.value || ''
-            });
+            // parse ms
+            let ms = 0;
+            try { ms = parseInt(inpMs.value, 10) || 0; } catch (e) { ms = 0; }
+
+            const secondsRaw = (inpSec.value || '').trim();
+            const messageRaw = (inpMsg.value || '').trim();
+
+            const nextParams = Object.assign({}, node.params);
+
+            // Regla: si ms > 0, guardo ms y limpio seconds
+            if (ms > 0) {
+                nextParams.ms = ms;
+                if (nextParams.seconds != null) delete nextParams.seconds;
+            } else {
+                // si no hay ms, guardo seconds si viene
+                if (secondsRaw) nextParams.seconds = secondsRaw;
+                else if (nextParams.seconds != null) delete nextParams.seconds;
+
+                if (nextParams.ms != null) delete nextParams.ms;
+            }
+
+            if (messageRaw) nextParams.message = messageRaw;
+            else if (nextParams.message != null) delete nextParams.message;
+
+            node.params = nextParams;
 
             ensurePosition(node);
-            const elNode = nodeEl(node.id);
-            if (elNode) elNode.querySelector('.node__title').textContent = node.label;
+            const elN = nodeEl(node.id);
+            if (elN) {
+                const t = elN.querySelector('.node__title');
+                if (t) t.textContent = node.label;
+            }
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
-            setTimeout(() => {
-                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
-            }, 0);
+            setTimeout(() => { try { ctx.drawEdges(); } catch (e) { } }, 0);
         };
 
         bDel.onclick = () => {
-            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
-                    if (!e) continue;
-                    if (e.from === node.id || e.to === node.id) {
-                        ctx.edges.splice(i, 1);
-                    }
+                    if (e && (e.from === node.id || e.to === node.id)) ctx.edges.splice(i, 1);
                 }
             }
-
-            // Eliminar el nodo del array real
             if (Array.isArray(ctx.nodes)) {
                 for (let i = ctx.nodes.length - 1; i >= 0; i--) {
                     const n = ctx.nodes[i];
-                    if (n && n.id === node.id) {
-                        ctx.nodes.splice(i, 1);
-                    }
+                    if (n && n.id === node.id) ctx.nodes.splice(i, 1);
                 }
             }
-
-            // Quitar del DOM y refrescar canvas
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
-
             ctx.drawEdges();
             ctx.select(null);
         };
 
-
         body.appendChild(sLbl);
-        body.appendChild(sSeg);
+        body.appendChild(sMs);
+        body.appendChild(sSec);
         body.appendChild(sMsg);
         body.appendChild(rowButtons(bSave, bDel));
     });
