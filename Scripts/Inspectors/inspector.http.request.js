@@ -25,6 +25,18 @@
         if (typeof x === 'string') return x;
         try { return JSON.stringify(x, null, 2); } catch { return String(x); }
     }
+    function toInt(val, def) {
+        const n = parseInt(String(val == null ? '' : val), 10);
+        return Number.isFinite(n) ? n : def;
+    }
+    function toBool(val, def) {
+        if (val === true || val === false) return val;
+        if (val == null) return def;
+        const s = String(val).trim().toLowerCase();
+        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+        if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+        return def;
+    }
 
     register('http.request', (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
@@ -41,7 +53,6 @@
         const sLbl = section('Etiqueta (label)', inpLbl);
 
         // --- Combo de plantillas ---
-        
         const selTpl = el('select', 'input');
         function fillTemplatesSelect(sel) {
             sel.innerHTML = '';
@@ -57,17 +68,20 @@
             const fallbackPack = {
                 ping_get: {
                     label: 'GET: /Api/Ping.ashx',
-                    url: '/Api/Ping.ashx', method: 'GET', headers: {}, query: {}, body: null, contentType: ''
+                    url: '/Api/Ping.ashx', method: 'GET', headers: {}, query: {}, body: null, contentType: '',
+                    timeoutMs: 10000, failOnStatus: false, failStatusMin: 400
                 },
                 cliente_por_id: {
                     label: 'Cliente por id (GET)',
-                    url: '/Api/Cliente.ashx', method: 'GET', headers: {}, query: { id: '${solicitud.clienteId}' }, body: null, contentType: ''
+                    url: '/Api/Cliente.ashx', method: 'GET', headers: {}, query: { id: '${solicitud.clienteId}' }, body: null, contentType: '',
+                    timeoutMs: 10000, failOnStatus: true, failStatusMin: 400
                 },
                 cliente_demo_777: {
                     label: 'Cliente DEMO id=777 (GET)',
-                    url: '/Api/Cliente.ashx', method: 'GET', headers: {}, query: { id: 777 }, body: null, contentType: ''
+                    url: '/Api/Cliente.ashx', method: 'GET', headers: {}, query: { id: 777 }, body: null, contentType: '',
+                    timeoutMs: 10000, failOnStatus: true, failStatusMin: 400
                 }
-            }; // ← OJO: cerramos el objeto acá
+            };
 
             // 3) usá global si tiene claves; si no, el fallback
             const pack = (globalPack && Object.keys(globalPack).length) ? globalPack : fallbackPack;
@@ -83,7 +97,7 @@
             });
         }
 
-        // Cargar YA (usa pack global si existe o el fallback; sin espera)
+        // Cargar YA
         fillTemplatesSelect(selTpl);
 
         // Refrescar una sola vez cuando las plantillas anuncien que están listas
@@ -96,7 +110,7 @@
 
         const sTpl = section('Plantilla', selTpl);
 
-        // URL / Método (declaradas ANTES de usarlas en appendChild)
+        // URL / Método
         const inpUrl = el('input', 'input'); inpUrl.value = p.url || '';
         const sUrl = section('URL', inpUrl);
 
@@ -121,7 +135,48 @@
         const inpCT = el('input', 'input'); inpCT.value = p.contentType || '';
         const sCT = section('Content-Type (opcional)', inpCT);
 
-        const hint = el('div', 'hint'); hint.textContent = 'GET/HEAD ignoran body al enviar.';
+        // ✅ NUEVO: timeoutMs editable
+        const inpTimeout = el('input', 'input');
+        inpTimeout.type = 'number';
+        inpTimeout.min = '0';
+        inpTimeout.step = '100';
+        inpTimeout.value = String(toInt(p.timeoutMs, 10000));
+        const sTimeout = section('Timeout (ms)', inpTimeout);
+
+        // ✅ NUEVO: failOnStatus + failStatusMin
+        const chkFail = el('input', 'input');
+        chkFail.type = 'checkbox';
+        chkFail.checked = toBool(p.failOnStatus, false);
+
+        const wrapFail = el('label', '');
+        wrapFail.style.display = 'flex';
+        wrapFail.style.alignItems = 'center';
+        wrapFail.style.gap = '8px';
+        wrapFail.appendChild(chkFail);
+        wrapFail.appendChild(document.createTextNode('Tratar status HTTP como error (para Retry/ramas "error")'));
+        const sFail = section('Fail on status', wrapFail);
+
+        const inpFailMin = el('input', 'input');
+        inpFailMin.type = 'number';
+        inpFailMin.min = '100';
+        inpFailMin.max = '599';
+        inpFailMin.step = '1';
+        inpFailMin.value = String(toInt(p.failStatusMin, 400));
+        const sFailMin = section('Status mínimo considerado error', inpFailMin);
+
+        // UI: deshabilitar el mínimo cuando no está activo
+        function syncFailMin() {
+            const on = !!chkFail.checked;
+            inpFailMin.disabled = !on;
+            if (!on) {
+                // dejamos valor visible pero inactivo (no lo borro)
+            }
+        }
+        chkFail.addEventListener('change', syncFailMin);
+        syncFailMin();
+
+        const hint = el('div', 'hint');
+        hint.textContent = 'GET/HEAD ignoran body al enviar. Para que Retry funcione con HTTP, activá "Fail on status".';
 
         // Botones
         const bTpl = btn('Insertar plantilla');
@@ -132,9 +187,7 @@
         // === Insertar plantilla ===
         bTpl.onclick = () => {
             const base = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['http.request']) || {};
-            // usar el pack que quedó asociado al select
             const packFromSelect = selTpl._pack || {};
-            // si por algún motivo no está, intento el global
             const packGlobal = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['http.request.templates']) || {};
 
             let tpl = null;
@@ -143,7 +196,6 @@
             }
             if (!tpl) tpl = base;
 
-            // aplicar la plantilla
             inpUrl.value = tpl.url || '/Api/Ping.ashx';
             selMethod.value = ((tpl.method || 'GET') + '').toUpperCase();
 
@@ -153,27 +205,48 @@
             if (sH.children.length > 1) sH.replaceChild(newKvH, sH.children[1]); else sH.appendChild(newKvH);
             if (sQ.children.length > 1) sQ.replaceChild(newKvQ, sQ.children[1]); else sQ.appendChild(newKvQ);
 
-            // referencias actualizadas para Guardar/Probar
             kvH = newKvH;
             kvQ = newKvQ;
 
             taBody.value = (tpl.body == null) ? '' : (typeof tpl.body === 'string' ? tpl.body : JSON.stringify(tpl.body, null, 2));
             inpCT.value = tpl.contentType || '';
-        };
 
+            // ✅ NUEVO: aplicar retry-friendly params si vienen en plantilla
+            if (tpl.timeoutMs != null) inpTimeout.value = String(toInt(tpl.timeoutMs, 10000));
+            if (tpl.failOnStatus != null) chkFail.checked = !!tpl.failOnStatus;
+            if (tpl.failStatusMin != null) inpFailMin.value = String(toInt(tpl.failStatusMin, 400));
+            syncFailMin();
+        };
 
         // === Guardar ===
         bSave.onclick = () => {
-            const next = {
-                url: inpUrl.value.trim(),
-                method: selMethod.value,
-                headers: kvH.getValue(),
-                query: kvQ.getValue(),
-                timeoutMs: (p.timeoutMs || 10000)
-            };
+            // ✅ CLAVE: clonar parámetros actuales y pisar solo lo editado
+            const next = Object.assign({}, (node.params || {}));
+
+            next.url = inpUrl.value.trim();
+            next.method = selMethod.value;
+            next.headers = kvH.getValue();
+            next.query = kvQ.getValue();
+
+            // timeout
+            next.timeoutMs = Math.max(0, toInt(inpTimeout.value, toInt(next.timeoutMs, 10000)));
+
+            // failOnStatus
+            next.failOnStatus = !!chkFail.checked;
+            next.failStatusMin = toInt(inpFailMin.value, toInt(next.failStatusMin, 400));
+
+            // body
             const raw = taBody.value.trim();
-            if (raw) { try { next.body = JSON.parse(raw); } catch { next.body = raw; } }
+            if (raw) {
+                try { next.body = JSON.parse(raw); } catch { next.body = raw; }
+            } else {
+                // si está vacío, lo limpiamos (para evitar basura persistida)
+                delete next.body;
+            }
+
+            // contentType
             if (inpCT.value.trim()) next.contentType = inpCT.value.trim();
+            else delete next.contentType;
 
             node.label = inpLbl.value || node.label;
             node.params = next;
@@ -183,7 +256,8 @@
             if (elNode) elNode.querySelector('.node__title').textContent = node.label;
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-            // === FIX: redraw edges after save ===
+
+            // redraw edges after save
             setTimeout(() => {
                 try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
             }, 0);
@@ -241,7 +315,6 @@ Para probar:
 
         // === Eliminar ===
         bDel.onclick = () => {
-            // Eliminar edges que salen o llegan a este nodo (mutando el array real)
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
@@ -252,7 +325,6 @@ Para probar:
                 }
             }
 
-            // Eliminar el nodo del array real
             if (Array.isArray(ctx.nodes)) {
                 for (let i = ctx.nodes.length - 1; i >= 0; i--) {
                     const n = ctx.nodes[i];
@@ -262,7 +334,6 @@ Para probar:
                 }
             }
 
-            // Quitar del DOM y refrescar canvas
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
 
@@ -270,12 +341,24 @@ Para probar:
             ctx.select(null);
         };
 
-
         // Orden correcto de agregado al DOM
-        body.appendChild(sLbl); body.appendChild(sTpl);
-        body.appendChild(sUrl); body.appendChild(sMet);
-        body.appendChild(sH); body.appendChild(sQ);
-        body.appendChild(sBody); body.appendChild(sCT);
+        body.appendChild(sLbl);
+        body.appendChild(sTpl);
+
+        body.appendChild(sUrl);
+        body.appendChild(sMet);
+
+        body.appendChild(sH);
+        body.appendChild(sQ);
+
+        body.appendChild(sBody);
+        body.appendChild(sCT);
+
+        // ✅ NUEVO: opciones de ejecución
+        body.appendChild(sTimeout);
+        body.appendChild(sFail);
+        body.appendChild(sFailMin);
+
         body.appendChild(hint);
         body.appendChild(rowButtons(bTpl, bSave, bTest, bDel));
     });

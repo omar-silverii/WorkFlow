@@ -13,7 +13,18 @@
 <body>
     <form id="form1" runat="server">
         <div class="container-fluid">
-            <h4 class="mb-3">Workflow – Tareas humanas</h4>
+            
+           <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">Workflow – Tareas humanas</h4>
+
+                <asp:HyperLink
+                    ID="lnkVolverInstancias"
+                    runat="server"
+                    NavigateUrl="WF_Instancias.aspx"
+                    CssClass="btn btn-sm btn-secondary">
+                    ← Volver a instancias
+                </asp:HyperLink>
+            </div>
 
             <div class="form-inline mb-2">
                 <label class="mr-2">Texto a buscar (título / descripción / rol / usuario):</label>

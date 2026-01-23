@@ -14,8 +14,6 @@ namespace Intranet.WorkflowStudio.WebForms
     {
         public string TipoNodo { get { return "http.request"; } }
 
-        //Omar
-
         public async Task<ResultadoEjecucion> EjecutarAsync(ContextoEjecucion ctx, NodeDef nodo, CancellationToken ct)
         {
             var p = nodo.Parameters ?? new Dictionary<string, object>();
@@ -27,10 +25,17 @@ namespace Intranet.WorkflowStudio.WebForms
             var body = GetObj(p, "body");
             var timeoutMs = GetInt(p, "timeoutMs", 10000);
 
+            // ✅ NUEVO (opcional, no rompe compatibilidad)
+            var failOnStatus = GetBool(p, "failOnStatus", false); // default false
+            var failStatusMin = GetInt(p, "failStatusMin", 400);  // default 400
+
             if (string.IsNullOrWhiteSpace(url))
                 throw new InvalidOperationException("http.request: falta 'url'");
 
-            var uri = BuildUri(ctx.Http.BaseAddress, url, query);
+            // ✅ NUEVO: elegir HttpClient (default vs intranet con credenciales)
+            var client = PickClient(ctx, url);
+
+            var uri = BuildUri(client.BaseAddress, url, query);
 
             // Armamos el request
             var req = new HttpRequestMessage(new HttpMethod(method), uri);
@@ -96,7 +101,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
             try
             {
-                var resp = await ctx.Http.SendAsync(req, HttpCompletionOption.ResponseContentRead, linked.Token);
+                // ✅ NUEVO: usar el client elegido
+                var resp = await client.SendAsync(req, HttpCompletionOption.ResponseContentRead, linked.Token);
                 var status = (int)resp.StatusCode;
                 var text = resp.Content != null ? await resp.Content.ReadAsStringAsync() : "";
 
@@ -104,7 +110,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ctx.Estado["payload.status"] = status;
                 ctx.Estado["payload.body"] = text;
 
-                // <<< NUEVO: intentar parsear JSON y exponerlo bien en ctx.Estado >>>
+                // intentar parsear JSON y exponerlo bien en ctx.Estado
                 try
                 {
                     var mediaType = resp.Content?.Headers?.ContentType?.MediaType;
@@ -112,16 +118,15 @@ namespace Intranet.WorkflowStudio.WebForms
                         mediaType != null &&
                         mediaType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        // Parseo como JSON
                         var tok = JToken.Parse(text);
 
                         // Raíz JSON accesible como "payload"
                         ctx.Estado["payload"] = tok;
 
-                        // Compatibilidad con lo que ya tenías
+                        // Compatibilidad
                         ctx.Estado["payload.json"] = tok;
 
-                        // Aplanar: payload.ok, payload.status, payload.nombre, payload.documento, etc.
+                        // Aplanar
                         FlattenJson("payload", tok, ctx.Estado);
                     }
                 }
@@ -130,7 +135,17 @@ namespace Intranet.WorkflowStudio.WebForms
                     // ignorar parse fallido; dejamos solo payload.body/payload.status
                 }
 
-                ctx.Log("[HTTP] " + method + " " + uri + " => " + status);
+                // Log (incluye qué client usó)
+                var clientName = (ctx.HttpIntranet != null && object.ReferenceEquals(client, ctx.HttpIntranet)) ? "intranet" : "default";
+                ctx.Log("[HTTP] client=" + clientName + " " + method + " " + uri + " => " + status);
+
+                // ✅ NUEVO: si está habilitado, status>=failStatusMin => error (para que funcione retry)
+                if (failOnStatus && status >= failStatusMin)
+                {
+                    ctx.Log("[HTTP] failOnStatus: status=" + status + " (min=" + failStatusMin + ")");
+                    return new ResultadoEjecucion { Etiqueta = "error" };
+                }
+
                 return new ResultadoEjecucion { Etiqueta = "always" };
             }
             catch (TaskCanceledException)
@@ -144,9 +159,46 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 ctx.Estado["payload.status"] = 500;
                 ctx.Estado["payload.body"] = ex.Message;
-                ctx.Log("[HTTP] error: " + ex.Message);
+                var inner = ex.InnerException != null ? ex.InnerException.Message : "";
+                ctx.Log("[HTTP] error: " + ex.Message + (string.IsNullOrWhiteSpace(inner) ? "" : " | inner=" + inner));
+                ctx.Log("[HTTP] url: " + uri);
+
                 return new ResultadoEjecucion { Etiqueta = "error" };
             }
+        }
+
+        // ✅ NUEVO: elige HttpIntranet si la URL es intranet/relativa y existe
+        private static HttpClient PickClient(ContextoEjecucion ctx, string url)
+        {
+            if (ctx == null) throw new ArgumentNullException("ctx");
+
+            var def = ctx.Http;
+            var intr = ctx.HttpIntranet;
+
+            if (intr == null) return def;
+
+            // URL relativa => intranet (mismo sitio)
+            if (!string.IsNullOrWhiteSpace(url) && url.StartsWith("/", StringComparison.OrdinalIgnoreCase))
+                return intr;
+
+            // URL absoluta => si es loopback o mismo host del BaseAddress => intranet
+            try
+            {
+                if (Uri.TryCreate(url, UriKind.Absolute, out var abs))
+                {
+                    if (abs.IsLoopback) return intr;
+
+                    var baseAddr = def != null ? def.BaseAddress : null;
+                    if (baseAddr != null && !string.IsNullOrWhiteSpace(baseAddr.Host) &&
+                        abs.Host.Equals(baseAddr.Host, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return intr;
+                    }
+                }
+            }
+            catch { }
+
+            return def;
         }
 
         // ===== Helpers =====
@@ -155,24 +207,42 @@ namespace Intranet.WorkflowStudio.WebForms
             if (d == null) return null;
             object v; return d.TryGetValue(k, out v) && v != null ? Convert.ToString(v) : null;
         }
+
         static int GetInt(Dictionary<string, object> d, string k, int def = 0)
         {
             if (d == null) return def;
             object v; if (!d.TryGetValue(k, out v) || v == null) return def;
             int i; return int.TryParse(Convert.ToString(v), out i) ? i : def;
         }
+
+        static bool GetBool(Dictionary<string, object> d, string k, bool def = false)
+        {
+            if (d == null) return def;
+            object v; if (!d.TryGetValue(k, out v) || v == null) return def;
+
+            if (v is bool b) return b;
+
+            var s = Convert.ToString(v);
+            if (bool.TryParse(s, out var bb)) return bb;
+
+            if (int.TryParse(s, out var ii)) return ii != 0;
+
+            return def;
+        }
+
         static object GetObj(Dictionary<string, object> d, string k)
         {
             if (d == null) return null;
             object v; return d.TryGetValue(k, out v) ? v : null;
         }
+
         static Dictionary<string, object> GetDict(Dictionary<string, object> d, string k)
         {
             var res = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             if (d == null) return res;
             object v; if (!d.TryGetValue(k, out v) || v == null) return res;
 
-            if (v is Newtonsoft.Json.Linq.JObject jo)
+            if (v is JObject jo)
                 return jo.ToObject<Dictionary<string, object>>();
 
             if (v is Dictionary<string, object> dd) return new Dictionary<string, object>(dd, StringComparer.OrdinalIgnoreCase);
@@ -184,14 +254,13 @@ namespace Intranet.WorkflowStudio.WebForms
             Uri u;
             if (!Uri.TryCreate(url, UriKind.Absolute, out u))
             {
-                // Base: ctx.Http.BaseAddress o bien HttpContext actual
                 var baseUri = baseAddress;
                 if (baseUri == null)
                 {
                     var http = HttpContext.Current;
                     if (http != null && http.Request != null)
                     {
-                        var left = http.Request.Url.GetLeftPart(UriPartial.Authority);   // https://localhost:44350
+                        var left = http.Request.Url.GetLeftPart(UriPartial.Authority);
                         var app = http.Request.ApplicationPath ?? "/";
                         if (!app.EndsWith("/")) app += "/";
                         baseUri = new Uri(new Uri(left), app);
@@ -218,7 +287,6 @@ namespace Intranet.WorkflowStudio.WebForms
             return u;
         }
 
-        // <<< NUEVO: helper para aplanar el JSON en ctx.Estado >>>
         private static void FlattenJson(string prefix, JToken token, IDictionary<string, object> state)
         {
             if (token == null) return;
@@ -233,12 +301,12 @@ namespace Intranet.WorkflowStudio.WebForms
 
                         if (val is JValue jv)
                         {
-                            state[key] = jv.Value;        // ej: payload.nombre = "María García"
+                            state[key] = jv.Value;
                         }
                         else
                         {
-                            state[key] = val;             // guarda subárbol
-                            FlattenJson(key, val, state); // y además lo aplana recursivamente
+                            state[key] = val;
+                            FlattenJson(key, val, state);
                         }
                     }
                     break;
@@ -248,7 +316,7 @@ namespace Intranet.WorkflowStudio.WebForms
                     for (int i = 0; i < arr.Count; i++)
                     {
                         var item = arr[i];
-                        var key = $"{prefix}[{i}]";       // ej: payload.productos[0]
+                        var key = $"{prefix}[{i}]";
                         if (item is JValue jv2)
                         {
                             state[key] = jv2.Value;
@@ -259,10 +327,6 @@ namespace Intranet.WorkflowStudio.WebForms
                             FlattenJson(key, item, state);
                         }
                     }
-                    break;
-
-                default:
-                    // Primitivos ya manejados arriba
                     break;
             }
         }

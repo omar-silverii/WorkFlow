@@ -271,6 +271,7 @@
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
     <Content Include="Scripts\Inspectors\inspector.control.delay.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.retry.js" />
     <Content Include="Scripts\Inspectors\inspector.logger.js" />
     <Content Include="Scripts\Inspectors\inspector.chat.notify.js" />
     <Content Include="Scripts\Inspectors\inspector.core.js" />
@@ -316,6 +317,7 @@
     <Content Include="Api\Generico.ashx" />
     <Content Include="Api\ChatWebhookMock.ashx" />
     <Content Include="Api\WfDefiniciones.ashx" />
+    <Content Include="Api\RetryTest.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -369,6 +371,9 @@
     <Compile Include="Api\Ping.ashx.cs">
       <DependentUpon>Ping.ashx</DependentUpon>
     </Compile>
+    <Compile Include="Api\RetryTest.ashx.cs">
+      <DependentUpon>RetryTest.ashx</DependentUpon>
+    </Compile>
     <Compile Include="Api\Score.ashx.cs">
       <DependentUpon>Score.ashx</DependentUpon>
     </Compile>
@@ -377,6 +382,7 @@
     </Compile>
     <Compile Include="App_Code\Handlers\HChatNotify.cs" />
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
+    <Compile Include="App_Code\Handlers\HControlRetry.cs" />
     <Compile Include="App_Code\Handlers\HDocEntrada.cs" />
     <Compile Include="App_Code\Handlers\HDocExtract.cs" />
     <Compile Include="App_Code\Handlers\HDocTipoResolve.cs" />

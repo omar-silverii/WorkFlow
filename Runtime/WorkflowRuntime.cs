@@ -229,7 +229,8 @@ namespace Intranet.WorkflowStudio.Runtime
         // ✅ IMPORTANTE: si vas a usar chat.notify dentro del subflow:
         new HChatNotify(),
 
-        // ✅ y el propio subflow si el hijo llama a nietos:
+       
+        new HControlRetry(),
         new HSubflow()
             };
 
@@ -373,7 +374,10 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),
-                new HDocTipoResolve()
+                new HDocTipoResolve(),
+
+                new HControlRetry(),
+                new HSubflow()
             };
 
             await WorkflowRunner.EjecutarAsync(

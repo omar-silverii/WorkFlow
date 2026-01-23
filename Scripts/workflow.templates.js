@@ -5,80 +5,98 @@
     const mergeGroup = (key, obj) => (PT[key] = Object.assign({}, PT[key] || {}, obj));
 
     // --- HTTP ---
-    merge('http.request', {
+    const HTTP_DEFAULTS = {
+        timeoutMs: 8000,
+        failOnStatus: false,
+        failStatusMin: 400
+    };
+
+    merge('http.request', Object.assign({
         url: '/Api/Ping.ashx',
         method: 'GET',
         headers: {},
         query: {},
         body: null,
-        contentType: '',
-        timeoutMs: 8000,
-    });
+        contentType: ''
+    }, HTTP_DEFAULTS));
+
     mergeGroup('http.request.templates', {
-        ping_get: {
+        ping_get: Object.assign({}, HTTP_DEFAULTS, {
             label: 'GET: /Api/Ping.ashx',
             url: '/Api/Ping.ashx',
             method: 'GET',
             headers: {},
             query: {},
             body: null,
-            contentType: '',
-        },
-        get_con_query: {
+            contentType: ''
+        }),
+
+        get_con_query: Object.assign({}, HTTP_DEFAULTS, {
             label: 'GET con query: ?clienteId',
             url: '/Api/Score.ashx',
             method: 'GET',
             headers: {},
             query: { clienteId: '${solicitud.clienteId}' },
             body: null,
-            contentType: '',
-        },
-        post_json: {
+            contentType: ''
+        }),
+
+        post_json: Object.assign({}, HTTP_DEFAULTS, {
             label: 'POST JSON',
             url: '/api/demo',
             method: 'POST',
             headers: {},
             query: {},
             body: { nro: '${payload.data.nro}', importe: '${payload.data.prima}' },
-            contentType: 'application/json',
-        },
-        put_json: {
+            contentType: 'application/json'
+        }),
+
+        put_json: Object.assign({}, HTTP_DEFAULTS, {
             label: 'PUT JSON',
             url: '/api/demo',
             method: 'PUT',
             headers: {},
             query: {},
             body: { id: '${payload.id}', valor: 'actualizado' },
-            contentType: 'application/json',
-        },
-        delete_simple: {
+            contentType: 'application/json'
+        }),
+
+        delete_simple: Object.assign({}, HTTP_DEFAULTS, {
             label: 'DELETE (simple)',
             url: '/api/demo/${payload.id}',
             method: 'DELETE',
             headers: {},
             query: {},
             body: null,
-            contentType: '',
-        },
-        cliente_por_id: {
+            contentType: ''
+        }),
+
+        // 👉 Estas 2 normalmente querés que fallen por status para integrarse con Retry
+        cliente_por_id: Object.assign({}, HTTP_DEFAULTS, {
             label: 'Cliente por id (GET)',
             url: '/Api/Cliente.ashx',
             method: 'GET',
             headers: {},
             query: { id: '${solicitud.clienteId}' },
             body: null,
-            contentType: ''
-        },
-        cliente_demo_777: {
+            contentType: '',
+            failOnStatus: true,
+            failStatusMin: 400
+        }),
+
+        cliente_demo_777: Object.assign({}, HTTP_DEFAULTS, {
             label: 'Cliente DEMO id=777 (GET)',
             url: '/Api/Cliente.ashx',
             method: 'GET',
             headers: {},
             query: { id: 777 },
             body: null,
-            contentType: ''
-        }
+            contentType: '',
+            failOnStatus: true,
+            failStatusMin: 400
+        })
     });
+
 
     // --- IF ---
     merge('control.if', { expression: '${payload.status} == 200' });
@@ -90,12 +108,16 @@
         score_ge_700: { label: 'payload.score >= 700', expression: '${payload.score} >= 700' },
     });
 
-    // --- DELEY ---
-    window.PARAM_TEMPLATES = window.PARAM_TEMPLATES || {};
-    window.PARAM_TEMPLATES['control.delay'] = {
-        ms: 1000,
-        message: 'Esperando...'
-    };
+    // --- DELAY ---
+    merge('control.delay', { ms: 1000, message: 'Esperando...' });
+
+    // --- RETRY ---
+    merge('control.retry', { reintentos: 3, backoffMs: 500, message: '' });
+    mergeGroup('control.retry.templates', {
+        retry_x3: { label: 'Reintentar x3', reintentos: 3, backoffMs: 500, message: '' },
+        retry_x5: { label: 'Reintentar x5', reintentos: 5, backoffMs: 800, message: '' },
+        retry_rapido: { label: 'Rápido (x3, 200ms)', reintentos: 3, backoffMs: 200, message: '' }
+    });
 
     // --- LOGGER ---
     merge('util.logger', { level: 'Info', message: 'Mensaje' });

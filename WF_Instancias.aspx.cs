@@ -1,12 +1,13 @@
-﻿using System;
+﻿using Intranet.WorkflowStudio.Runtime;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Configuration;
 using System.Data;
-using Newtonsoft.Json.Linq;
 using System.Data.SqlClient;
 using System.Text;
+using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
-using Intranet.WorkflowStudio.Runtime;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -47,6 +48,21 @@ namespace Intranet.WorkflowStudio.WebForms
                     ViewState["InstanciaSeleccionada"] = null;
                 }
                 CargarInstancias();
+
+                // Si venimos desde tareas, habilitamos botón "Volver a tareas"
+                var returnTo = Request.QueryString["returnTo"];
+                if (!string.IsNullOrWhiteSpace(returnTo) && returnTo.Equals("tareas", StringComparison.OrdinalIgnoreCase))
+                {
+                    lnkBackTareas.Visible = true;
+                    lnkBackTareas.NavigateUrl = "WF_Gerente_Tareas.aspx";
+                }
+                else
+                {
+                    // Si querés, lo mostramos siempre:
+                    lnkBackTareas.Visible = true;
+                    lnkBackTareas.NavigateUrl = "WF_Gerente_Tareas.aspx";
+                }
+
             }
         }
 
@@ -308,59 +324,149 @@ namespace Intranet.WorkflowStudio.WebForms
         private void VerLog(long instId)
         {
             string sql = @"
-                SELECT FechaLog, Nivel, Mensaje, NodoId, NodoTipo
-                FROM dbo.WF_InstanciaLog
-                WHERE WF_InstanciaId = @Id
-                ORDER BY FechaLog";
+        SELECT FechaLog, Nivel, Mensaje, NodoId, NodoTipo
+        FROM dbo.WF_InstanciaLog
+        WHERE WF_InstanciaId = @Id
+        ORDER BY FechaLog";
 
-            StringBuilder sb = new StringBuilder();
+            var html = new StringBuilder();
 
             using (SqlConnection cn = new SqlConnection(Cnn))
             using (SqlCommand cmd = new SqlCommand(sql, cn))
             {
                 cmd.Parameters.AddWithValue("@Id", instId);
                 cn.Open();
+
                 using (SqlDataReader dr = cmd.ExecuteReader())
                 {
-                    if (dr.HasRows)
+                    if (!dr.HasRows)
+                    {
+                        html.Append("<div class='list-group-item'>Sin logs para esta instancia.</div>");
+                    }
+                    else
                     {
                         while (dr.Read())
                         {
                             DateTime fecha = dr.GetDateTime(0);
-                            string nivel = dr["Nivel"].ToString();
-                            string mensaje = dr["Mensaje"].ToString();
-                            object nodoIdObj = dr["NodoId"];
-                            object nodoTipoObj = dr["NodoTipo"];
+                            string nivelDb = dr["Nivel"]?.ToString() ?? "Info";
+                            string mensaje = dr["Mensaje"]?.ToString() ?? "";
 
-                            sb.Append(fecha.ToString("dd/MM/yyyy HH:mm:ss"));
-                            sb.Append(" [");
-                            sb.Append(nivel);
-                            sb.Append("] ");
+                            string nodoId = (dr["NodoId"] == DBNull.Value) ? "" : dr["NodoId"].ToString();
+                            string nodoTipo = (dr["NodoTipo"] == DBNull.Value) ? "" : dr["NodoTipo"].ToString();
 
-                            if (nodoIdObj != DBNull.Value)
-                            {
-                                sb.Append("(Nodo=" + nodoIdObj.ToString());
-                                if (nodoTipoObj != DBNull.Value)
-                                {
-                                    sb.Append(" / " + nodoTipoObj.ToString());
-                                }
-                                sb.Append(") ");
-                            }
+                            // Detectar "técnico" (oculto por defecto)
+                            bool isTech = EsTecnico(mensaje);
 
-                            sb.AppendLine(mensaje);
+                            // Nivel “derivado” (si DB viene Info pero el mensaje marca Error)
+                            string nivel = DerivarNivel(nivelDb, mensaje);
+
+                            string badgeLevel = CssBadgeNivel(nivel);
+                            string nodoBadge = (!string.IsNullOrWhiteSpace(nodoId) || !string.IsNullOrWhiteSpace(nodoTipo))
+                                ? $"<span class='badge text-bg-light ms-2'>{HttpUtility.HtmlEncode(nodoId)} / {HttpUtility.HtmlEncode(nodoTipo)}</span>"
+                                : "";
+
+                            string msgHtml = HttpUtility.HtmlEncode(mensaje);
+                            // preservar saltos de línea si existieran
+                            msgHtml = msgHtml.Replace("\r\n", "\n").Replace("\n", "<br/>");
+                            msgHtml = LinkificarTareaId(msgHtml);
+
+                            string dataText = HttpUtility.HtmlAttributeEncode($"{fecha:dd/MM/yyyy HH:mm:ss} {nivel} {nodoId} {nodoTipo} {mensaje}");
+
+                            html.Append("<div class='list-group-item wf-log-item'");
+                            html.Append($" data-level='{HttpUtility.HtmlAttributeEncode(nivel)}'");
+                            html.Append($" data-tech='{(isTech ? "1" : "0")}'");
+                            html.Append($" data-text='{dataText}'>");
+
+                            html.Append("<div class='d-flex justify-content-between align-items-start'>");
+                            html.Append("<div>");
+                            html.Append($"<span class='badge {badgeLevel}'>{HttpUtility.HtmlEncode(nivel)}</span>");
+                            html.Append(nodoBadge);
+                            html.Append("</div>");
+                            html.Append($"<small class='text-muted'>{fecha:dd/MM/yyyy HH:mm:ss}</small>");
+                            html.Append("</div>");
+
+                            html.Append($"<div class='mt-1'>{msgHtml}</div>");
+
+                            html.Append("</div>");
                         }
-                    }
-                    else
-                    {
-                        sb.AppendLine("Sin logs para esta instancia.");
                     }
                 }
             }
 
             lblTituloDetalle.InnerText = "Instancia " + instId + " – Log";
-            preDetalle.InnerText = sb.ToString();
+
+            // IMPORTANTE: divLogList es runat="server"
+            divLogList.InnerHtml = html.ToString();
+
             pnlDetalle.Visible = true;
+            ScriptManager.RegisterStartupScript(this, this.GetType(),
+    "wf_applyLogFilters", "setTimeout(function(){ if(window.applyLogFilters) window.applyLogFilters(); }, 0);", true);
+
         }
+
+        private static bool EsTecnico(string mensaje)
+        {
+            if (string.IsNullOrWhiteSpace(mensaje)) return false;
+
+            // Todo esto lo ocultamos por defecto (debug/ruido)
+            if (mensaje.IndexOf("[Logger DEBUG]", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (mensaje.IndexOf("raw=", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (mensaje.IndexOf("expanded=", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+            // Podés agregar más reglas si querés (por ahora minimal)
+            return false;
+        }
+
+        private static string DerivarNivel(string nivelDb, string mensaje)
+        {
+            var n = (nivelDb ?? "Info").Trim();
+
+            // Si el mensaje sugiere error, lo subimos a Error (solo para UI)
+            if (!string.IsNullOrEmpty(mensaje))
+            {
+                if (mensaje.IndexOf("[Error]", StringComparison.OrdinalIgnoreCase) >= 0) return "Error";
+                if (mensaje.IndexOf(" ERROR", StringComparison.OrdinalIgnoreCase) >= 0) return "Error";
+                if (mensaje.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase)) return "Error";
+                if (mensaje.IndexOf("[Warning]", StringComparison.OrdinalIgnoreCase) >= 0) return "Warning";
+            }
+
+            return string.IsNullOrWhiteSpace(n) ? "Info" : n;
+        }
+
+        private static string CssBadgeNivel(string nivel)
+        {
+            // Bootstrap 5: text-bg-*
+            switch ((nivel ?? "").Trim().ToLowerInvariant())
+            {
+                case "error": return "text-bg-danger";
+                case "warning": return "text-bg-warning";
+                case "debug": return "text-bg-secondary";
+                default: return "text-bg-primary"; // Info
+            }
+        }
+
+        private static string LinkificarTareaId(string msgHtml)
+        {
+            // msgHtml ya viene HTML-encoded + <br/>, así que buscamos el patrón en texto encodeado igual.
+            // Como "tareaId=20076" no tiene chars especiales, lo podemos reemplazar directo.
+            // Si querés regex, también se puede.
+            int idx = msgHtml.IndexOf("tareaId=", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return msgHtml;
+
+            // Reemplazo simple con regex para capturar el número
+            return System.Text.RegularExpressions.Regex.Replace(
+                msgHtml,
+                @"tareaId=(\d+)",
+                m =>
+                {
+                    var id = m.Groups[1].Value;
+                    var url = "WF_Tareas.aspx?tareaId=" + id + "&returnTo=instancias";
+                    return "tareaId=<a href='" + url + "'><b>" + id + "</b></a>";
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+        }
+
 
         // =========================
         // NUEVO: crear instancia + ejecutar workflow (async/await directo)

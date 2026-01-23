@@ -21,11 +21,21 @@
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <h4 class="mb-0">Workflows – Instancias</h4>
-                <asp:HyperLink ID="lnkBack" runat="server" NavigateUrl="WF_Definiciones.aspx" CssClass="btn btn-sm btn-secondary">← Volver a definiciones</asp:HyperLink>
+
+            <div class="btn-group">
+                <asp:HyperLink ID="lnkBackDef" runat="server"
+                    NavigateUrl="WF_Definiciones.aspx"
+                    CssClass="btn btn-sm btn-secondary">← Definiciones</asp:HyperLink>
+
+                <asp:HyperLink ID="lnkBackTareas" runat="server"
+                    CssClass="btn btn-sm btn-outline-secondary"
+                    Visible="false">← Tareas</asp:HyperLink>
             </div>
+        </div>
+
 
             <div class="form-inline mb-2">
-                <label class="mr-2">Definición:</label>
+                <label class="me-2">Definición:</label>
                 <asp:DropDownList ID="ddlDef" runat="server" CssClass="form-control form-control-sm mr-2" AutoPostBack="true" OnSelectedIndexChanged="ddlDef_SelectedIndexChanged" />
                 <asp:Button ID="btnRefrescar" runat="server" Text="Refrescar" CssClass="btn btn-sm btn-primary mr-2" OnClick="btnRefrescar_Click" />
                 <!-- NUEVO: crear una instancia dummy de la definición seleccionada -->
@@ -70,7 +80,39 @@
             <!-- panel datos / log -->
             <asp:Panel ID="pnlDetalle" runat="server" Visible="false" CssClass="mt-3">
                 <h6 id="lblTituloDetalle" runat="server">Detalle</h6>
-                <pre id="preDetalle" runat="server" class="log-view"></pre>
+                <pre id="preDetalle" runat="server" class="log-box" Visible="false"></pre>
+                <div class="card mb-3">
+                  <div class="card-body">
+
+                    <div class="row g-2 align-items-center mb-2">
+                      <div class="col-md-6">
+                        <input id="txtLogSearch" type="text" class="form-control" placeholder="Buscar en el log..." />
+                      </div>
+
+                      <div class="col-md-3">
+                        <select id="ddlLogLevel" class="form-select">
+                          <option value="">Todos los niveles</option>
+                          <option value="Info">Info</option>
+                          <option value="Warning">Warning</option>
+                          <option value="Error">Error</option>
+                          <option value="Debug">Debug</option>
+                        </select>
+                      </div>
+
+                      <div class="col-md-3">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="chkShowTech" />
+                          <label class="form-check-label" for="chkShowTech">
+                            Mostrar técnico (debug)
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="divLogList" runat="server" class="list-group"></div>
+
+                  </div>
+                </div>
             </asp:Panel>
 
             <!-- Modal Historial de Escalamiento (por Instancia) -->
@@ -94,9 +136,55 @@
             </div>
 
         </div>
+
+        <script type="text/javascript">
+            (function () {
+                function norm(s) { return (s || '').toString().toLowerCase(); }
+
+                function applyLogFilters() {
+                    var txt = document.getElementById('txtLogSearch');
+                    var ddl = document.getElementById('ddlLogLevel');
+                    var chk = document.getElementById('chkShowTech');
+
+                    // Si el panel de log no está renderizado, no hacemos nada.
+                    if (!txt || !ddl || !chk) return;
+
+                    var q = norm(txt.value);
+                    var lvl = (ddl.value || '').toString();
+                    var showTech = chk.checked;
+
+                    var items = document.querySelectorAll('.wf-log-item');
+                    for (var i = 0; i < items.length; i++) {
+                        var it = items[i];
+                        var text = norm(it.getAttribute('data-text'));
+                        var level = (it.getAttribute('data-level') || '');
+                        var isTech = (it.getAttribute('data-tech') || '0') === '1';
+
+                        var okQ = !q || text.indexOf(q) >= 0;
+                        var okL = !lvl || level === lvl;
+                        var okT = showTech ? true : !isTech;
+
+                        it.style.display = (okQ && okL && okT) ? '' : 'none';
+                    }
+                }
+
+                document.addEventListener('input', function (e) {
+                    if (e.target && e.target.id === 'txtLogSearch') applyLogFilters();
+                });
+
+                document.addEventListener('change', function (e) {
+                    if (!e.target) return;
+                    if (e.target.id === 'ddlLogLevel' || e.target.id === 'chkShowTech') applyLogFilters();
+                });
+
+                // primera pasada (si existe panel)
+                setTimeout(applyLogFilters, 0);
+            })();
+        </script>
+
     </form>
 
-    <script type="text/javascript">
+    <script type="text/javascript">        
         async function wfMostrarHistorialInst(instanciaId) {
         const modalEl = document.getElementById('mdlHistorialEsc');
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -206,7 +294,9 @@
             .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
             .replaceAll('"','&quot;').replaceAll("'","&#039;");
         }
-    </script>
+
+
+         </script>
 
 </body>
 </html>

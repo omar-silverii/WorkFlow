@@ -43,7 +43,8 @@
             </div>
 
             <!-- Definiciones (estilo bootstrap-like) -->
-            <button type="button" id="btnIrDef" class="btn btn-outline-primary">
+            <button type="button" class="btn" id="btnNewGraph">Nuevo grafo</button>
+            <button type="button" class="btn btn-outline-primary" id="btnIrDef">
                 Definiciones
             </button>
 
@@ -154,6 +155,8 @@
     <script src="Scripts/inspectors/inspector.edge.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.http.request.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.if.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.control.delay.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.control.retry.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.subflow.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.logger.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.human.task.js?v=dev200"></script>
@@ -251,6 +254,28 @@
                     } else {
                         window.location.href = 'WF_Definiciones.aspx';
                     }
+                });
+            })();
+
+            (function () {
+                var btnNew = document.getElementById('btnNewGraph');
+                if (!btnNew) return;
+
+                btnNew.addEventListener('click', function () {
+                    if (!confirm('¿Crear un grafo nuevo? Se perderán cambios no guardados.')) return;
+
+                    // Reusar tu limpieza existente (la más segura: “click” al botón real)
+                    var btnClear = document.getElementById('btnClear');
+                    if (btnClear) btnClear.click();
+
+                    // (Opcional) si tenés un input de nombre, lo limpiamos sin romper
+                    // Ajustá el selector si tu input tiene otro id
+                    var nameInput =
+                        document.getElementById('txtNombreWorkflow') ||
+                        document.querySelector('input[name="workflowName"]') ||
+                        null;
+
+                    if (nameInput) nameInput.value = '';
                 });
             })();
 

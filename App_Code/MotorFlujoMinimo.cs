@@ -58,13 +58,30 @@ namespace Intranet.WorkflowStudio.WebForms
     {
         public Dictionary<string, object> Estado { get; private set; }
         public Action<string> Log { get; set; }
+
+        // Cliente general (externo)
         public HttpClient Http { get; private set; }
+
+        // ✅ NUEVO: Cliente intranet con credenciales Windows
+        public HttpClient HttpIntranet { get; private set; }
 
         public ContextoEjecucion(Action<string> log = null)
         {
             Estado = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             Log = log ?? (_ => { });
+
             Http = new HttpClient();
+
+            // Cliente SOLO intranet con credenciales Windows
+            try
+            {
+                var handler = new HttpClientHandler { UseDefaultCredentials = true };
+                HttpIntranet = new HttpClient(handler);
+            }
+            catch
+            {
+                HttpIntranet = null;
+            }
 
             // Importar seed si lo dejó el server
             try
@@ -78,7 +95,7 @@ namespace Intranet.WorkflowStudio.WebForms
             }
             catch { }
 
-            // Base para URLs relativas
+            // Base para URLs relativas (aplica a ambos clientes)
             try
             {
                 var req = System.Web.HttpContext.Current?.Request;
@@ -87,7 +104,9 @@ namespace Intranet.WorkflowStudio.WebForms
                     var app = req.ApplicationPath ?? "/";
                     if (!app.EndsWith("/")) app += "/";
                     var baseUri = new Uri(req.Url.Scheme + "://" + req.Url.Authority + app);
+
                     Http.BaseAddress = baseUri;
+                    if (HttpIntranet != null) HttpIntranet.BaseAddress = baseUri;
                 }
             }
             catch { }
@@ -140,7 +159,9 @@ namespace Intranet.WorkflowStudio.WebForms
             return false;
         }
 
-        private static readonly Regex _tplRegex = new Regex(@"\$\{(?<path>[^}]+)\}", RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex _tplRegex =
+            new System.Text.RegularExpressions.Regex(@"\$\{(?<path>[^}]+)\}",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
 
         public string ExpandString(string s)
         {
@@ -154,10 +175,6 @@ namespace Intranet.WorkflowStudio.WebForms
             });
         }
 
-        /// <summary>
-        /// Setea en Estado una ruta con puntos: ejemplo "payload.polizaId" = 123.
-        /// Crea diccionarios intermedios si no existen.
-        /// </summary>
         public static void SetPath(IDictionary<string, object> root, string path, object value)
         {
             if (root == null || string.IsNullOrWhiteSpace(path)) return;
@@ -185,7 +202,6 @@ namespace Intranet.WorkflowStudio.WebForms
             curr[parts[parts.Length - 1]] = value;
         }
     }
-
     // ===== Motor =====
     public class MotorFlujo
     {
@@ -306,7 +322,145 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!_handlers.TryGetValue(nodo.Type, out var manejador))
                     throw new InvalidOperationException("No hay handler para: " + nodo.Type);
 
-                var res = await manejador.EjecutarAsync(ctx, nodo, ct);
+                ResultadoEjecucion res = null;
+
+                // ================================================================
+                // control.retry: el motor reintenta internamente el nodo siguiente
+                // - reintenta si:
+                //     a) el nodo siguiente devuelve Etiqueta == "error"
+                //     b) el handler del nodo siguiente lanza excepción
+                // ================================================================
+                if (string.Equals(nodo.Type, "control.retry", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 1) ejecutar handler del retry (solo log/config)
+                    try
+                    {
+                        _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
+                        await manejador.EjecutarAsync(ctx, nodo, ct);
+                    }
+                    catch (Exception exRetry)
+                    {
+                        // si el retry en sí falla, lo tratamos como error del flujo
+                        ctx.Log($"[Retry] ERROR en control.retry: {exRetry.Message}");
+                    }
+
+                    // 2) resolver destino (arista always o primera)
+                    var salRetry = (wf.Edges ?? new List<EdgeDef>())
+                        .Where(e => string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (salRetry.Count == 0)
+                        throw new InvalidOperationException("control.retry sin aristas salientes: " + nodo.Id);
+
+                    var edgeToTry =
+                        salRetry.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                        salRetry.FirstOrDefault();
+
+                    if (edgeToTry == null || string.IsNullOrWhiteSpace(edgeToTry.To))
+                        throw new InvalidOperationException("control.retry sin destino válido: " + nodo.Id);
+
+                    if (!wf.Nodes.TryGetValue(edgeToTry.To, out var nodoTarget))
+                        throw new InvalidOperationException("Nodo destino de retry no encontrado: " + edgeToTry.To);
+
+                    if (!_handlers.TryGetValue(nodoTarget.Type, out var handlerTarget))
+                        throw new InvalidOperationException("No hay handler para nodo destino de retry: " + nodoTarget.Type);
+
+                    // 3) leer params retry
+                    int reintentos = GetIntParam(nodo, "reintentos", 3);
+                    int backoffMs = GetIntParam(nodo, "backoffMs", 500);
+                    if (reintentos < 0) reintentos = 0;
+                    if (reintentos > 50) reintentos = 50;
+                    if (backoffMs < 0) backoffMs = 0;
+                    if (backoffMs > 600000) backoffMs = 600000;
+
+                    int maxIntentos = reintentos + 1;
+
+                    ResultadoEjecucion resTarget = null;
+                    Exception ultimaEx = null;
+
+                    for (int intento = 1; intento <= maxIntentos; intento++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        try
+                        {
+                            _estadoPublisher?.Publish(ctx.Estado, nodoTarget.Id, nodoTarget.Type);
+                            ctx.Log($"[Retry] intento {intento}/{maxIntentos} -> {nodoTarget.Id} ({nodoTarget.Type})");
+                            resTarget = await handlerTarget.EjecutarAsync(ctx, nodoTarget, ct);
+                            ultimaEx = null;
+                        }
+                        catch (Exception ex)
+                        {
+                            ultimaEx = ex;
+                            ctx.Log($"[Retry] excepción en intento {intento}/{maxIntentos}: {ex.Message}");
+
+                            // forzamos etiqueta error para el criterio de retry (tu ResultadoEjecucion no tiene 'Mensaje')
+                            resTarget = new ResultadoEjecucion { Etiqueta = "error" };
+                        }
+
+
+                        // publicar estado luego de ejecutar el nodo target
+                        _estadoPublisher?.Publish(ctx.Estado, nodoTarget.Id, nodoTarget.Type);
+
+                        // criterio de “fallo” => retry
+                        var et = (resTarget != null && !string.IsNullOrEmpty(resTarget.Etiqueta)) ? resTarget.Etiqueta : "always";
+                        bool esError = string.Equals(et, "error", StringComparison.OrdinalIgnoreCase);
+
+                        if (!esError)
+                        {
+                            // éxito: salimos del retry loop
+                            break;
+                        }
+
+                        // si falló y quedan intentos, backoff
+                        if (intento < maxIntentos && backoffMs > 0)
+                        {
+                            ctx.Log($"[Retry] backoff {backoffMs}ms (sigue retry)");
+                            await Task.Delay(backoffMs, ct);
+                        }
+                    }
+
+                    // si terminó con excepción persistente, log extra (sin romper compatibilidad)
+                    if (ultimaEx != null)
+                        ctx.Log($"[Retry] agotados intentos. última excepción: {ultimaEx.Message}");
+
+                    // 4) aplicar lógica de transición EN BASE AL NODO TARGET (no al retry)
+                    var etiquetaTarget = (resTarget != null && !string.IsNullOrEmpty(resTarget.Etiqueta))
+                        ? resTarget.Etiqueta
+                        : "always";
+
+                    var salTarget = (wf.Edges ?? new List<EdgeDef>())
+                        .Where(e => string.Equals(e.From, nodoTarget.Id, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (salTarget.Count == 0)
+                        break;
+
+                    var nextAfterTarget =
+                        salTarget.FirstOrDefault(e => string.Equals(e.Condition, etiquetaTarget, StringComparison.OrdinalIgnoreCase)) ??
+                        salTarget.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                        salTarget[0];
+
+                    actual = nextAfterTarget.To;
+
+                    // aplicar mismas reglas post-ejecución (detener)
+                    if (ctx.Estado != null &&
+                        ctx.Estado.TryGetValue("wf.detener", out var detValRetry) &&
+                        ContextoEjecucion.ToBool(detValRetry))
+                    {
+                        ctx.Log($"[Motor] ejecución detenida (desde retry) en nodo {nodoTarget.Id} ({nodoTarget.Type})");
+                        break;
+                    }
+
+                    // saltamos el flujo normal porque ya avanzamos "actual" manualmente
+                    continue;
+                }
+                // ================================================================
+
+                // ejecución normal
+                _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
+                res = await manejador.EjecutarAsync(ctx, nodo, ct);
+
 
                 // Publicar estado luego de ejecutar cada nodo
                 _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
@@ -344,6 +498,32 @@ namespace Intranet.WorkflowStudio.WebForms
             _estadoPublisher?.Publish(ctx.Estado, null, null);
         }
 
+        private static int GetIntParam(NodeDef nodo, string key, int def)
+        {
+            try
+            {
+                if (nodo?.Parameters == null) return def;
+                if (!nodo.Parameters.TryGetValue(key, out var v) || v == null) return def;
+
+                if (v is int i) return i;
+                if (v is long l) return (int)l;
+                if (v is decimal d) return (int)d;
+                if (v is double db) return (int)db;
+
+                var s = v.ToString().Trim();
+                if (string.IsNullOrEmpty(s)) return def;
+
+                s = s.Replace(",", ".");
+                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var x))
+                    return x;
+
+                if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var dd))
+                    return (int)dd;
+
+                return def;
+            }
+            catch { return def; }
+        }
 
     }
 
