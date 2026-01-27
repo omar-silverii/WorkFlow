@@ -9,7 +9,7 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web;   // <<< para HttpContext
+using System.Web;   // HttpContext
 
 namespace Intranet.WorkflowStudio.Runtime
 {
@@ -20,7 +20,7 @@ namespace Intranet.WorkflowStudio.Runtime
 
         /// <summary>
         /// Reejecuta una instancia creando una NUEVA instancia con la misma definición y datos de entrada.
-        /// (Esto es para "replay", no para reanudar human.tasks)
+        /// (Replay, no reanudar human.tasks)
         /// </summary>
         public static async Task<long> ReejecutarInstanciaAsync(long instanciaId, string usuario)
         {
@@ -43,7 +43,6 @@ namespace Intranet.WorkflowStudio.Runtime
                 }
             }
 
-            // Crea una NUEVA instancia usando la misma definición y los mismos datos de entrada
             return await CrearInstanciaYEjecutarAsync(defId, datosEntrada, usuario);
         }
 
@@ -53,7 +52,7 @@ namespace Intranet.WorkflowStudio.Runtime
             public long InstanciaId { get; set; }
             public int DefinicionId { get; set; }
             public string DatosEntradaJson { get; set; }
-            public string NodoId { get; set; }   // <<< NUEVO
+            public string NodoId { get; set; }
         }
 
         /// <summary>
@@ -63,13 +62,13 @@ namespace Intranet.WorkflowStudio.Runtime
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            SELECT  t.WF_InstanciaId,
-                                                    i.WF_DefinicionId,
-                                                    i.DatosEntrada,
-                                                    t.NodoId
-                                            FROM    dbo.WF_Tarea      t
-                                            JOIN    dbo.WF_Instancia  i ON i.Id = t.WF_InstanciaId
-                                            WHERE   t.Id = @Id;", cn))
+SELECT  t.WF_InstanciaId,
+        i.WF_DefinicionId,
+        i.DatosEntrada,
+        t.NodoId
+FROM    dbo.WF_Tarea      t
+JOIN    dbo.WF_Instancia  i ON i.Id = t.WF_InstanciaId
+WHERE   t.Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
                 cn.Open();
@@ -84,7 +83,7 @@ namespace Intranet.WorkflowStudio.Runtime
                         InstanciaId = dr.GetInt64(0),
                         DefinicionId = dr.GetInt32(1),
                         DatosEntradaJson = dr.IsDBNull(2) ? null : dr.GetString(2),
-                        NodoId = dr.IsDBNull(3) ? null : dr.GetString(3)   // <<< NUEVO
+                        NodoId = dr.IsDBNull(3) ? null : dr.GetString(3)
                     };
                 }
             }
@@ -95,21 +94,19 @@ namespace Intranet.WorkflowStudio.Runtime
         /// </summary>
         private static void MarcarTareaCompletada(long tareaId, string resultado, string datosJson)
         {
-            // Wrapper que reusa la implementación más completa (con usuario).
             MarcarTareaCompletada(tareaId, resultado, usuario: null, datosJson: datosJson);
         }
 
         public static async Task EjecutarInstanciaExistenteAsync(long instId, string usuario, CancellationToken ct)
         {
-            // 1) Leer definición + datos entrada desde WF_Instancia
             int defId;
             string datosEntrada;
 
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-        SELECT WF_DefinicionId, DatosEntrada
-        FROM dbo.WF_Instancia
-        WHERE Id = @Id;", cn))
+SELECT WF_DefinicionId, DatosEntrada
+FROM dbo.WF_Instancia
+WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
                 cn.Open();
@@ -130,7 +127,7 @@ namespace Intranet.WorkflowStudio.Runtime
             var wf = WorkflowRunner.FromJson(jsonDef);
             var logs = new List<string>();
 
-            // 2) Seed igual que CrearInstanciaYEjecutarAsync, pero usando instId existente
+            // Seed
             var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
             if (!string.IsNullOrWhiteSpace(datosEntrada))
@@ -150,11 +147,11 @@ namespace Intranet.WorkflowStudio.Runtime
             seed["wf.definicionId"] = defId;
             seed["wf.creadoPor"] = usuario ?? "app";
 
-            // init depth/callstack para subflows
+            // subflows
             seed["wf.depth"] = 0;
             seed["wf.callStack"] = new string[0];
 
-            // RootInstanciaId desde tabla (si existe)
+            // RootInstanciaId/Depth desde tabla (si existe)
             try
             {
                 using (var cn = new SqlConnection(Cnn))
@@ -209,29 +206,24 @@ namespace Intranet.WorkflowStudio.Runtime
 
             var handlersExtra = new IManejadorNodo[]
             {
-        new ManejadorSql(),
-        new HParallel(),
-        new HJoin(),
-        new HUtilError(),
-        new HUtilNotify(),
-        new HFileRead(),
-        new HFileWrite(),
-        new HDocExtract(),
-        new HControlDelay(),
-        new HFtpPut(),
-        new HEmailSend(),
-
-        new HQueuePublishSql(),
-        new HQueueConsumeSql(),
-        new HDocLoad(),
-        new HDocTipoResolve(),
-
-        // ✅ IMPORTANTE: si vas a usar chat.notify dentro del subflow:
-        new HChatNotify(),
-
-       
-        new HControlRetry(),
-        new HSubflow()
+                new ManejadorSql(),
+                new HParallel(),
+                new HJoin(),
+                new HUtilError(),
+                new HUtilNotify(),
+                new HFileRead(),
+                new HFileWrite(),
+                new HDocExtract(),
+                new HControlDelay(),
+                new HFtpPut(),
+                new HEmailSend(),
+                new HQueuePublishSql(),
+                new HQueueConsumeSql(),
+                new HDocLoad(),
+                new HDocTipoResolve(),
+                new HChatNotify(),
+                new HControlRetry(),
+                new HSubflow()
             };
 
             await WorkflowRunner.EjecutarAsync(
@@ -241,58 +233,14 @@ namespace Intranet.WorkflowStudio.Runtime
                 ct: ct
             );
 
-            // 3) Persistencia final igual que CrearInstanciaYEjecutarAsync
-            bool detenido = false;
-            bool hayError = false;
-            string mensajeError = null;
-
-            object ctxPayload;
-
-            if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
-            {
-                if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
-                    ContextoEjecucion.ToBool(detVal))
-                    detenido = true;
-
-                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
-                    ContextoEjecucion.ToBool(errVal))
-                    hayError = true;
-
-                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
-                    mensajeError = Convert.ToString(msgVal);
-
-                ctxPayload = (mensajeError != null)
-                    ? (object)new { logs, error = new { message = mensajeError }, estado = estadoFinal }
-                    : (object)new { logs, estado = estadoFinal };
-            }
-            else
-            {
-                ctxPayload = (mensajeError != null)
-                    ? (object)new { logs, error = new { message = mensajeError } }
-                    : (object)new { logs };
-            }
-
-            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
-
-            if (detenido)
-                ActualizarInstanciaEnCurso(instId, datosContexto);
-            else if (hayError)
-                MarcarInstanciaError(instId, datosContexto);
-            else
-                CerrarInstanciaOk(instId, datosContexto);
+            PersistirFinal(instId, logs);
         }
 
-
-
         /// <summary>
-        /// Crea una instancia de workflow, setea el seed (WF_SEED) y ejecuta el motor.
-        /// Si el flujo termina normal => WF_Instancia.Estado = 'Finalizado'.
-        /// Si el flujo se detiene (ej: human.task) => WF_Instancia queda 'EnCurso'.
+        /// Crea una instancia, setea WF_SEED y ejecuta el motor.
+        /// Finalizado/Error/EnCurso según estado publicado por el motor.
         /// </summary>
-        public static async Task<long> CrearInstanciaYEjecutarAsync(
-            int defId,
-            string datosEntradaJson,
-            string usuario)
+        public static async Task<long> CrearInstanciaYEjecutarAsync(int defId, string datosEntradaJson, string usuario)
         {
             string jsonDef = CargarJsonDefinicion(defId);
             if (string.IsNullOrWhiteSpace(jsonDef))
@@ -303,7 +251,6 @@ namespace Intranet.WorkflowStudio.Runtime
             var wf = WorkflowRunner.FromJson(jsonDef);
             var logs = new List<string>();
 
-            // ================== 1) Seed para el motor (WF_SEED) ==================
             var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
             if (!string.IsNullOrWhiteSpace(datosEntradaJson))
@@ -330,7 +277,6 @@ namespace Intranet.WorkflowStudio.Runtime
                 items["WF_CTX_ESTADO"] = null;
             }
 
-            // ================== 2) Acción de log para el motor ==================
             Action<string> logAction = s =>
             {
                 logs.Add(s);
@@ -351,14 +297,11 @@ namespace Intranet.WorkflowStudio.Runtime
 
                     GuardarLog(instId, "Info", s, nodoId, nodoTipo);
                 }
-                catch
-                {
-                }
+                catch { }
             };
 
-            // ================== 3) Ejecutar motor con handlers por defecto + SQL ==================
             var handlersExtra = new IManejadorNodo[]
-            {                
+            {
                 new ManejadorSql(),
                 new HParallel(),
                 new HJoin(),
@@ -375,7 +318,6 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HQueueConsumeSql(),
                 new HDocLoad(),
                 new HDocTipoResolve(),
-
                 new HControlRetry(),
                 new HSubflow()
             };
@@ -387,77 +329,54 @@ namespace Intranet.WorkflowStudio.Runtime
                 ct: CancellationToken.None
             );
 
-            // ================== 4) Ver si el motor se detuvo / hubo error ==================
+            PersistirFinal(instId, logs);
+            return instId;
+        }
+
+        // ======================================================================
+        //                      Persistencia final (UNIFICADA)
+        // ======================================================================
+        private static void PersistirFinal(long instId, List<string> logs)
+        {
+            var items = HttpContext.Current?.Items;
+
             bool detenido = false;
             bool hayError = false;
             string mensajeError = null;
-
-            // <<< NOTA: estadoFinal queda disponible solo dentro del if, pero lo usamos ahí mismo >>>
-            object ctxPayload;
 
             if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
             {
                 if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
                     ContextoEjecucion.ToBool(detVal))
-                {
                     detenido = true;
-                }
 
                 if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
                     ContextoEjecucion.ToBool(errVal))
-                {
                     hayError = true;
-                }
 
                 if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
-                {
                     mensajeError = Convert.ToString(msgVal);
-                }
 
-                // ✅ NUEVO: guardamos logs + error (si lo hubo) + snapshot del estado
-                ctxPayload = (mensajeError != null)
-                    ? (object)new
-                    {
-                        logs,
-                        error = new { message = mensajeError },
-                        estado = estadoFinal
-                    }
-                    : (object)new
-                    {
-                        logs,
-                        estado = estadoFinal
-                    };
-            }
-            else
-            {
-                // Sin estado publicado (raro, pero posible si no hubo HttpContext)
-                ctxPayload = (mensajeError != null)
-                    ? (object)new
-                    {
-                        logs,
-                        error = new { message = mensajeError }
-                    }
-                    : (object)new { logs };
+                string datosContexto = ConstruirDatosContextoJson(logs, estadoFinal, mensajeError);
+
+                if (detenido) ActualizarInstanciaEnCurso(instId, datosContexto);
+                else if (hayError) MarcarInstanciaError(instId, datosContexto);
+                else CerrarInstanciaOk(instId, datosContexto);
+
+                return;
             }
 
-            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
+            // fallback sin estado
+            string fallback = JsonConvert.SerializeObject(
+                (mensajeError != null)
+                    ? (object)new { logs, error = new { message = mensajeError } }
+                    : (object)new { logs },
+                Formatting.None
+            );
 
-            if (detenido)
-            {
-                ActualizarInstanciaEnCurso(instId, datosContexto);
-            }
-            else if (hayError)
-            {
-                MarcarInstanciaError(instId, datosContexto);
-            }
-            else
-            {
-                CerrarInstanciaOk(instId, datosContexto);
-            }
-
-            return instId;
+            // si no hay estado, asumimos finalizado OK (si querés, lo podemos dejar EnCurso)
+            CerrarInstanciaOk(instId, fallback);
         }
-
 
         // ======================================================================
         //                      Helpers privados de Runtime
@@ -466,8 +385,7 @@ namespace Intranet.WorkflowStudio.Runtime
         private static string CargarJsonDefinicion(int defId)
         {
             using (var cn = new SqlConnection(Cnn))
-            using (var cmd = new SqlCommand(
-                       "SELECT JsonDef FROM dbo.WF_Definicion WHERE Id=@Id", cn))
+            using (var cmd = new SqlCommand("SELECT JsonDef FROM dbo.WF_Definicion WHERE Id=@Id", cn))
             {
                 cmd.Parameters.AddWithValue("@Id", defId);
                 cn.Open();
@@ -483,7 +401,6 @@ namespace Intranet.WorkflowStudio.Runtime
             int? tenantId = null;
             int? docTipoId = null;
 
-            // Leer metadata opcional desde datosEntradaJson (sin hardcodear negocio)
             if (!string.IsNullOrWhiteSpace(datos))
             {
                 try
@@ -501,21 +418,18 @@ namespace Intranet.WorkflowStudio.Runtime
                         if (d != null && int.TryParse(d.ToString(), out var xd)) docTipoId = xd;
                     }
                 }
-                catch
-                {
-                    // si el JSON no es válido, no frenamos la creación
-                }
+                catch { }
             }
 
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            INSERT INTO dbo.WF_Instancia
-                                                (WF_DefinicionId, Estado, FechaInicio, DatosEntrada, CreadoPor,
-                                                 ProcesoKey, ScopeKey, TenantId, DocTipoId)
-                                            VALUES
-                                                (@DefId, 'EnCurso', GETDATE(), @Datos, @User,
-                                                 @ProcesoKey, @ScopeKey, @TenantId, @DocTipoId);
-                                            SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
+INSERT INTO dbo.WF_Instancia
+    (WF_DefinicionId, Estado, FechaInicio, DatosEntrada, CreadoPor,
+     ProcesoKey, ScopeKey, TenantId, DocTipoId)
+VALUES
+    (@DefId, 'EnCurso', GETDATE(), @Datos, @User,
+     @ProcesoKey, @ScopeKey, @TenantId, @DocTipoId);
+SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
             {
                 cmd.Parameters.Add("@DefId", SqlDbType.Int).Value = defId;
                 cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datos ?? DBNull.Value;
@@ -531,20 +445,14 @@ namespace Intranet.WorkflowStudio.Runtime
             }
         }
 
-
-        /// <summary>
-        /// (Opcional) Insertar una línea en WF_InstanciaLog.
-        /// Hoy no la estamos usando desde logAction, pero queda disponible.
-        /// </summary>
-        private static void GuardarLog(long instId, string nivel, string mensaje,
-            string nodoId, string nodoTipo)
+        private static void GuardarLog(long instId, string nivel, string mensaje, string nodoId, string nodoTipo)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            INSERT INTO dbo.WF_InstanciaLog
-                                                (WF_InstanciaId, FechaLog, Nivel, Mensaje, NodoId, NodoTipo)
-                                            VALUES
-                                                (@InstId, GETDATE(), @Nivel, @Msg, @NodoId, @NodoTipo);", cn))
+INSERT INTO dbo.WF_InstanciaLog
+    (WF_InstanciaId, FechaLog, Nivel, Mensaje, NodoId, NodoTipo)
+VALUES
+    (@InstId, GETDATE(), @Nivel, @Msg, @NodoId, @NodoTipo);", cn))
             {
                 cmd.Parameters.AddWithValue("@InstId", instId);
                 cmd.Parameters.AddWithValue("@Nivel", (object)nivel ?? DBNull.Value);
@@ -556,18 +464,14 @@ namespace Intranet.WorkflowStudio.Runtime
             }
         }
 
-        /// <summary>
-        /// La instancia sigue "EnCurso": actualizamos solo DatosContexto.
-        /// (Se usa cuando el motor se detuvo por un human.task u otro nodo Detener = true)
-        /// </summary>
         private static void ActualizarInstanciaEnCurso(long instId, string datosContexto)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            UPDATE dbo.WF_Instancia
-                                            SET Estado = 'EnCurso',
-                                                DatosContexto = @Ctx
-                                            WHERE Id = @Id;", cn))
+UPDATE dbo.WF_Instancia
+SET Estado = 'EnCurso',
+    DatosContexto = @Ctx
+WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -580,11 +484,11 @@ namespace Intranet.WorkflowStudio.Runtime
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            UPDATE dbo.WF_Instancia
-                                            SET Estado = 'Finalizado',
-                                                FechaFin = GETDATE(),
-                                                DatosContexto = @Ctx
-                                            WHERE Id = @Id;", cn))
+UPDATE dbo.WF_Instancia
+SET Estado = 'Finalizado',
+    FechaFin = GETDATE(),
+    DatosContexto = @Ctx
+WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -593,16 +497,15 @@ namespace Intranet.WorkflowStudio.Runtime
             }
         }
 
-        // NUEVO: helper para marcar la instancia en Error
         private static void MarcarInstanciaError(long instId, string datosContexto)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            UPDATE dbo.WF_Instancia
-                                            SET Estado      = 'Error',
-                                                FechaFin    = ISNULL(FechaFin, GETDATE()),
-                                                DatosContexto = @Ctx
-                                            WHERE Id = @Id;", cn))
+UPDATE dbo.WF_Instancia
+SET Estado       = 'Error',
+    FechaFin     = ISNULL(FechaFin, GETDATE()),
+    DatosContexto = @Ctx
+WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.AddWithValue("@Ctx", (object)datosContexto ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Id", instId);
@@ -611,29 +514,15 @@ namespace Intranet.WorkflowStudio.Runtime
             }
         }
 
-        /// <summary>
-        /// Completa una tarea humana (WF_Tarea) y reanuda el workflow
-        /// sobre la MISMA instancia (no crea otra).
-        /// Además, expone en el contexto variables como:
-        ///   - tarea.resultado
-        ///   - tarea.datos / tarea.datosRaw
-        ///   - wf.tarea.* 
-        ///   - humanTask.* (compatibilidad)
-        /// para usarlas en expresiones (${...}) dentro del grafo.
-        /// </summary>
-        public static async Task ReanudarDesdeTareaAsync(
-             long tareaId,
-             string resultado,
-             string datosJson,
-             string usuario)
+        // ======================================================================
+        //                      Reanudar desde tarea (MISMA instancia)
+        // ======================================================================
+        public static async Task ReanudarDesdeTareaAsync(long tareaId, string resultado, string datosJson, string usuario)
         {
-            // 1) Info de instancia + definición
             var info = CargarInfoInstanciaPorTarea(tareaId);
 
-            // 2) Marcar la tarea como completada
             MarcarTareaCompletada(tareaId, resultado, usuario, datosJson);
 
-            // 3) Definición
             string jsonDef = CargarJsonDefinicion(info.DefinicionId);
             if (string.IsNullOrWhiteSpace(jsonDef))
                 throw new InvalidOperationException("Definición no encontrada: " + info.DefinicionId);
@@ -658,11 +547,10 @@ namespace Intranet.WorkflowStudio.Runtime
 
             var logs = new List<string>();
 
-            // ================== 4) Seed BASE (rehidratar estado previo) ==================
-            // ✅ La clave: traer el "estado" guardado en WF_Instancia.DatosContexto
+            // Seed base desde snapshot
             var seed = CargarSeedDesdeDatosContexto(info.InstanciaId);
 
-            // Si no había snapshot, al menos metemos input desde DatosEntrada (fallback)
+            // fallback input
             if (!seed.ContainsKey("input") && !string.IsNullOrWhiteSpace(info.DatosEntradaJson))
             {
                 try
@@ -676,12 +564,12 @@ namespace Intranet.WorkflowStudio.Runtime
                 }
             }
 
-            // Aseguramos identidades mínimas (por si el snapshot no las tenía)
+            // identidades mínimas
             seed["wf.instanceId"] = info.InstanciaId;
             seed["wf.definicionId"] = info.DefinicionId;
             seed["wf.reanudadoPor"] = usuario ?? "app";
 
-            // ================== 5) Inyectar info de tarea (pisando lo necesario) ==================
+            // inyección técnica (compatibilidad)
             seed["humanTask.id"] = tareaId;
             seed["humanTask.result"] = resultado ?? "";
 
@@ -708,9 +596,24 @@ namespace Intranet.WorkflowStudio.Runtime
                 }
             }
 
-            // ================== 6) Start override (arrancar desde el nodo siguiente) ==================
-            var resumeFrom = CalcularSiguienteNodo(wf, info.NodoId);
+            // ✅ CONTRATO BIZ (genérico, estable)
+            seed["biz.task.id"] = tareaId;
+            seed["biz.task.result"] = resultado ?? "";
+            if (!string.IsNullOrWhiteSpace(datosJson))
+            {
+                try
+                {
+                    var datosObj = JsonConvert.DeserializeObject<object>(datosJson);
+                    seed["biz.task.data"] = datosObj;
+                }
+                catch
+                {
+                    seed["biz.task.dataRaw"] = datosJson;
+                }
+            }
 
+            // start override
+            var resumeFrom = CalcularSiguienteNodo(wf, info.NodoId);
             if (!string.IsNullOrWhiteSpace(resumeFrom))
             {
                 seed["wf.startNodeIdOverride"] = resumeFrom;
@@ -718,19 +621,13 @@ namespace Intranet.WorkflowStudio.Runtime
                 seed["wf.resume.fromNodeId"] = resumeFrom;
             }
 
-            // ================== 🔴 LIMPIEZA CRÍTICA DE FLAGS DE CONTROL ==================
-            // ⛔ si no limpiás esto, el motor se vuelve a detener inmediatamente
+            // limpieza flags
             seed["wf.detener"] = false;
-
-            // limpieza defensiva (recomendado)
             seed.Remove("wf.currentNodeId");
             seed.Remove("wf.currentNodeType");
-
-            // Si venís de una corrida con error, limpiarlo para no heredar flags
             seed["wf.error"] = false;
             seed.Remove("wf.error.message");
 
-            // ================== 7) Publicar seed al motor ==================
             var items = HttpContext.Current?.Items;
             if (items != null)
             {
@@ -738,11 +635,9 @@ namespace Intranet.WorkflowStudio.Runtime
                 items["WF_CTX_ESTADO"] = null;
             }
 
-            // ================== 7) Ejecutar motor ==================
             Action<string> logAction = s =>
             {
                 logs.Add(s);
-
                 try
                 {
                     string nodoId = null;
@@ -760,14 +655,11 @@ namespace Intranet.WorkflowStudio.Runtime
 
                     GuardarLog(info.InstanciaId, "Info", s, nodoId, nodoTipo);
                 }
-                catch
-                {
-                }
+                catch { }
             };
 
             var handlersExtra = new IManejadorNodo[]
             {
-                
                 new ManejadorSql(),
                 new HParallel(),
                 new HJoin(),
@@ -783,7 +675,9 @@ namespace Intranet.WorkflowStudio.Runtime
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
                 new HDocLoad(),
-                new HDocTipoResolve()
+                new HDocTipoResolve(),
+                new HControlRetry(),
+                new HSubflow()
             };
 
             await WorkflowRunner.EjecutarAsync(
@@ -793,69 +687,23 @@ namespace Intranet.WorkflowStudio.Runtime
                 ct: CancellationToken.None
             );
 
-            // ================== 8) Estado final + persistencia ==================
-            bool detenido = false;
-            bool hayError = false;
-            string mensajeError = null;
-
-            object ctxPayload;
-
-            if (items != null && items["WF_CTX_ESTADO"] is IDictionary<string, object> estadoFinal)
-            {
-                if (estadoFinal.TryGetValue("wf.detener", out var detVal) &&
-                    ContextoEjecucion.ToBool(detVal))
-                    detenido = true;
-
-                if (estadoFinal.TryGetValue("wf.error", out var errVal) &&
-                    ContextoEjecucion.ToBool(errVal))
-                    hayError = true;
-
-                if (estadoFinal.TryGetValue("wf.error.message", out var msgVal))
-                    mensajeError = Convert.ToString(msgVal);
-
-                ctxPayload = (mensajeError != null)
-                    ? (object)new { logs, error = new { message = mensajeError }, estado = estadoFinal }
-                    : (object)new { logs, estado = estadoFinal };
-            }
-            else
-            {
-                ctxPayload = (mensajeError != null)
-                    ? (object)new { logs, error = new { message = mensajeError } }
-                    : (object)new { logs };
-            }
-
-            string datosContexto = JsonConvert.SerializeObject(ctxPayload, Formatting.None);
-
-            if (detenido)
-                ActualizarInstanciaEnCurso(info.InstanciaId, datosContexto);
-            else if (hayError)
-                MarcarInstanciaError(info.InstanciaId, datosContexto);
-            else
-                CerrarInstanciaOk(info.InstanciaId, datosContexto);
+            PersistirFinal(info.InstanciaId, logs);
         }
 
-
-        private static void MarcarTareaCompletada(
-            long tareaId,
-            string resultado,
-            string usuario,
-            string datosJson)
+        private static void MarcarTareaCompletada(long tareaId, string resultado, string usuario, string datosJson)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = @"
-                                    UPDATE dbo.WF_Tarea
-                                    SET Estado          = 'Completada',
-                                        Resultado       = @Resultado,
-                                        UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
-                                        FechaCierre     = GETDATE(),
-                                        Datos           = CASE 
-                                                            WHEN @Datos IS NULL OR @Datos = '' THEN Datos 
-                                                            ELSE @Datos 
-                                                          END
-                                    WHERE Id = @Id
-                                      AND Estado NOT IN ('Completada','Cancelada');";
+UPDATE dbo.WF_Tarea
+SET Estado          = 'Completada',
+    Resultado       = @Resultado,
+    UsuarioAsignado = COALESCE(UsuarioAsignado, @Usuario),
+    FechaCierre     = GETDATE(),
+    Datos           = CASE WHEN @Datos IS NULL OR @Datos = '' THEN Datos ELSE @Datos END
+WHERE Id = @Id
+  AND Estado NOT IN ('Completada','Cancelada');";
 
                 cmd.Parameters.Add("@Resultado", SqlDbType.NVarChar, 50).Value = (object)resultado ?? DBNull.Value;
                 cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value = (object)usuario ?? DBNull.Value;
@@ -864,24 +712,18 @@ namespace Intranet.WorkflowStudio.Runtime
 
                 cn.Open();
                 var rows = cmd.ExecuteNonQuery();
-
                 if (rows == 0)
-                {
-                    // Nadie actualizado => alguien la cerró antes
-                    throw new InvalidOperationException(
-                        "WF_Tarea ya fue completada o cancelada por otro usuario.");
-                }
+                    throw new InvalidOperationException("WF_Tarea ya fue completada o cancelada por otro usuario.");
             }
         }
-
 
         private static string CargarDatosContextoInstancia(long instId)
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(@"
-                                            SELECT DatosContexto
-                                            FROM dbo.WF_Instancia
-                                            WHERE Id = @Id;", cn))
+SELECT DatosContexto
+FROM dbo.WF_Instancia
+WHERE Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
                 cn.Open();
@@ -890,11 +732,33 @@ namespace Intranet.WorkflowStudio.Runtime
             }
         }
 
-        /// <summary>
-        /// Lee WF_Instancia.DatosContexto y, si existe, devuelve el objeto "estado"
-        /// como Dictionary<string,object> para rehidratar WF_SEED.
-        /// Si no existe o falla, devuelve diccionario vacío.
-        /// </summary>
+        // ======================================================================
+        //                      BIZ SNAPSHOT HELPERS
+        // ======================================================================
+        private static Dictionary<string, object> ExtraerBizDesdeEstado(IDictionary<string, object> estadoFinal)
+        {
+            var biz = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (estadoFinal == null) return biz;
+
+            foreach (var kv in estadoFinal)
+            {
+                if (kv.Key != null && kv.Key.StartsWith("biz.", StringComparison.OrdinalIgnoreCase))
+                    biz[kv.Key] = kv.Value;
+            }
+            return biz;
+        }
+
+        private static string ConstruirDatosContextoJson(List<string> logs, IDictionary<string, object> estadoFinal, string mensajeError)
+        {
+            var biz = ExtraerBizDesdeEstado(estadoFinal);
+
+            object payload = (!string.IsNullOrWhiteSpace(mensajeError))
+                ? (object)new { logs, error = new { message = mensajeError }, estado = estadoFinal, biz }
+                : (object)new { logs, estado = estadoFinal, biz };
+
+            return JsonConvert.SerializeObject(payload, Formatting.None);
+        }
+
         private static Dictionary<string, object> CargarSeedDesdeDatosContexto(long instId)
         {
             var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -910,7 +774,6 @@ namespace Intranet.WorkflowStudio.Runtime
                 var estadoTok = root["estado"];
                 if (estadoTok == null) return seed;
 
-                // Convertimos JObject -> Dictionary<string, object>
                 var dict = estadoTok.ToObject<Dictionary<string, object>>();
                 if (dict == null) return seed;
 
@@ -924,6 +787,5 @@ namespace Intranet.WorkflowStudio.Runtime
                 return seed;
             }
         }
-
     }
 }

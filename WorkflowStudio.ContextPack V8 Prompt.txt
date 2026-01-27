@@ -1,0 +1,7 @@
+Cuando abras la nueva sesión:
+
+1. Pegás el **prompt**  
+2. Subís el `WorkflowStudio.ContextPack.md`  
+3. Subís el ZIP del proyecto  
+4. Yo te confirmo que lo leí completo  
+5. Y seguimos exactamente donde quedamos, sin volver atrás ni improvisar
