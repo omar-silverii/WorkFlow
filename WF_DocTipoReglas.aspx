@@ -51,8 +51,17 @@
             <div class="row">
                 <div>
                     <label>Campo</label>
-                    <input id="inpCampo" type="text" placeholder="Ej: ProveedorCUIT" />
+                    <input id="inpCampo" type="text" placeholder="Ej: Total" />
                 </div>
+
+<div style="max-width:140px;">
+    <label>Destino</label>
+    <select id="selDestino">
+        <option value="input">input.* (legacy)</option>
+        <option value="biz">biz.* (nuevo)</option>
+    </select>
+</div>
+
                 <div style="max-width:160px;">
                     <label>TipoDato</label>
                     <select id="selTipoDato">
@@ -143,299 +152,324 @@
     </div>
 
 <script>
-(() => {
-    const API = '/Api/Generico.ashx';
+    (() => {
+        const API = '/Api/Generico.ashx';
 
-    const selDocTipo = document.getElementById('selDocTipo');
-    const btnReload  = document.getElementById('btnReload');
+        const selDocTipo = document.getElementById('selDocTipo');
+        const btnReload = document.getElementById('btnReload');
 
-    const inpCampo   = document.getElementById('inpCampo');
-    const selTipoDato= document.getElementById('selTipoDato');
-    const inpOrden   = document.getElementById('inpOrden');
-    const inpGrupo   = document.getElementById('inpGrupo');
-    const selActivo  = document.getElementById('selActivo');
-    const inpEjemplo = document.getElementById('inpEjemplo');
-    const taHint     = document.getElementById('taHint');
+        const inpCampo = document.getElementById('inpCampo');
+        const selDestino = document.getElementById('selDestino');
+        const selTipoDato = document.getElementById('selTipoDato');
+        const inpOrden = document.getElementById('inpOrden');
+        const inpGrupo = document.getElementById('inpGrupo');
+        const selActivo = document.getElementById('selActivo');
+        const inpEjemplo = document.getElementById('inpEjemplo');
+        const taHint = document.getElementById('taHint');
 
-    const btnGuardar = document.getElementById('btnGuardar');
-    const btnProbar  = document.getElementById('btnProbar');
-    const lblEstado  = document.getElementById('lblEstado');
+        const btnGuardar = document.getElementById('btnGuardar');
+        const btnProbar = document.getElementById('btnProbar');
+        const lblEstado = document.getElementById('lblEstado');
 
-    const tblBody    = document.querySelector('#tblReglas tbody');
+        const tblBody = document.querySelector('#tblReglas tbody');
 
-    const taPreviewSrc = document.getElementById('taPreviewSrc');
-    const fileTxt      = document.getElementById('fileTxt');
-    const btnLoadPreview = document.getElementById('btnLoadPreview');
-    const prePreview   = document.getElementById('prePreview');
+        const taPreviewSrc = document.getElementById('taPreviewSrc');
+        const fileTxt = document.getElementById('fileTxt');
+        const btnLoadPreview = document.getElementById('btnLoadPreview');
+        const prePreview = document.getElementById('prePreview');
 
-    let reglas = [];
-    let editingId = 0;
+        let reglas = [];
+        let editingId = 0;
 
-    function setStatus(msg, ok) {
-        lblEstado.textContent = msg;
-        lblEstado.className = 'pill ' + (ok ? 'ok' : 'bad');
-    }
 
-    async function apiListDocTipos() {
-        const r = await fetch(`${API}?action=doctipo.list`, { cache: 'no-store' });
-        if (!r.ok) throw new Error('doctipo.list ' + r.status);
-        return await r.json();
-    }
+        function normalizeKey(s) {
+            s = (s || '').trim();
+            if (!s) return 'campo';
+            // 1) minúsculas
+            s = s.toLowerCase();
+            // 2) quitar acentos
+            s = s.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+            // 3) no [a-z0-9] => _
+            s = s.replace(/[^a-z0-9]+/g, '_');
+            s = s.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+            return s || 'campo';
+        }
 
-    async function apiListReglas(codigo) {
-        const r = await fetch(`${API}?action=doctipo.reglas.list&codigo=${encodeURIComponent(codigo||'')}`, { cache: 'no-store' });
-        if (!r.ok) throw new Error('doctipo.reglas.list ' + r.status);
-        return await r.json();
-    }
+        function setStatus(msg, ok) {
+            lblEstado.textContent = msg;
+            lblEstado.className = 'pill ' + (ok ? 'ok' : 'bad');
+        }
 
-    async function apiSaveRegla(payload) {
-        const r = await fetch(`${API}?action=doctipo.reglas.save`, {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!r.ok) throw new Error('doctipo.reglas.save ' + r.status);
-        return await r.json();
-    }
+        async function apiListDocTipos() {
+            const r = await fetch(`${API}?action=doctipo.list`, { cache: 'no-store' });
+            if (!r.ok) throw new Error('doctipo.list ' + r.status);
+            return await r.json();
+        }
 
-    async function apiTestRegex(payload) {
-        const r = await fetch(`${API}?action=doctipo.reglas.test`, {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!r.ok) throw new Error('doctipo.reglas.test ' + r.status);
-        return await r.json();
-    }
+        async function apiListReglas(codigo) {
+            const r = await fetch(`${API}?action=doctipo.reglas.list&codigo=${encodeURIComponent(codigo || '')}`, { cache: 'no-store' });
+            if (!r.ok) throw new Error('doctipo.reglas.list ' + r.status);
+            return await r.json();
+        }
 
-    function renderReglas() {
-        tblBody.innerHTML = '';
-        reglas.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
+        async function apiSaveRegla(payload) {
+            const r = await fetch(`${API}?action=doctipo.reglas.save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!r.ok) throw new Error('doctipo.reglas.save ' + r.status);
+            return await r.json();
+        }
+
+        async function apiTestRegex(payload) {
+            const r = await fetch(`${API}?action=doctipo.reglas.test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!r.ok) throw new Error('doctipo.reglas.test ' + r.status);
+            return await r.json();
+        }
+
+        function renderReglas() {
+            tblBody.innerHTML = '';
+            reglas.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
                 <td>${r.orden}</td>
-                <td>${escapeHtml(r.campo||'')}</td>
-                <td>${escapeHtml(r.tipoDato||'')}</td>
+                <td>${escapeHtml(r.campo || '')}</td>
+                <td>${escapeHtml(r.tipoDato || '')}</td>
                 <td>${r.activo ? 'Sí' : 'No'}</td>
                 <td>
                   <button type="button" class="btn btn-small" data-edit="${r.id}">Editar</button>
                   <button type="button" class="btn btn-small" data-test="${r.id}">Probar</button>
                 </td>
             `;
-            tblBody.appendChild(tr);
-        });
+                tblBody.appendChild(tr);
+            });
 
-        tblBody.querySelectorAll('[data-edit]').forEach(b => {
-            b.onclick = () => loadToForm(parseInt(b.getAttribute('data-edit'),10));
-        });
-        tblBody.querySelectorAll('[data-test]').forEach(b => {
-            b.onclick = () => testRule(parseInt(b.getAttribute('data-test'),10));
-        });
-    }
-
-    function loadToForm(id) {
-        const r = reglas.find(x => x.id === id);
-        if (!r) return;
-        editingId = r.id;
-
-        inpCampo.value = r.campo || '';
-        selTipoDato.value = r.tipoDato || 'Texto';
-        inpOrden.value = r.orden || 10;
-        inpGrupo.value = r.grupo || 1;
-        selActivo.value = r.activo ? '1' : '0';
-        inpEjemplo.value = r.ejemplo || '';
-        taHint.value = r.hintContext || '';
-
-        setStatus('Editando regla Id=' + id, true);
-    }
-
-    function clearForm() {
-        editingId = 0;
-        inpCampo.value = '';
-        selTipoDato.value = 'Texto';
-        inpOrden.value = 10;
-        inpGrupo.value = 1;
-        selActivo.value = '1';
-        inpEjemplo.value = '';
-        taHint.value = '';
-    }
-
-    function escapeHtml(s){
-        return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    }
-
-    function getPreviewText(){
-        return prePreview.textContent || '';
-    }
-
-    // ========= CAPTURA DE SELECCIÓN (Ejemplo + HintContext) =========
-    function captureSelectionFromPreview() {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
-
-        // Solo si la selección está dentro del preview
-        const anchor = sel.anchorNode;
-        if (!anchor) return;
-        const root = document.getElementById('prePreview');
-        if (!root.contains(anchor)) return;
-
-        const selected = (sel.toString() || '').trim();
-        if (!selected) return;
-
-        const full = getPreviewText();
-        const idx = full.indexOf(selected);
-        if (idx < 0) {
-            // si no encontramos literal, igual guardamos ejemplo
-            inpEjemplo.value = selected;
-            taHint.value = selected;
-            return;
+            tblBody.querySelectorAll('[data-edit]').forEach(b => {
+                b.onclick = () => loadToForm(parseInt(b.getAttribute('data-edit'), 10));
+            });
+            tblBody.querySelectorAll('[data-test]').forEach(b => {
+                b.onclick = () => testRule(parseInt(b.getAttribute('data-test'), 10));
+            });
         }
 
-        const beforeStart = Math.max(0, idx - 60);
-        const afterEnd = Math.min(full.length, idx + selected.length + 60);
-        const ctx = full.substring(beforeStart, afterEnd);
+        function loadToForm(id) {
+            const r = reglas.find(x => x.id === id);
+            if (!r) return;
+            editingId = r.id;
 
-        inpEjemplo.value = selected;
-        taHint.value = ctx;
+            inpCampo.value = r.campo || '';
+            selTipoDato.value = r.tipoDato || 'Texto';
+            inpOrden.value = r.orden || 10;
+            inpGrupo.value = r.grupo || 1;
+            selActivo.value = r.activo ? '1' : '0';
+            inpEjemplo.value = r.ejemplo || '';
+            taHint.value = r.hintContext || '';
 
-        setStatus('Ejemplo capturado ✅', true);
-    }
+            setStatus('Editando regla Id=' + id, true);
+        }
 
-    document.getElementById('prePreview').addEventListener('mouseup', () => {
-        setTimeout(captureSelectionFromPreview, 0);
-    });
+        function clearForm() {
+            editingId = 0;
+            inpCampo.value = '';
+            selTipoDato.value = 'Texto';
+            inpOrden.value = 10;
+            inpGrupo.value = 1;
+            selActivo.value = '1';
+            if (selDestino) selDestino.value = 'input';
+            inpEjemplo.value = '';
+            taHint.value = '';
+        }
 
-    // ========= Preview loader =========
-    btnLoadPreview.onclick = async () => {
-        try {
-            if (fileTxt.files && fileTxt.files.length > 0) {
-                const f = fileTxt.files[0];
-                const txt = await f.text();
-                prePreview.textContent = txt;
-                setStatus('Preview cargado desde archivo ✅', true);
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function getPreviewText() {
+            return prePreview.textContent || '';
+        }
+
+        // ========= CAPTURA DE SELECCIÓN (Ejemplo + HintContext) =========
+        function captureSelectionFromPreview() {
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+
+            // Solo si la selección está dentro del preview
+            const anchor = sel.anchorNode;
+            if (!anchor) return;
+            const root = document.getElementById('prePreview');
+            if (!root.contains(anchor)) return;
+
+            const selected = (sel.toString() || '').trim();
+            if (!selected) return;
+
+            const full = getPreviewText();
+            const idx = full.indexOf(selected);
+            if (idx < 0) {
+                // si no encontramos literal, igual guardamos ejemplo
+                inpEjemplo.value = selected;
+                taHint.value = selected;
                 return;
             }
-            prePreview.textContent = taPreviewSrc.value || '';
-            setStatus('Preview cargado desde texto ✅', true);
-        } catch (e) {
-            console.warn(e);
-            setStatus('Error cargando preview', false);
+
+            const beforeStart = Math.max(0, idx - 60);
+            const afterEnd = Math.min(full.length, idx + selected.length + 60);
+            const ctx = full.substring(beforeStart, afterEnd);
+
+            inpEjemplo.value = selected;
+            taHint.value = ctx;
+
+            setStatus('Ejemplo capturado ✅', true);
         }
-    };
 
-    // ========= Guardar (genera regex en server) =========
-    btnGuardar.onclick = async () => {
-        const codigo = (selDocTipo.value || '').trim();
-        if (!codigo) { setStatus('Elegí un DocTipo', false); return; }
+        document.getElementById('prePreview').addEventListener('mouseup', () => {
+            setTimeout(captureSelectionFromPreview, 0);
+        });
 
-        const campo = (inpCampo.value || '').trim();
-        if (!campo) { setStatus('Falta Campo', false); return; }
-
-        const payload = {
-            id: editingId,
-            docTipoCodigo: codigo,
-            campo: campo,
-            tipoDato: selTipoDato.value,
-            orden: parseInt(inpOrden.value||'0',10) || 0,
-            grupo: parseInt(inpGrupo.value||'1',10) || 1,
-            activo: selActivo.value === '1',
-            ejemplo: (inpEjemplo.value || '').trim(),
-            hintContext: (taHint.value || '').trim(),
-            modo: 'LabelValue'
+        // ========= Preview loader =========
+        btnLoadPreview.onclick = async () => {
+            try {
+                if (fileTxt.files && fileTxt.files.length > 0) {
+                    const f = fileTxt.files[0];
+                    const txt = await f.text();
+                    prePreview.textContent = txt;
+                    setStatus('Preview cargado desde archivo ✅', true);
+                    return;
+                }
+                prePreview.textContent = taPreviewSrc.value || '';
+                setStatus('Preview cargado desde texto ✅', true);
+            } catch (e) {
+                console.warn(e);
+                setStatus('Error cargando preview', false);
+            }
         };
 
-        try {
-            const resp = await apiSaveRegla(payload);
-            if (!resp.ok) { setStatus(resp.error || 'Error guardando', false); return; }
+        // ========= Guardar (genera regex en server) =========
+        btnGuardar.onclick = async () => {
+            const codigo = (selDocTipo.value || '').trim();
+            if (!codigo) { setStatus('Elegí un DocTipo', false); return; }
 
-            setStatus('Guardado ✅ (regex generado)', true);
+            const campoRaw = (inpCampo.value || '').trim();
+            if (!campoRaw) { setStatus('Falta Campo', false); return; }
 
-            // recargar grilla
+            let campoFinal = campoRaw;
+            const destino = (selDestino && selDestino.value) ? selDestino.value : 'input';
+
+            // Si el usuario escribe un path (ej: "biz.total"), respetarlo.
+            // Si no hay ".", y el destino es biz, generamos "biz.<campoNormalizado>"
+            if (campoRaw.indexOf('.') === -1 && destino === 'biz') {
+                campoFinal = 'biz.' + normalizeKey(campoRaw);
+            }
+
+            const payload = {
+                id: editingId,
+                docTipoCodigo: codigo,
+                campo: campoFinal,
+                tipoDato: selTipoDato.value,
+                orden: parseInt(inpOrden.value || '0', 10) || 0,
+                grupo: parseInt(inpGrupo.value || '1', 10) || 1,
+                activo: selActivo.value === '1',
+                ejemplo: (inpEjemplo.value || '').trim(),
+                hintContext: (taHint.value || '').trim(),
+                modo: 'LabelValue'
+            };
+
+            try {
+                const resp = await apiSaveRegla(payload);
+                if (!resp.ok) { setStatus(resp.error || 'Error guardando', false); return; }
+
+                setStatus('Guardado ✅ (regex generado)', true);
+
+                // recargar grilla
+                await reloadReglas();
+                clearForm();
+            } catch (e) {
+                console.warn(e);
+                setStatus('Error guardando: ' + e.message, false);
+            }
+        };
+
+        async function testRule(id) {
+            const r = reglas.find(x => x.id === id);
+            if (!r) return;
+
+            const text = getPreviewText();
+            if (!text.trim()) { setStatus('Cargá preview primero', false); return; }
+
+            try {
+                const resp = await apiTestRegex({
+                    regex: r.regex,
+                    grupo: r.grupo || 1,
+                    text: text
+                });
+                if (!resp.ok) { setStatus(resp.error || 'Error', false); return; }
+                if (!resp.success) { setStatus('No match ❌', false); return; }
+
+                setStatus('Match ✅ Valor: ' + (resp.value || ''), true);
+            } catch (e) {
+                console.warn(e);
+                setStatus('Error probando: ' + e.message, false);
+            }
+        }
+
+        btnProbar.onclick = async () => {
+            // prueba “la regla actual del form” si estamos editando, sino la primera
+            if (editingId > 0) return await testRule(editingId);
+            if (reglas.length === 0) { setStatus('No hay reglas para probar', false); return; }
+            return await testRule(reglas[0].id);
+        };
+
+        async function reloadReglas() {
+            const codigo = (selDocTipo.value || '').trim();
+            if (!codigo) { reglas = []; renderReglas(); return; }
+
+            const resp = await apiListReglas(codigo);
+            if (!resp.ok) { setStatus(resp.error || 'Error listando reglas', false); return; }
+
+            reglas = (resp.reglas || []);
+            renderReglas();
+        }
+
+        btnReload.onclick = async () => {
             await reloadReglas();
             clearForm();
-        } catch (e) {
-            console.warn(e);
-            setStatus('Error guardando: ' + e.message, false);
-        }
-    };
+            setStatus('Recargado ✅', true);
+        };
 
-    async function testRule(id) {
-        const r = reglas.find(x => x.id === id);
-        if (!r) return;
+        selDocTipo.addEventListener('change', async () => {
+            await reloadReglas();
+            clearForm();
+        });
 
-        const text = getPreviewText();
-        if (!text.trim()) { setStatus('Cargá preview primero', false); return; }
+        // init
+        (async function init() {
+            try {
+                const items = await apiListDocTipos();
+                selDocTipo.innerHTML = '';
+                const o0 = document.createElement('option');
+                o0.value = '';
+                o0.textContent = '(seleccioná DocTipo)';
+                selDocTipo.appendChild(o0);
 
-        try {
-            const resp = await apiTestRegex({
-                regex: r.regex,
-                grupo: r.grupo || 1,
-                text: text
-            });
-            if (!resp.ok) { setStatus(resp.error || 'Error', false); return; }
-            if (!resp.success) { setStatus('No match ❌', false); return; }
+                (items || []).forEach(it => {
+                    const o = document.createElement('option');
+                    o.value = it.codigo || '';
+                    o.textContent = (it.codigo || '') + (it.nombre ? ' — ' + it.nombre : '');
+                    selDocTipo.appendChild(o);
+                });
 
-            setStatus('Match ✅ Valor: ' + (resp.value || ''), true);
-        } catch (e) {
-            console.warn(e);
-            setStatus('Error probando: ' + e.message, false);
-        }
-    }
+                setStatus('Listo ✅', true);
+            } catch (e) {
+                console.warn(e);
+                setStatus('Error init: ' + e.message, false);
+            }
+        })();
 
-    btnProbar.onclick = async () => {
-        // prueba “la regla actual del form” si estamos editando, sino la primera
-        if (editingId > 0) return await testRule(editingId);
-        if (reglas.length === 0) { setStatus('No hay reglas para probar', false); return; }
-        return await testRule(reglas[0].id);
-    };
-
-    async function reloadReglas() {
-        const codigo = (selDocTipo.value || '').trim();
-        if (!codigo) { reglas = []; renderReglas(); return; }
-
-        const resp = await apiListReglas(codigo);
-        if (!resp.ok) { setStatus(resp.error || 'Error listando reglas', false); return; }
-
-        reglas = (resp.reglas || []);
-        renderReglas();
-    }
-
-    btnReload.onclick = async () => {
-        await reloadReglas();
-        clearForm();
-        setStatus('Recargado ✅', true);
-    };
-
-    selDocTipo.addEventListener('change', async () => {
-        await reloadReglas();
-        clearForm();
-    });
-
-    // init
-    (async function init(){
-        try {
-            const items = await apiListDocTipos();
-            selDocTipo.innerHTML = '';
-            const o0 = document.createElement('option');
-            o0.value = '';
-            o0.textContent = '(seleccioná DocTipo)';
-            selDocTipo.appendChild(o0);
-
-            (items||[]).forEach(it => {
-                const o = document.createElement('option');
-                o.value = it.codigo || '';
-                o.textContent = (it.codigo||'') + (it.nombre ? ' — ' + it.nombre : '');
-                selDocTipo.appendChild(o);
-            });
-
-            setStatus('Listo ✅', true);
-        } catch(e) {
-            console.warn(e);
-            setStatus('Error init: ' + e.message, false);
-        }
     })();
-
-})();
 </script>
 
 </form>

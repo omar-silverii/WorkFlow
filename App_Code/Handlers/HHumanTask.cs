@@ -57,11 +57,19 @@ namespace Intranet.WorkflowStudio.WebForms
 
                     if (EstaCerrada(tarea.Estado))
                     {
-                        ctx.Log($"[human.task] tarea ya CERRADA para instancia {instanciaId}, nodo {nodo.Id}; se continúa. tareaId={tarea.Id}, estado={tarea.Estado}");
-                        // opcional: acá podrías inyectar tarea.Resultado al contexto si querés
+                        ctx.Log($"[human.task] tarea ya CERRADA para instancia {instanciaId}, nodo {nodo.Id}; se continúa. tareaId={tarea.Id}, estado={tarea.Estado}, resultado={tarea.Resultado}");
+
+                        // Exponer resultado al contexto (global + por nodo)
+                        ctx.Estado["wf.tarea.id"] = tarea.Id;
+                        ctx.Estado["wf.tarea.estado"] = tarea.Estado;
+                        var res = (tarea.Resultado ?? "").Trim().ToLowerInvariant();
+
+                        ctx.Estado["wf.tarea.resultado"] = res;                 // "apto" / "no_apto" / "rechazado"
+                        ctx.Estado[$"wf.tarea.{nodo.Id}.resultado"] = res;      // por nodo
+
                         ctx.Estado["wf.currentNodeId"] = nodo.Id;
                         ctx.Estado["wf.currentNodeType"] = nodo.Type;
-                        ctx.Estado["wf.tarea.id"] = tarea.Id; // opcional, pero útil para logs
+                        ctx.Log($"[human.task] resultado normalizado='{res}' (raw='{tarea.Resultado}')");
                         return new ResultadoEjecucion { Etiqueta = "always" };
                     }
 

@@ -575,6 +575,19 @@ WHERE Id = @Id;", cn))
 
             seed["wf.tarea.id"] = tareaId;
             seed["wf.tarea.resultado"] = resultado ?? "";
+
+            if (!string.IsNullOrWhiteSpace(info.NodoId))
+            {
+                seed[$"wf.tarea.{info.NodoId}.resultado"] = resultado ?? "";
+
+                if (seed.TryGetValue("wf.tarea.datos", out var datosNodo) && datosNodo != null)
+                    seed[$"wf.tarea.{info.NodoId}.datos"] = datosNodo;
+
+                if (seed.TryGetValue("wf.tarea.datosRaw", out var datosRaw) && datosRaw != null)
+                    seed[$"wf.tarea.{info.NodoId}.datosRaw"] = datosRaw;
+            }
+
+
             seed["tarea.id"] = tareaId;
             seed["tarea.resultado"] = resultado ?? "";
 

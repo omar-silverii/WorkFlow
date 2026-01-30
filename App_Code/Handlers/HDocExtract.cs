@@ -338,10 +338,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 // Fixed
                 if (reg.Linea.HasValue && reg.ColDesde.HasValue && reg.Largo.HasValue)
                 {
-                    string valor = ExtraerFixed(lineas, reg, ctx);
+                    string valor = ExtraerFixed(lineas, reg, ctx, key);
                     if (valor != null)
                     {
-                        ctx.Estado[key] = valor;
+                        SetEstadoPath(ctx.Estado, key, valor);
                         fixedCount++;
                     }
                     continue;
@@ -350,10 +350,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 // Regex
                 if (!string.IsNullOrWhiteSpace(reg.Regex))
                 {
-                    string valor = ExtraerRegex(texto, reg, ctx);
+                    string valor = ExtraerRegex(texto, reg, ctx, key);
                     if (valor != null)
                     {
-                        ctx.Estado[key] = valor;
+                        SetEstadoPath(ctx.Estado, key, valor);
                         regexCount++;
                     }
                     continue;
@@ -395,15 +395,26 @@ namespace Intranet.WorkflowStudio.WebForms
                     continue;
 
                 var campo = (reg.Campo ?? "").Trim();
-                var campoKey = normalizeKeys ? NormalizeKey(campo) : campo;
-                string key = "input." + campoKey;
+
+                // NUEVO: si el Campo contiene ".", lo tratamos como path absoluto (ej: "biz.total")
+                // Caso contrario, mantenemos compatibilidad y escribimos en "input.<campoNormalizado>"
+                string key;
+                if (campo.Contains("."))
+                {
+                    key = campo; // path directo (no se normaliza)
+                }
+                else
+                {
+                    var campoKey = normalizeKeys ? NormalizeKey(campo) : campo;
+                    key = "input." + campoKey;
+                }
 
                 if (reg.Linea.HasValue && reg.ColDesde.HasValue && reg.Largo.HasValue)
                 {
-                    string valor = ExtraerFixed(lineas, reg, ctx);
+                    string valor = ExtraerFixed(lineas, reg, ctx, key);
                     if (valor != null)
                     {
-                        ctx.Estado[key] = valor;
+                        SetEstadoPath(ctx.Estado, key, valor);
                         fixedCount++;
                     }
                     continue;
@@ -411,10 +422,10 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 if (!string.IsNullOrWhiteSpace(reg.Regex))
                 {
-                    string valor = ExtraerRegex(texto, reg, ctx);
+                    string valor = ExtraerRegex(texto, reg, ctx, key);
                     if (valor != null)
                     {
-                        ctx.Estado[key] = valor;
+                        SetEstadoPath(ctx.Estado, key, valor);
                         regexCount++;
                     }
                     continue;
@@ -472,7 +483,7 @@ namespace Intranet.WorkflowStudio.WebForms
             return result;
         }
 
-        private static string ExtraerFixed(string[] lineas, ReglaDocExtract reg, ContextoEjecucion ctx)
+        private static string ExtraerFixed(string[] lineas, ReglaDocExtract reg, ContextoEjecucion ctx, string logKey)
         {
             int idxLinea = (reg.Linea ?? 0) - 1;
             if (idxLinea < 0 || idxLinea >= lineas.Length)
@@ -494,11 +505,11 @@ namespace Intranet.WorkflowStudio.WebForms
             largo = Math.Min(largo, linea.Length - start);
             string valor = linea.Substring(start, largo).Trim();
 
-            ctx.Log($"[doc.extract/fixed] input.{reg.Campo} = \"{valor}\"");
+            ctx.Log($"[doc.extract/fixed] {logKey} = \"{valor}\"");
             return valor;
         }
 
-        private static string ExtraerRegex(string texto, ReglaDocExtract reg, ContextoEjecucion ctx)
+        private static string ExtraerRegex(string texto, ReglaDocExtract reg, ContextoEjecucion ctx, string logKey)
         {
             var match = Regex.Match(texto, reg.Regex, RegexOptions.Multiline);
             if (!match.Success)
@@ -512,7 +523,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ? match.Groups[grupo].Value.Trim()
                 : match.Value.Trim();
 
-            ctx.Log($"[doc.extract/regex] input.{reg.Campo} = \"{valor}\"");
+            ctx.Log($"[doc.extract/fixed] {logKey} = \"{valor}\"");
             return valor;
         }
 
