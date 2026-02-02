@@ -14,10 +14,72 @@
     <style>
         body { padding: 12px; }
         pre.log-view { max-height: 220px; overflow: auto; background: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: .7rem; }
+
+         body { background: #f6f7fb; }
+         .ws-card { border: 0; border-radius: 16px; box-shadow: 0 10px 24px rgba(16,24,40,.06); }
+         .ws-card .card-body { padding: 20px; }
+         .ws-muted { color: rgba(0,0,0,.65); }
+         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
+         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
+         .ws-section-title { font-weight: 700; }
+         .table thead th { white-space: nowrap; }
+         .ws-kpi { border-radius: 16px; border: 1px solid rgba(0,0,0,.08); background: #fff; }
+         .ws-badge { font-size: 12px; }
     </style>
 </head>
 <body>
     <form id="form1" runat="server">
+
+            <!-- Topbar -->
+    <nav class="navbar navbar-expand-lg ws-topbar sticky-top">
+        <div class="container-fluid px-3 px-md-4">
+            <a class="navbar-brand fw-bold" href="Default.aspx">
+                Workflow Studio <span class="ws-pill ms-2">Intranet</span>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#wsNav"
+                aria-controls="wsNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="wsNav">
+                <ul class="navbar-nav ms-auto gap-lg-2">
+                    <li class="nav-item"><a class="nav-link" href="Default.aspx">Inicio</a></li>
+
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Workflows</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="WorkflowUI.aspx">➕ Nuevo / Editor</a></li>
+                            <li><a class="dropdown-item" href="WF_Definiciones.aspx">📋 Definiciones</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Documentos</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="WF_DocTipo.aspx">📁 Tipos de documento</a></li>
+                            <li><a class="dropdown-item" href="WF_DocTipoReglas.aspx">🧠 Reglas de extracción</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Ejecuciones</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="WF_Instancias.aspx">▶ Instancias</a></li>
+                            <li><a class="dropdown-item" href="WF_Instancias.aspx#logs">📜 Logs</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link active" href="WF_Gerente_Tareas.aspx">Gerencia</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+
+
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <h4 class="mb-0">Workflows – Instancias</h4>

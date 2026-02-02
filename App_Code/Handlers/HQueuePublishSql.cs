@@ -216,7 +216,6 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);";
         }
     }
 
-
     /// <summary>
     /// Consume mensajes de WF_Queue usando SQL.
     /// Tipo de nodo: "queue.consume"
@@ -225,11 +224,84 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);";
     {
         public string TipoNodo => "queue.consume";
 
+        // Aplana recursivamente un JToken en ctx.Estado, generando claves tipo:
+        // payload.ocNumero
+        // payload.proveedor.codigo
+        // payload.proveedor.razonSocial
+        // etc.
+        private static void FlattenIntoEstado(ContextoEjecucion ctx, string prefix, JToken token)
+        {
+            if (ctx == null || ctx.Estado == null) return;
+
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                ctx.Estado[prefix] = null;
+                return;
+            }
+
+            switch (token.Type)
+            {
+                case JTokenType.Object:
+                    {
+                        // ✅ guardo el objeto completo como diccionario "plain" (navegable)
+                        ctx.Estado[prefix] = (Dictionary<string, object>)TokenToPlainObject(token);
+
+                        foreach (var prop in ((JObject)token).Properties())
+                        {
+                            FlattenIntoEstado(ctx, prefix + "." + prop.Name, prop.Value);
+                        }
+                        break;
+                    }
+
+                case JTokenType.Array:
+                    {
+                        ctx.Estado[prefix] = (List<object>)TokenToPlainObject(token);
+                        break;
+                    }
+
+                default:
+                    {
+                        ctx.Estado[prefix] = ((JValue)token).Value;
+                        break;
+                    }
+            }
+        }
+
+
+        private static object TokenToPlainObject(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return null;
+
+            switch (token.Type)
+            {
+                case JTokenType.Object:
+                    {
+                        var d = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var p in ((JObject)token).Properties())
+                            d[p.Name] = TokenToPlainObject(p.Value);
+                        return d;
+                    }
+
+                case JTokenType.Array:
+                    {
+                        var list = new List<object>();
+                        foreach (var it in (JArray)token)
+                            list.Add(TokenToPlainObject(it));
+                        return list;
+                    }
+
+                default:
+                    return ((JValue)token).Value;
+            }
+        }
+
+
         public async Task<ResultadoEjecucion> EjecutarAsync(
             ContextoEjecucion ctx,
             NodeDef nodo,
             CancellationToken ct)
         {
+            ctx.Log("[Queue.ConsumeSql/BUILD] 2026-02-01 A");
             var p = nodo.Parameters ?? new Dictionary<string, object>();
 
             // Nombre de la cola (permite templating)
@@ -326,82 +398,134 @@ OUTPUT
                 {
                     ctx.Estado["queue.hasMessage"] = false;
                     ctx.Estado["queue.messages"] = new List<Dictionary<string, object>>();
+                    ctx.Estado["queue.message"] = null;
+                    ctx.Estado["queue.messageId"] = null;
+
+                    // ✅ SIEMPRE publicar raíz queue
+                    ctx.Estado["queue"] = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["hasMessage"] = false,
+                        ["messages"] = new List<Dictionary<string, object>>(),
+                        ["message"] = null,
+                        ["messageId"] = null
+                    };
+
+                    ctx.Estado["payload"] = null;
+
                     ctx.Log($"[Queue.ConsumeSql] No hay mensajes pendientes en '{queue}'.");
                 }
                 else
                 {
-                    // Hay mensajes
+                    var first = mensajes[0];
+
+                    // ✅ ID del mensaje
+                    var messageId = first.ContainsKey("Id") ? first["Id"] : null;
+
+                    // Publicar flags + lista
                     ctx.Estado["queue.hasMessage"] = true;
                     ctx.Estado["queue.messages"] = mensajes;
 
-                    var first = mensajes[0];
+                    // ✅ queue.message como diccionario navegable
                     ctx.Estado["queue.message"] = first;
 
-                    // También exponer queue.message.Id, queue.message.Queue, etc.
+                    ctx.Estado["queue.messageId"] = messageId;   // ${queue.messageId}
+                    ctx.Estado["queueId"] = messageId;          // ${queueId} alias
+                    ctx.Estado["queue.message.Id"] = messageId; // ${queue.message.Id}
+                    ctx.Estado["queue.message.id"] = messageId; // ${queue.message.id}
+
                     foreach (var kv in first)
                     {
-                        var keyQM = "queue.message." + kv.Key;   // ej: queue.message.Id
-                        ctx.Estado[keyQM] = kv.Value;
+                        ctx.Estado["queue.message." + kv.Key] = kv.Value;
+                        ctx.Estado["queue.message." + kv.Key.ToLowerInvariant()] = kv.Value;
                     }
 
+                    // ✅ SIEMPRE publicar raíz queue (también cuando hay mensaje)
+                    ctx.Estado["queue"] = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["hasMessage"] = true,
+                        ["messages"] = mensajes,
+                        ["message"] = first,
+                        ["messageId"] = messageId
+                    };
+
                     var payloadJson = first["Payload"] as string;
+                    ctx.Estado["payload"] = null;
 
                     if (!string.IsNullOrWhiteSpace(payloadJson))
                     {
                         try
                         {
-                            // Para debug, ver exactamente qué JSON llega
                             ctx.Log("[Queue.ConsumeSql/debug] payloadJson=" + payloadJson);
 
-                            var rootToken = JToken.Parse(payloadJson);
+                            // 1) Parse inicial
+                            JToken rootToken = JToken.Parse(payloadJson);
 
-                            // Si viene envoltorio { queue, broker, ..., payload: { ... } }, nos quedamos con el payload interno.
+                            // 2) ✅ FIX DOBLE-JSON: si el payload es un string que contiene JSON, parsear de nuevo
+                            if (rootToken.Type == JTokenType.String)
+                            {
+                                var inner = rootToken.ToString(); // contenido del string
+                                inner = inner?.Trim();
+
+                                if (!string.IsNullOrEmpty(inner) &&
+                                    ((inner.StartsWith("{") && inner.EndsWith("}")) || (inner.StartsWith("[") && inner.EndsWith("]"))))
+                                {
+                                    rootToken = JToken.Parse(inner);
+                                    ctx.Log("[Queue.ConsumeSql/debug] double-json detected -> reparsed inner JSON OK.");
+                                }
+                                else
+                                {
+                                    ctx.Log("[Queue.ConsumeSql/debug] rootToken is STRING but inner is not JSON object/array.");
+                                }
+                            }
+
+                            // 3) Si viene envoltorio { payload: {...} }, usar el payload interno
                             JToken effectivePayload = rootToken;
                             if (rootToken.Type == JTokenType.Object)
                             {
                                 var rootObj = (JObject)rootToken;
                                 if (rootObj["payload"] != null &&
-                                    (rootObj["payload"].Type == JTokenType.Object ||
-                                     rootObj["payload"].Type == JTokenType.Array))
+                                    (rootObj["payload"].Type == JTokenType.Object || rootObj["payload"].Type == JTokenType.Array))
                                 {
                                     effectivePayload = rootObj["payload"];
                                 }
                             }
 
-                            // Lo que quede como payload es lo que exponemos para ${payload...}
-                            var effectiveObj = effectivePayload.ToObject<object>();
-                            ctx.Estado["payload"] = effectiveObj;
+                            // 4) ✅ payload SIEMPRE plain (Dictionary/List), case-insensitive, navegable
+                            var plain = TokenToPlainObject(effectivePayload);
+                            ctx.Estado["payload"] = plain;
 
-                            // Además, si es objeto, generamos claves payload.campo (payload.polizaId, payload.clienteId, etc.)
-                            if (effectivePayload.Type == JTokenType.Object)
-                            {
-                                var effObj = (JObject)effectivePayload;
-                                foreach (var prop in effObj.Properties())
-                                {
-                                    var key = "payload." + prop.Name;
-                                    ctx.Estado[key] = prop.Value.Type == JTokenType.Null
-                                        ? null
-                                        : prop.Value.ToObject<object>();
-                                }
-                            }
+                            // 5) ✅ rutas planas payload.xxx
+                            FlattenIntoEstado(ctx, "payload", effectivePayload);
 
-                            // Guardamos el JSON completo por si hace falta
-                            ctx.Estado["payload.raw"] = rootToken.ToObject<object>();
+                            // 6) raw por si hace falta
+                            ctx.Estado["payload.raw"] = TokenToPlainObject(rootToken);
 
-                            ctx.Log("[Queue.ConsumeSql] Mensaje Id=" + first["Id"] +
-                                    " → payload en Estado['payload'].");
+                            ctx.Log("[Queue.ConsumeSql] Mensaje Id=" + first["Id"] + " → payload en Estado['payload'].");
+
+                            // DEBUG DURO
+                            var test1 = ContextoEjecucion.ResolverPath(ctx.Estado, "payload.ocNumero");
+                            ctx.Log("[Queue.ConsumeSql/debug] ResolverPath(payload.ocNumero)=" + Convert.ToString(test1 ?? "(null)"));
+
+                            var test2 = ctx.Estado.ContainsKey("payload.ocNumero") ? ctx.Estado["payload.ocNumero"] : null;
+                            ctx.Log("[Queue.ConsumeSql/debug] Estado[payload.ocNumero]=" + Convert.ToString(test2 ?? "(null)"));
+
+                            var pObj = ctx.Estado.ContainsKey("payload") ? ctx.Estado["payload"] : null;
+                            ctx.Log("[Queue.ConsumeSql/debug] payload.type=" + (pObj == null ? "(null)" : pObj.GetType().FullName));
+
+
                         }
                         catch (Exception exJson)
                         {
                             ctx.Estado["payloadRaw"] = payloadJson;
                             ctx.Log("[Queue.ConsumeSql] Error parseando payload: " + exJson.Message);
+                            ctx.Estado["payload"] = null;
                         }
                     }
+
 
                     ctx.Log($"[Queue.ConsumeSql] Consumidos {mensajes.Count} mensaje(s) de '{queue}'.");
                 }
 
-                // El grafo decide con control.if usando queue.hasMessage
                 return new ResultadoEjecucion { Etiqueta = "always" };
             }
             catch (Exception ex)
@@ -412,5 +536,7 @@ OUTPUT
             }
         }
     }
+
+
 
 }

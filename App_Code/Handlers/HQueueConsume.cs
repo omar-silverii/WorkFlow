@@ -12,7 +12,7 @@ namespace Intranet.WorkflowStudio.Runtime
 {
     public class HQueueConsume : IManejadorNodo
     {
-        public string TipoNodo => "queue.consume";
+        public string TipoNodo => "queue.consume.legacy";
 
         private string Cnn
             => ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
