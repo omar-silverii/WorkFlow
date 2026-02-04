@@ -25,50 +25,62 @@
             <asp:Button ID="btnNuevo" runat="server" Text="Nuevo" CssClass="btn btn-sm btn-success" OnClick="btnNuevo_Click" />
         </div>
 
-        <asp:GridView ID="gvDef" runat="server"
-            CssClass="table table-sm table-bordered table-striped grid-small"
-            AutoGenerateColumns="False"
-            DataKeyNames="Id"
-            AllowPaging="True"
-            PageSize="20"
-            OnPageIndexChanging="gvDef_PageIndexChanging"
-            OnRowCommand="gvDef_RowCommand">
-            <Columns>
-                <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="40px" />
-                <asp:BoundField DataField="Codigo" HeaderText="Código" />
-                <asp:BoundField DataField="Nombre" HeaderText="Nombre" />
-                <asp:BoundField DataField="Version" HeaderText="Ver" ItemStyle-Width="40px" />
-                <asp:CheckBoxField DataField="Activo" HeaderText="Activo" ItemStyle-Width="55px" />
-                <asp:BoundField DataField="FechaCreacion" HeaderText="Creado" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
-                <asp:BoundField DataField="CreadoPor" HeaderText="Creado por" />
-                <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="320px">
-                <ItemTemplate>
-                    <!-- Editar en el editor conservando posiciones -->
-                    <asp:HyperLink ID="lnkEditar" runat="server"
-                        CssClass="btn btn-sm btn-primary mr-1"
-                        NavigateUrl='<%# "WorkflowUI.aspx?defId=" + Eval("Id") %>'>Editar</asp:HyperLink>
+<asp:GridView ID="gvDef" runat="server"
+    CssClass="table table-sm table-bordered table-striped grid-small"
+    AutoGenerateColumns="False"
+    DataKeyNames="Id"
+    AllowPaging="True"
+    PageSize="20"
+    OnPageIndexChanging="gvDef_PageIndexChanging"
+    OnRowCommand="gvDef_RowCommand"
+    OnRowDataBound="gvDef_RowDataBound">
+    <Columns>
+        <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="40px" />
+        <asp:BoundField DataField="Codigo" HeaderText="Código" />
+        <asp:BoundField DataField="Nombre" HeaderText="Nombre" />
+            
+        <asp:TemplateField HeaderText="Tipo" ItemStyle-Width="90px">
+            <ItemTemplate>
+                <asp:Label ID="lblTipo" runat="server"></asp:Label>
+            </ItemTemplate>
+        </asp:TemplateField>
 
-                    <!-- Ver JSON -->
-                    <asp:LinkButton ID="lnkVerJson" runat="server"
-                        CommandName="VerJson"
-                        CommandArgument='<%# Eval("Id") %>'
-                        CssClass="btn btn-sm btn-info mr-1">JSON</asp:LinkButton>
+        <asp:TemplateField HeaderText="Usado por">
+            <ItemTemplate>
+                <asp:Label ID="lblUsadoPor" runat="server" CssClass="small text-muted"></asp:Label>
+            </ItemTemplate>
+        </asp:TemplateField>
 
-                    <!-- Ir a instancias -->
-                    <asp:LinkButton ID="lnkVerInst" runat="server"
-                        CommandName="VerInst"
-                        CommandArgument='<%# Eval("Id") %>'
-                        CssClass="btn btn-sm btn-secondary mr-1">Instancias</asp:LinkButton>
+        <asp:BoundField DataField="Version" HeaderText="Ver" ItemStyle-Width="40px" />
+        <asp:CheckBoxField DataField="Activo" HeaderText="Activo" ItemStyle-Width="55px" />
+        <asp:BoundField DataField="FechaCreacion" HeaderText="Creado" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
+        <asp:BoundField DataField="CreadoPor" HeaderText="Creado por" />
 
-                    <!-- NUEVO: Ejecutar definición (crear instancia y correr motor) -->
-                    <asp:LinkButton ID="lnkEjecutar" runat="server"
-                        CommandName="Ejecutar"
-                        CommandArgument='<%# Eval("Id") %>'
-                        CssClass="btn btn-sm btn-success">Ejecutar</asp:LinkButton>
-                </ItemTemplate>
-            </asp:TemplateField>
-            </Columns>
-        </asp:GridView>
+        <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="320px">
+            <ItemTemplate>
+                <asp:HyperLink ID="lnkEditar" runat="server"
+                    CssClass="btn btn-sm btn-primary mr-1"
+                    NavigateUrl='<%# "WorkflowUI.aspx?defId=" + Eval("Id") %>'>Editar</asp:HyperLink>
+
+                <asp:LinkButton ID="lnkVerJson" runat="server"
+                    CommandName="VerJson"
+                    CommandArgument='<%# Eval("Id") %>'
+                    CssClass="btn btn-sm btn-info mr-1">JSON</asp:LinkButton>
+
+                <asp:LinkButton ID="lnkVerInst" runat="server"
+                    CommandName="VerInst"
+                    CommandArgument='<%# Eval("Id") %>'
+                    CssClass="btn btn-sm btn-secondary mr-1">Instancias</asp:LinkButton>
+
+                <asp:LinkButton ID="lnkEjecutar" runat="server"
+                    CommandName="Ejecutar"
+                    CommandArgument='<%# Eval("Id") %>'
+                    CssClass="btn btn-sm btn-success">Ejecutar</asp:LinkButton>
+            </ItemTemplate>
+        </asp:TemplateField>
+    </Columns>
+</asp:GridView>
+
 
         <!-- panel JSON -->
         <asp:Panel ID="pnlJson" runat="server" Visible="false" CssClass="mt-3">

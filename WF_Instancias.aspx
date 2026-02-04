@@ -96,13 +96,66 @@
         </div>
 
 
-            <div class="form-inline mb-2">
-                <label class="me-2">Definición:</label>
-                <asp:DropDownList ID="ddlDef" runat="server" CssClass="form-control form-control-sm mr-2" AutoPostBack="true" OnSelectedIndexChanged="ddlDef_SelectedIndexChanged" />
-                <asp:Button ID="btnRefrescar" runat="server" Text="Refrescar" CssClass="btn btn-sm btn-primary mr-2" OnClick="btnRefrescar_Click" />
-                <!-- NUEVO: crear una instancia dummy de la definición seleccionada -->
-                <asp:Button ID="btnCrearInst" runat="server" Text="Crear instancia (prueba)" CssClass="btn btn-sm btn-success" OnClick="btnCrearInst_Click" />
-            </div>
+           <div class="row g-2 align-items-end mb-2">
+    <div class="col-md-4">
+        <label class="form-label mb-0">Definición:</label>
+        <asp:DropDownList ID="ddlDef" runat="server"
+            CssClass="form-select form-select-sm"
+            AutoPostBack="true"
+            OnSelectedIndexChanged="ddlDef_SelectedIndexChanged" />
+    </div>
+
+    <div class="col-md-2">
+        <label class="form-label mb-0">Estado:</label>
+        <asp:DropDownList ID="ddlEstado" runat="server"
+            CssClass="form-select form-select-sm"
+            AutoPostBack="true"
+            OnSelectedIndexChanged="ddlEstado_SelectedIndexChanged">
+            <asp:ListItem Text="(Todos)" Value="" />
+            <asp:ListItem Text="EnCurso" Value="EnCurso" />
+            <asp:ListItem Text="Finalizado" Value="Finalizado" />
+            <asp:ListItem Text="Error" Value="Error" />
+        </asp:DropDownList>
+    </div>
+
+    <div class="col-md-3">
+        <label class="form-label mb-0">Buscar:</label>
+        <asp:TextBox ID="txtBuscar" runat="server"
+            CssClass="form-control form-control-sm"
+            placeholder="Id / texto (OC, proveedor, etc.)" />
+    </div>
+
+    <div class="col-md-2">
+        <div class="form-check mt-3">
+            <asp:CheckBox ID="chkMostrarFinalizados" runat="server"
+                CssClass="form-check-input"
+                AutoPostBack="true"
+                OnCheckedChanged="chkMostrarFinalizados_CheckedChanged" />
+            <label class="form-check-label" for="chkMostrarFinalizados">
+                Mostrar finalizados
+            </label>
+        </div>
+    </div>
+
+    <div class="col-md-1 d-grid">
+        <asp:Button ID="btnRefrescar" runat="server"
+            Text="Refrescar"
+            CssClass="btn btn-sm btn-primary"
+            OnClick="btnRefrescar_Click" />
+    </div>
+
+    <div class="col-md-12 d-flex gap-2">
+        <asp:Button ID="btnBuscar" runat="server"
+            Text="Buscar"
+            CssClass="btn btn-sm btn-outline-primary"
+            OnClick="btnBuscar_Click" />
+        <asp:Button ID="btnCrearInst" runat="server"
+            Text="Crear instancia (prueba)"
+            CssClass="btn btn-sm btn-success"
+            OnClick="btnCrearInst_Click" />
+    </div>
+</div>
+
 
             <asp:GridView ID="gvInst" runat="server"
                 CssClass="table table-sm table-bordered table-striped"

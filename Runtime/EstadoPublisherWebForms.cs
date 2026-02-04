@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using static Intranet.WorkflowStudio.Runtime.WorkflowRuntime;
 
 namespace Intranet.WorkflowStudio.Runtime
 {
@@ -9,7 +10,8 @@ namespace Intranet.WorkflowStudio.Runtime
         {
             try
             {
-                var items = System.Web.HttpContext.Current?.Items;
+                var items = System.Web.HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                //var items = System.Web.HttpContext.Current?.Items;
                 if (items == null || estado == null) return;
 
                 if (!string.IsNullOrEmpty(nodoId))

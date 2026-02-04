@@ -1,6 +1,7 @@
 ﻿using Intranet.WorkflowStudio.Runtime;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
@@ -22,7 +23,9 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (!IsPostBack)
             {
-
+                chkMostrarFinalizados.Checked = false;
+                ddlEstado.SelectedValue = "";
+                txtBuscar.Text = "";
                 CargarDefiniciones();
 
                 // Acepto varios nombres de parámetro:
@@ -95,53 +98,71 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private void CargarInstancias()
         {
+            int defId = 0;
+            int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
+
+            bool mostrarFinalizados = chkMostrarFinalizados.Checked;
+            string estado = Convert.ToString(ddlEstado.SelectedValue ?? "").Trim();
+            string q = (txtBuscar.Text ?? "").Trim();
+
+            var where = new List<string>();
+            where.Add("WF_DefinicionId = @DefId");
+
+            // Por defecto: ocultar finalizados
+            if (!mostrarFinalizados)
+                where.Add("Estado <> 'Finalizado'");
+
+            // Filtro por estado
+            if (!string.IsNullOrWhiteSpace(estado))
+                where.Add("Estado = @Estado");
+
+            // Buscar (SIEMPRE por DatosContexto; y si es numérico, también por Id contiene)
+            bool qEsNumero = false;
+            long dummy;
+            if (!string.IsNullOrWhiteSpace(q))
+                qEsNumero = long.TryParse(q, out dummy);
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                if (qEsNumero)
+                    where.Add("(CONVERT(varchar(30), Id) LIKE @Q OR DatosContexto LIKE @Q)");
+                else
+                    where.Add("(DatosContexto LIKE @Q)");
+            }
+
             string sql = @"
-                SELECT i.Id, i.WF_DefinicionId, i.Estado, i.FechaInicio, i.FechaFin,
-                i.DatosContexto
-                FROM dbo.WF_Instancia i
-                WHERE 1=1";
+SELECT TOP (500)
+    Id,
+    WF_DefinicionId,
+    Estado,
+    FechaInicio,
+    FechaFin,
+    DatosContexto
+FROM WF_Instancia
+WHERE " + string.Join(" AND ", where) + @"
+ORDER BY Id DESC;";
 
-            bool tieneDef = ddlDef.Items.Count > 0 && !string.IsNullOrEmpty(ddlDef.SelectedValue);
-
-            if (tieneDef)
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
             {
-                sql += " AND i.WF_DefinicionId = @DefId";
+                cmd.Parameters.Add("@DefId", SqlDbType.Int).Value = defId;
+
+                if (!string.IsNullOrWhiteSpace(estado))
+                    cmd.Parameters.Add("@Estado", SqlDbType.NVarChar, 30).Value = estado;
+
+                if (!string.IsNullOrWhiteSpace(q))
+                    cmd.Parameters.Add("@Q", SqlDbType.NVarChar, 200).Value = "%" + q + "%";
+
+                var dt = new DataTable();
+                cn.Open();
+                dt.Load(cmd.ExecuteReader());
+
+                gvInst.DataSource = dt;
+                gvInst.DataBind();
             }
-
-            // Filtro adicional opcional por querystring (ej: ?poliza=xxxx)
-            string numeroQS = Request.QueryString["poliza"];
-            if (!string.IsNullOrEmpty(numeroQS))
-            {
-                sql += " AND ISNULL(i.DatosEntrada,'') LIKE @Poliza";
-            }
-
-            sql += " ORDER BY i.Id DESC";
-
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(sql, cn))
-            {
-                if (tieneDef)
-                {
-                    cmd.Parameters.AddWithValue("@DefId", Convert.ToInt32(ddlDef.SelectedValue));
-                }
-                if (!string.IsNullOrEmpty(numeroQS))
-                {
-                    cmd.Parameters.AddWithValue("@Poliza", "%" + numeroQS + "%");
-                }
-
-                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
-                {
-                    DataTable dt = new DataTable();
-                    da.Fill(dt);
-
-                    gvInst.DataSource = dt;
-                    gvInst.DataBind();
-                }
-            }
-
-            pnlDetalle.Visible = false;
-            preDetalle.InnerText = string.Empty;
         }
+
+
 
         protected void ddlDef_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -150,6 +171,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void btnRefrescar_Click(object sender, EventArgs e)
         {
+            gvInst.PageIndex = 0;
             CargarInstancias();
         }
 
@@ -212,80 +234,63 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
-        protected void gvInst_RowDataBound(object sender, GridViewRowEventArgs e) {
-            if (e.Row.RowType != DataControlRowType.DataRow)
-                return;
+        protected void gvInst_RowDataBound(object sender, GridViewRowEventArgs e)
+        {
+            if (e.Row.RowType != DataControlRowType.DataRow) return;
 
-            // 1) Obtener el DataRowView (asumiendo que el DataSource es un DataTable/DataView)
-            var drv = e.Row.DataItem as DataRowView;
-            if (drv == null)
-                return;
+            var lbl = e.Row.FindControl("lblErrorMsg") as Label;
+            if (lbl == null) return;
 
-            string estado = Convert.ToString(drv["Estado"]);
-            string datosContexto = drv["DatosContexto"] as string;
+            lbl.Text = "";
 
-            long? instSel = null;
-            if (ViewState["InstanciaSeleccionada"] != null &&
-                long.TryParse(ViewState["InstanciaSeleccionada"].ToString(), out var tmp))
-            {
-                instSel = tmp;
-            }
+            // Estado (para pintar)
+            var estadoObj = DataBinder.Eval(e.Row.DataItem, "Estado");
+            var estado = Convert.ToString(estadoObj ?? "");
 
-            long idInstanciaFila = Convert.ToInt64(drv["Id"]);
+            // Intentar extraer mensaje de error desde DatosContexto (JSON)
+            var datosCtx = Convert.ToString(DataBinder.Eval(e.Row.DataItem, "DatosContexto") ?? "");
 
-            // 2) Buscar el Label de la columna Error
-            var lblError = e.Row.FindControl("lblErrorMsg") as Label;
-            if (lblError == null)
-                return;
+            string msg = TryExtractErrorMessageFromDatosContexto(datosCtx);
 
-            // Si no está en estado 'Error', no mostramos nada
-            if (!string.Equals(estado, "Error", StringComparison.OrdinalIgnoreCase))
-            {
-                lblError.Text = string.Empty;
-            }
+            if (!string.IsNullOrWhiteSpace(msg))
+                lbl.Text = msg;
+
+            // Opcional: resaltar según estado
+            if (estado.Equals("Error", StringComparison.OrdinalIgnoreCase))
+                lbl.CssClass = "text-danger small";
             else
-            {
-                // 3) Solo si Estado = 'Error', tratamos de leer DatosContexto.error.message
-                string mensaje = null;
-
-                if (!string.IsNullOrWhiteSpace(datosContexto))
-                {
-                    try
-                    {
-                        var root = JObject.Parse(datosContexto);
-                        // Buscamos error.message, según lo que guarda WorkflowRuntime
-                        mensaje = (string)(root["error"]?["message"]);
-                    }
-                    catch
-                    {
-                        // Si el JSON vino roto, al menos indicamos algo
-                        mensaje = "(error sin detalle JSON)";
-                    }
-                }
-
-                lblError.Text = mensaje ?? "(error sin detalle)";
-            }
-
-            // 4) Pintar la fila en rojo si está en estado Error
-            if (string.Equals(estado, "Error", StringComparison.OrdinalIgnoreCase))
-            {
-                // Agregamos la clase de Bootstrap
-                // (respetando cualquier CssClass previa)
-                string cls = e.Row.CssClass ?? string.Empty;
-                if (!cls.Contains("table-danger"))
-                    e.Row.CssClass = (cls + " table-danger").Trim();
-            }
-
-            // 5) (Opcional) resaltar la instancia seleccionada
-            if (instSel.HasValue && idInstanciaFila == instSel.Value)
-            {
-                // azul clarito de Bootstrap para marcar "seleccionado"
-                string cls = e.Row.CssClass ?? string.Empty;
-                if (!cls.Contains("table-info"))
-                    e.Row.CssClass = (cls + " table-info").Trim();
-            }
-
+                lbl.CssClass = "text-muted small";
         }
+
+        private static string TryExtractErrorMessageFromDatosContexto(string datosContexto)
+        {
+            if (string.IsNullOrWhiteSpace(datosContexto)) return null;
+
+            try
+            {
+                var jo = Newtonsoft.Json.Linq.JObject.Parse(datosContexto);
+
+                // soporta varias formas (por si cambió el formato)
+                var msg =
+                    (string)jo.SelectToken("error.message") ??
+                    (string)jo.SelectToken("wf.error.message") ??
+                    (string)jo.SelectToken("mensajeError") ??
+                    (string)jo.SelectToken("error") ??
+                    null;
+
+                if (string.IsNullOrWhiteSpace(msg)) return null;
+
+                msg = msg.Trim();
+                if (msg.Length > 180) msg = msg.Substring(0, 180) + "...";
+                return msg;
+            }
+            catch
+            {
+                // Si no es JSON, no mostramos nada
+                return null;
+            }
+        }
+
 
 
 
@@ -403,6 +408,25 @@ namespace Intranet.WorkflowStudio.WebForms
     "wf_applyLogFilters", "setTimeout(function(){ if(window.applyLogFilters) window.applyLogFilters(); }, 0);", true);
 
         }
+
+        protected void chkMostrarFinalizados_CheckedChanged(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            CargarInstancias();
+        }
+
+        protected void ddlEstado_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            CargarInstancias();
+        }
+
+        protected void btnBuscar_Click(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            CargarInstancias();
+        }
+
 
         private static bool EsTecnico(string mensaje)
         {

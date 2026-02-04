@@ -2,6 +2,7 @@
 using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
 using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
@@ -174,11 +175,14 @@ WHERE Id = @Id;", cn))
             }
             catch { }
 
-            var items = HttpContext.Current?.Items;
+            var items = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
             if (items != null)
             {
                 items["WF_SEED"] = seed;
                 items["WF_CTX_ESTADO"] = null;
+
+                // clave: dejar el ambient seteado para que sobreviva al async
+                WorkflowAmbient.Items.Value = items;
             }
 
             Action<string> logAction = s =>
@@ -270,11 +274,14 @@ WHERE Id = @Id;", cn))
             seed["wf.definicionId"] = defId;
             seed["wf.creadoPor"] = usuario ?? "app";
 
-            var items = HttpContext.Current?.Items;
+            var items = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
             if (items != null)
             {
                 items["WF_SEED"] = seed;
                 items["WF_CTX_ESTADO"] = null;
+
+                // clave: dejar el ambient seteado para que sobreviva al async
+                WorkflowAmbient.Items.Value = items;
             }
 
             Action<string> logAction = s =>
@@ -338,8 +345,8 @@ WHERE Id = @Id;", cn))
         // ======================================================================
         private static void PersistirFinal(long instId, List<string> logs)
         {
-            var items = HttpContext.Current?.Items;
-
+            //var items = HttpContext.Current?.Items;
+            var items = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
             bool detenido = false;
             bool hayError = false;
             string mensajeError = null;
@@ -641,11 +648,14 @@ WHERE Id = @Id;", cn))
             seed["wf.error"] = false;
             seed.Remove("wf.error.message");
 
-            var items = HttpContext.Current?.Items;
+            var items = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
             if (items != null)
             {
                 items["WF_SEED"] = seed;
                 items["WF_CTX_ESTADO"] = null;
+
+                // clave: dejar el ambient seteado para que sobreviva al async
+                WorkflowAmbient.Items.Value = items;
             }
 
             Action<string> logAction = s =>
