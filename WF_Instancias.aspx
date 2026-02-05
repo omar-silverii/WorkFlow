@@ -19,82 +19,32 @@
          .ws-card { border: 0; border-radius: 16px; box-shadow: 0 10px 24px rgba(16,24,40,.06); }
          .ws-card .card-body { padding: 20px; }
          .ws-muted { color: rgba(0,0,0,.65); }
-         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
-         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
-         .ws-section-title { font-weight: 700; }
-         .table thead th { white-space: nowrap; }
-         .ws-kpi { border-radius: 16px; border: 1px solid rgba(0,0,0,.08); background: #fff; }
-         .ws-badge { font-size: 12px; }
+         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(16,24,40,.06); border-radius: 16px; }
+         .ws-title { font-weight: 700; letter-spacing: .2px; }
+         .ws-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.08); color: #0d6efd; font-size: .78rem; font-weight: 600; }
+         .ws-chip.ws-chip-muted { background: rgba(108,117,125,.10); color: #6c757d; }
+         .ws-grid { border-radius: 14px; overflow: hidden; border: 1px solid rgba(16,24,40,.08); }
+         .table> :not(caption)>*>* { vertical-align: middle; }
     </style>
 </head>
 <body>
     <form id="form1" runat="server">
-
-            <!-- Topbar -->
-    <nav class="navbar navbar-expand-lg ws-topbar sticky-top">
-        <div class="container-fluid px-3 px-md-4">
-            <a class="navbar-brand fw-bold" href="Default.aspx">
-                Workflow Studio <span class="ws-pill ms-2">Intranet</span>
-            </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#wsNav"
-                aria-controls="wsNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" id="wsNav">
-                <ul class="navbar-nav ms-auto gap-lg-2">
-                    <li class="nav-item"><a class="nav-link" href="Default.aspx">Inicio</a></li>
-
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Workflows</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="WorkflowUI.aspx">➕ Nuevo / Editor</a></li>
-                            <li><a class="dropdown-item" href="WF_Definiciones.aspx">📋 Definiciones</a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Documentos</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="WF_DocTipo.aspx">📁 Tipos de documento</a></li>
-                            <li><a class="dropdown-item" href="WF_DocTipoReglas.aspx">🧠 Reglas de extracción</a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Ejecuciones</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="WF_Instancias.aspx">▶ Instancias</a></li>
-                            <li><a class="dropdown-item" href="WF_Instancias.aspx#logs">📜 Logs</a></li>
-                        </ul>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link active" href="WF_Gerente_Tareas.aspx">Gerencia</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-
-
         <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h4 class="mb-0">Workflows – Instancias</h4>
 
-            <div class="btn-group">
-                <asp:HyperLink ID="lnkBackDef" runat="server"
-                    NavigateUrl="WF_Definiciones.aspx"
-                    CssClass="btn btn-sm btn-secondary">← Definiciones</asp:HyperLink>
+            <div class="ws-topbar p-3 mb-3 ws-card">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="ws-title">Instancias</div>
+                        <div class="ws-muted small">Seguimiento, datos y logs</div>
+                    </div>
 
-                <asp:HyperLink ID="lnkBackTareas" runat="server"
-                    CssClass="btn btn-sm btn-outline-secondary"
-                    Visible="false">← Tareas</asp:HyperLink>
+                    <div class="d-flex gap-2">
+                        <asp:HyperLink ID="lnkBackTareas" runat="server" Visible="false" CssClass="btn btn-sm btn-outline-secondary">
+                            Volver a tareas
+                        </asp:HyperLink>
+                    </div>
+                </div>
             </div>
-        </div>
-
 
            <div class="row g-2 align-items-end mb-2">
     <div class="col-md-4">
@@ -107,6 +57,13 @@
 
     <div class="col-md-2">
         <label class="form-label mb-0">Estado:</label>
+        <div class="btn-group btn-group-sm w-100 mb-1" role="group" aria-label="Filtro de estado">
+            <asp:LinkButton ID="lnkEstadoTodos" runat="server" CssClass="btn btn-outline-secondary" OnClick="lnkEstado_Click" CommandArgument="">Todos</asp:LinkButton>
+            <asp:LinkButton ID="lnkEstadoEnCurso" runat="server" CssClass="btn btn-outline-primary" OnClick="lnkEstado_Click" CommandArgument="EnCurso">En curso</asp:LinkButton>
+            <asp:LinkButton ID="lnkEstadoError" runat="server" CssClass="btn btn-outline-danger" OnClick="lnkEstado_Click" CommandArgument="Error">Error</asp:LinkButton>
+            <asp:LinkButton ID="lnkEstadoFinalizado" runat="server" CssClass="btn btn-outline-dark" OnClick="lnkEstado_Click" CommandArgument="Finalizado">Finalizado</asp:LinkButton>
+        </div>
+
         <asp:DropDownList ID="ddlEstado" runat="server"
             CssClass="form-select form-select-sm"
             AutoPostBack="true"
@@ -150,268 +107,89 @@
             CssClass="btn btn-sm btn-outline-primary"
             OnClick="btnBuscar_Click" />
         <asp:Button ID="btnCrearInst" runat="server"
-            Text="Crear instancia (prueba)"
-            CssClass="btn btn-sm btn-success"
+            Text="Ejecutar (sin input)"
+            CssClass="btn btn-sm btn-outline-success"
             OnClick="btnCrearInst_Click" />
     </div>
 </div>
 
+            <div class="row g-3">
+                <div class="col-md-7">
+                    <div class="card ws-card">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="ws-title">Listado</div>
+                                <div class="ws-chip ws-chip-muted">TOP 500</div>
+                            </div>
 
-            <asp:GridView ID="gvInst" runat="server"
-                CssClass="table table-sm table-bordered table-striped"
-                AutoGenerateColumns="False"
-                AllowPaging="True"
-                PageSize="20"
-                DataKeyNames="Id"
-                OnPageIndexChanging="gvInst_PageIndexChanging"
-                OnRowCommand="gvInst_RowCommand"
-                OnRowDataBound="gvInst_RowDataBound">
-                <Columns>
-                    <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="60px" />
-                    <asp:BoundField DataField="WF_DefinicionId" HeaderText="Definición" />
-                    <asp:BoundField DataField="Estado" HeaderText="Estado" />
-                    <asp:BoundField DataField="FechaInicio" HeaderText="Inicio" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
-                    <asp:BoundField DataField="FechaFin" HeaderText="Fin" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
-                    <asp:TemplateField HeaderText="Error">
-                        <ItemTemplate>
-                            <asp:Label ID="lblErrorMsg" runat="server" CssClass="text-danger small"></asp:Label>
-                        </ItemTemplate>
-                    </asp:TemplateField>
-                    <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="210px">
-                        <ItemTemplate>
-                            <asp:LinkButton ID="lnkVerDatos" runat="server" CommandName="VerDatos" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-info mr-1">Datos</asp:LinkButton>
-                            <asp:LinkButton ID="lnkVerLog" runat="server" CommandName="VerLog" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-secondary mr-1">Log</asp:LinkButton>
-                            <asp:LinkButton ID="lnkRetry" runat="server" CommandName="Reejecutar" CommandArgument='<%# Eval("Id") %>' CssClass="btn btn-sm btn-warning">Re-ejecutar</asp:LinkButton>
-                            <asp:LinkButton ID="lnkHistorial" runat="server"
-                                CssClass="btn btn-sm btn-primary"
-                                OnClientClick='<%# "wfMostrarHistorialInst(" + Eval("Id") + "); return false;" %>'>
-                                Historial
-                            </asp:LinkButton>
-                        </ItemTemplate>
-                    </asp:TemplateField>
-                </Columns>
-            </asp:GridView>
+                            <div class="ws-grid">
+                                <asp:GridView ID="gvInst" runat="server"
+                                    CssClass="table table-sm table-striped mb-0"
+                                    AutoGenerateColumns="false"
+                                    AllowPaging="true"
+                                    PageSize="20"
+                                    OnPageIndexChanging="gvInst_PageIndexChanging"
+                                    OnRowCommand="gvInst_RowCommand">
+                                    <Columns>
+                                        <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="70px" />
+                                        <asp:BoundField DataField="Estado" HeaderText="Estado" ItemStyle-Width="100px" />
+                                        <asp:BoundField DataField="FechaInicio" HeaderText="Inicio" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" ItemStyle-Width="160px" />
+                                        <asp:BoundField DataField="FechaFin" HeaderText="Fin" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" ItemStyle-Width="160px" />
 
-            <!-- panel datos / log -->
-            <asp:Panel ID="pnlDetalle" runat="server" Visible="false" CssClass="mt-3">
-                <h6 id="lblTituloDetalle" runat="server">Detalle</h6>
-                <pre id="preDetalle" runat="server" class="log-box" Visible="false"></pre>
-                <div class="card mb-3">
-                  <div class="card-body">
+                                        <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="170px">
+                                            <ItemTemplate>
+                                                <asp:LinkButton ID="lnkDatos" runat="server"
+                                                    CommandName="Datos"
+                                                    CommandArgument='<%# Eval("Id") %>'
+                                                    CssClass="btn btn-sm btn-outline-primary">Datos</asp:LinkButton>
 
-                    <div class="row g-2 align-items-center mb-2">
-                      <div class="col-md-6">
-                        <input id="txtLogSearch" type="text" class="form-control" placeholder="Buscar en el log..." />
-                      </div>
+                                                <asp:LinkButton ID="lnkLogs" runat="server"
+                                                    CommandName="Logs"
+                                                    CommandArgument='<%# Eval("Id") %>'
+                                                    CssClass="btn btn-sm btn-outline-secondary">Logs</asp:LinkButton>
 
-                      <div class="col-md-3">
-                        <select id="ddlLogLevel" class="form-select">
-                          <option value="">Todos los niveles</option>
-                          <option value="Info">Info</option>
-                          <option value="Warning">Warning</option>
-                          <option value="Error">Error</option>
-                          <option value="Debug">Debug</option>
-                        </select>
-                      </div>
-
-                      <div class="col-md-3">
-                        <div class="form-check">
-                          <input class="form-check-input" type="checkbox" id="chkShowTech" />
-                          <label class="form-check-label" for="chkShowTech">
-                            Mostrar técnico (debug)
-                          </label>
+                                                <asp:LinkButton ID="lnkReej" runat="server"
+                                                    CommandName="Reejecutar"
+                                                    CommandArgument='<%# Eval("Id") %>'
+                                                    CssClass="btn btn-sm btn-outline-success"
+                                                    OnClientClick="return confirm('Reejecutar la instancia seleccionada?');">Reej.</asp:LinkButton>
+                                            </ItemTemplate>
+                                        </asp:TemplateField>
+                                    </Columns>
+                                </asp:GridView>
+                            </div>
                         </div>
-                      </div>
+                    </div>
+                </div>
+
+                <div class="col-md-5">
+                    <div class="card ws-card mb-3">
+                        <div class="card-body">
+                            <div class="ws-title mb-2">Datos (DatosContexto)</div>
+                            <asp:Panel ID="pnlDatos" runat="server" Visible="false">
+                                <pre class="log-view"><asp:Literal ID="litDatos" runat="server"></asp:Literal></pre>
+                            </asp:Panel>
+                            <asp:Panel ID="pnlDatosEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                Seleccioná una instancia y presioná “Datos”.
+                            </asp:Panel>
+                        </div>
                     </div>
 
-                    <div id="divLogList" runat="server" class="list-group"></div>
-
-                  </div>
+                    <div class="card ws-card">
+                        <div class="card-body">
+                            <div class="ws-title mb-2">Logs</div>
+                            <asp:Panel ID="pnlLogs" runat="server" Visible="false">
+                                <pre class="log-view"><asp:Literal ID="litLogs" runat="server"></asp:Literal></pre>
+                            </asp:Panel>
+                            <asp:Panel ID="pnlLogsEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                Seleccioná una instancia y presioná “Logs”.
+                            </asp:Panel>
+                        </div>
+                    </div>
                 </div>
-            </asp:Panel>
-
-            <!-- Modal Historial de Escalamiento (por Instancia) -->
-            <div class="modal fade" id="mdlHistorialEsc" tabindex="-1" aria-hidden="true">
-              <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                <div class="modal-content">
-                  <div class="modal-header">
-                    <h5 class="modal-title">Historial de escalamiento</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                  </div>
-                  <div class="modal-body">
-                    <div id="histEscLoading" class="py-3">Cargando...</div>
-                    <div id="histEscError" class="alert alert-danger d-none"></div>
-                    <div id="histEscBody" class="d-none"></div>
-                  </div>
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                  </div>
-                </div>
-              </div>
             </div>
 
         </div>
-
-        <script type="text/javascript">
-            (function () {
-                function norm(s) { return (s || '').toString().toLowerCase(); }
-
-                function applyLogFilters() {
-                    var txt = document.getElementById('txtLogSearch');
-                    var ddl = document.getElementById('ddlLogLevel');
-                    var chk = document.getElementById('chkShowTech');
-
-                    // Si el panel de log no está renderizado, no hacemos nada.
-                    if (!txt || !ddl || !chk) return;
-
-                    var q = norm(txt.value);
-                    var lvl = (ddl.value || '').toString();
-                    var showTech = chk.checked;
-
-                    var items = document.querySelectorAll('.wf-log-item');
-                    for (var i = 0; i < items.length; i++) {
-                        var it = items[i];
-                        var text = norm(it.getAttribute('data-text'));
-                        var level = (it.getAttribute('data-level') || '');
-                        var isTech = (it.getAttribute('data-tech') || '0') === '1';
-
-                        var okQ = !q || text.indexOf(q) >= 0;
-                        var okL = !lvl || level === lvl;
-                        var okT = showTech ? true : !isTech;
-
-                        it.style.display = (okQ && okL && okT) ? '' : 'none';
-                    }
-                }
-
-                document.addEventListener('input', function (e) {
-                    if (e.target && e.target.id === 'txtLogSearch') applyLogFilters();
-                });
-
-                document.addEventListener('change', function (e) {
-                    if (!e.target) return;
-                    if (e.target.id === 'ddlLogLevel' || e.target.id === 'chkShowTech') applyLogFilters();
-                });
-
-                // primera pasada (si existe panel)
-                setTimeout(applyLogFilters, 0);
-            })();
-        </script>
-
     </form>
-
-    <script type="text/javascript">        
-        async function wfMostrarHistorialInst(instanciaId) {
-        const modalEl = document.getElementById('mdlHistorialEsc');
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-        const loading = document.getElementById('histEscLoading');
-        const err = document.getElementById('histEscError');
-        const body = document.getElementById('histEscBody');
-
-        loading.classList.remove('d-none');
-        err.classList.add('d-none');
-        body.classList.add('d-none');
-        body.innerHTML = '';
-
-        modal.show();
-
-        try {
-            const url = '/Api/Generico.ashx?action=instancia.escalamiento.historial&instanciaId=' + encodeURIComponent(instanciaId);
-            const res = await fetch(url, { cache: 'no-store' });
-            const data = await res.json();
-
-            if (!data || data.ok !== true) {
-            throw new Error((data && data.error) ? data.error : 'Respuesta inválida');
-            }
-
-            const items = data.items || [];
-
-            if (items.length === 0) {
-            body.innerHTML = '<div class="text-muted">No hay historial de escalamiento para esta instancia.</div>';
-            } else {
-            // Agrupar por RootId (cadena)
-            const groups = {};
-            for (const it of items) {
-                const k = String(it.rootId || it.id);
-                if (!groups[k]) groups[k] = [];
-                groups[k].push(it);
-            }
-
-            // Render
-            let html = '';
-            const roots = Object.keys(groups).sort((a,b)=> Number(b)-Number(a)); // últimos primero
-
-            for (const rk of roots) {
-                const arr = groups[rk];
-
-                // ordenar por nivel y fecha
-                arr.sort((a,b)=>{
-                const la = a.nivel || 0, lb = b.nivel || 0;
-                if (la !== lb) return la - lb;
-                return String(a.fechaCreacion||'').localeCompare(String(b.fechaCreacion||''));
-                });
-
-                html += `<div class="mb-3 p-3 border rounded">
-                <div class="fw-semibold mb-2">Cadena (rootId = ${escapeHtml(rk)})</div>`;
-
-                for (const it of arr) {
-                const badge = (it.estado || '').toLowerCase() === 'completada'
-                    ? '<span class="badge bg-success">Completada</span>'
-                    : '<span class="badge bg-warning text-dark">Pendiente</span>';
-
-                const resu = it.resultado ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(it.resultado)}</span>` : '';
-                const nivel = (it.nivel != null) ? it.nivel : 0;
-
-                html += `
-                    <div class="d-flex align-items-start mb-2">
-                    <div style="width:70px" class="text-muted small">Nivel ${nivel}</div>
-                    <div class="flex-grow-1 border rounded p-2">
-                        <div class="d-flex justify-content-between">
-                        <div>
-                            <span class="fw-semibold">#${it.id}</span>
-                            <span class="ms-2">${badge}${resu}</span>
-                            <span class="ms-2">Rol: <b>${escapeHtml(it.rolDestino||'')}</b></span>
-                            ${it.origenTareaId ? `<span class="ms-2 text-muted small">OrigenTareaId: ${it.origenTareaId}</span>` : ''}
-                        </div>
-                        <div class="text-muted small">
-                            ${escapeHtml(it.fechaCreacion||'')}${it.fechaCierre ? (' · ' + escapeHtml(it.fechaCierre)) : ''}
-                        </div>
-                        </div>
-                        <div class="mt-1">${escapeHtml(it.titulo||'')}</div>
-                        ${it.origenEscalamientoObj ? `
-                        <details class="mt-2">
-                            <summary class="small">origenEscalamiento</summary>
-                            <pre class="small bg-light p-2 rounded mb-0">${escapeHtml(JSON.stringify(it.origenEscalamientoObj, null, 2))}</pre>
-                        </details>` : ''
-                        }
-                    </div>
-                    </div>`;
-                }
-
-                html += `</div>`;
-            }
-
-            body.innerHTML = html;
-            }
-
-            loading.classList.add('d-none');
-            body.classList.remove('d-none');
-
-        } catch (e) {
-            loading.classList.add('d-none');
-            err.textContent = 'Error: ' + (e.message || e);
-            err.classList.remove('d-none');
-        }
-        }
-
-        function escapeHtml(s) {
-        return (s ?? '').toString()
-            .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-            .replaceAll('"','&quot;').replaceAll("'","&#039;");
-        }
-
-
-         </script>
-
 </body>
 </html>

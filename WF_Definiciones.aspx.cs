@@ -24,93 +24,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 int defId;
                 if (int.TryParse(Request.QueryString["defId"], out defId))
                 {
-                    CargarGridYPosicionar(defId);
+                    txtFiltro.Text = defId.ToString();
                 }
-                else
-                {
-                    CargarGrid();
-                }
+
+                CargarGrid();
             }
-        }
-
-        private void CargarGridYPosicionar(int defId)
-        {
-            string sql = @"
-SELECT Id, Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef
-FROM dbo.WF_Definicion
-ORDER BY Codigo, Version DESC;";
-
-            DataTable dt = new DataTable();
-
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(sql, cn))
-            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
-            {
-                da.Fill(dt);
-            }
-
-            DecorarDefinicionesSubflow(dt);
-
-            int rowIndex = -1;
-            for (int i = 0; i < dt.Rows.Count; i++)
-            {
-                if (Convert.ToInt32(dt.Rows[i]["Id"]) == defId)
-                {
-                    rowIndex = i;
-                    break;
-                }
-            }
-
-            if (rowIndex >= 0)
-            {
-                int pageSize = gvDef.PageSize;
-                gvDef.PageIndex = rowIndex / pageSize;
-            }
-            else
-            {
-                gvDef.PageIndex = 0;
-            }
-
-            gvDef.DataSource = dt;
-            gvDef.DataBind();
-        }
-
-        private void CargarGrid()
-        {
-            string sql = @"
-SELECT Id, Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef
-FROM dbo.WF_Definicion
-WHERE 1 = 1";
-
-            string filtro = (txtFiltro.Text ?? "").Trim();
-            if (!string.IsNullOrEmpty(filtro))
-            {
-                sql += " AND Codigo LIKE @Filtro";
-            }
-
-            sql += " ORDER BY Codigo, Version DESC;";
-
-            DataTable dt = new DataTable();
-
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(sql, cn))
-            {
-                if (!string.IsNullOrEmpty(filtro))
-                    cmd.Parameters.AddWithValue("@Filtro", "%" + filtro + "%");
-
-                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
-                {
-                    da.Fill(dt);
-                }
-            }
-
-            DecorarDefinicionesSubflow(dt);
-
-            gvDef.DataSource = dt;
-            gvDef.DataBind();
-
-            pnlJson.Visible = false;
-            preJson.InnerText = string.Empty;
         }
 
         protected void btnBuscar_Click(object sender, EventArgs e)
@@ -121,14 +39,15 @@ WHERE 1 = 1";
 
         protected void btnLimpiar_Click(object sender, EventArgs e)
         {
-            txtFiltro.Text = string.Empty;
+            txtFiltro.Text = "";
             gvDef.PageIndex = 0;
             CargarGrid();
         }
 
         protected void btnNuevo_Click(object sender, EventArgs e)
         {
-            Response.Redirect("WorkflowUI.aspx");
+            Response.Redirect("WorkflowUI.aspx", false);
+            Context.ApplicationInstance.CompleteRequest();
         }
 
         protected void gvDef_PageIndexChanging(object sender, GridViewPageEventArgs e)
@@ -155,6 +74,15 @@ WHERE 1 = 1";
             else if (e.CommandName == "Ejecutar")
             {
                 int defId = Convert.ToInt32(e.CommandArgument);
+
+                // Seguridad/UX: si es subflow (usado por otro workflow), no permitir ejecución manual.
+                if (EsDefinicionSubflow(defId))
+                {
+                    pnlJson.Visible = true;
+                    preJson.InnerText =
+                        "Este workflow está marcado como SUBFLOW (es invocado por otro workflow) y no se puede ejecutar manualmente desde esta grilla.";
+                    return;
+                }
 
                 string usuario =
                     (User != null && User.Identity != null && User.Identity.IsAuthenticated)
@@ -229,36 +157,83 @@ WHERE 1 = 1";
 
             if (lnkEjecutar != null && isSubflow)
             {
-                // No confundir: en subflow, lo dejamos como “Probar” con confirmación.
-                lnkEjecutar.Text = "Probar";
-                lnkEjecutar.CssClass = "btn btn-sm btn-outline-success";
-                string msg = "Este flujo es un SUBFLOW (invocado por: " + (string.IsNullOrWhiteSpace(usadoPor) ? "otro workflow" : usadoPor) +
-                             ").\\n\\n¿Ejecutar en modo PRUEBA?";
-                lnkEjecutar.OnClientClick = "return confirm('" + JsEscape(msg) + "');";
+                // Regla: los subflows NO se ejecutan manualmente desde esta grilla.
+                lnkEjecutar.Text = "Bloqueado";
+                lnkEjecutar.Enabled = false;
+                lnkEjecutar.CssClass = "btn btn-sm btn-outline-secondary disabled";
+                string msg = "Este flujo es un SUBFLOW (invocado por: " + (string.IsNullOrWhiteSpace(usadoPor) ? "otro workflow" : usadoPor) + ").";
+                lnkEjecutar.ToolTip = msg;
+                lnkEjecutar.OnClientClick = "return false;";
             }
+        }
+
+        private void CargarGrid()
+        {
+            string sql = @"
+SELECT Id, Codigo, Nombre, Version, Activo, FechaCreacion, CreadoPor, JsonDef
+FROM dbo.WF_Definicion
+WHERE 1 = 1";
+
+            string filtro = (txtFiltro.Text ?? "").Trim();
+
+            int filtroId;
+            bool esId = int.TryParse(filtro, out filtroId);
+
+            if (!string.IsNullOrEmpty(filtro))
+            {
+                if (esId)
+                    sql += " AND (Id = @FiltroId OR Codigo LIKE @Filtro)";
+                else
+                    sql += " AND Codigo LIKE @Filtro";
+            }
+
+            sql += " ORDER BY Codigo, Version DESC;";
+
+            DataTable dt = new DataTable();
+
+            using (SqlConnection cn = new SqlConnection(Cnn))
+            using (SqlCommand cmd = new SqlCommand(sql, cn))
+            {
+                if (!string.IsNullOrEmpty(filtro))
+                {
+                    if (esId)
+                        cmd.Parameters.AddWithValue("@FiltroId", filtroId);
+
+                    cmd.Parameters.AddWithValue("@Filtro", "%" + filtro + "%");
+                }
+
+                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                {
+                    da.Fill(dt);
+                }
+            }
+
+            DecorarDefinicionesSubflow(dt);
+
+            gvDef.DataSource = dt;
+            gvDef.DataBind();
+
+            pnlJson.Visible = false;
+            preJson.InnerText = string.Empty;
         }
 
         private void VerJson(int id)
         {
-            string json = null;
-
+            string sql = "SELECT JsonDef FROM dbo.WF_Definicion WHERE Id=@Id;";
             using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand("SELECT JsonDef FROM dbo.WF_Definicion WHERE Id = @Id", cn))
+            using (SqlCommand cmd = new SqlCommand(sql, cn))
             {
                 cmd.Parameters.AddWithValue("@Id", id);
                 cn.Open();
-                object o = cmd.ExecuteScalar();
-                if (o != null && o != DBNull.Value)
-                    json = o.ToString();
-            }
 
-            preJson.InnerText = string.IsNullOrEmpty(json) ? "-- sin JSON --" : json;
-            pnlJson.Visible = true;
+                object o = cmd.ExecuteScalar();
+                string json = (o == null || o == DBNull.Value) ? "" : Convert.ToString(o);
+
+                pnlJson.Visible = true;
+                preJson.InnerText = json;
+            }
         }
 
-        // ==========================
-        //  Subflow: detección automática
-        // ==========================
         private void DecorarDefinicionesSubflow(DataTable dt)
         {
             if (dt == null) return;
@@ -387,14 +362,74 @@ WHERE 1 = 1";
             return results;
         }
 
+        private bool EsDefinicionSubflow(int defId)
+        {
+            // Un workflow es "subflow" si algún otro WF_Definicion tiene un nodo util.subflow que lo referencia
+            // (por Nombre o por Código).
+            string nombre = null;
+            string codigo = null;
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("SELECT Nombre, Codigo FROM dbo.WF_Definicion WHERE Id = @Id", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = defId;
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                {
+                    if (rd.Read())
+                    {
+                        nombre = rd["Nombre"] == DBNull.Value ? null : Convert.ToString(rd["Nombre"]);
+                        codigo = rd["Codigo"] == DBNull.Value ? null : Convert.ToString(rd["Codigo"]);
+                    }
+                }
+            }
+
+            nombre = (nombre ?? "").Trim();
+            codigo = (codigo ?? "").Trim();
+
+            if (string.IsNullOrWhiteSpace(nombre) && string.IsNullOrWhiteSpace(codigo))
+                return false;
+
+            // Traemos solo defs que aparentan tener subflows para no parsear todo.
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+SELECT Id, JsonDef
+FROM dbo.WF_Definicion
+WHERE Id <> @Id
+  AND JsonDef IS NOT NULL
+  AND JsonDef LIKE '%util.subflow%';", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = defId;
+                cn.Open();
+
+                using (var rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        var json = rd["JsonDef"] == DBNull.Value ? null : Convert.ToString(rd["JsonDef"]);
+                        if (string.IsNullOrWhiteSpace(json)) continue;
+
+                        foreach (var target in FindSubflowTargets(json))
+                        {
+                            if (string.IsNullOrWhiteSpace(target)) continue;
+
+                            if (!string.IsNullOrWhiteSpace(nombre) && string.Equals(target, nombre, StringComparison.OrdinalIgnoreCase))
+                                return true;
+
+                            if (!string.IsNullOrWhiteSpace(codigo) && string.Equals(target, codigo, StringComparison.OrdinalIgnoreCase))
+                                return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private static string JsEscape(string s)
         {
             if (s == null) return "";
-            return s
-                .Replace("\\", "\\\\")
-                .Replace("'", "\\'")
-                .Replace("\r", "")
-                .Replace("\n", "\\n");
+            return s.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "\\r").Replace("\n", "\\n");
         }
     }
 }

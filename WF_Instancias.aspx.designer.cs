@@ -24,15 +24,6 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.HtmlControls.HtmlForm form1;
 
         /// <summary>
-        /// Control lnkBackDef.
-        /// </summary>
-        /// <remarks>
-        /// Campo generado automáticamente.
-        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
-        /// </remarks>
-        protected global::System.Web.UI.WebControls.HyperLink lnkBackDef;
-
-        /// <summary>
         /// Control lnkBackTareas.
         /// </summary>
         /// <remarks>
@@ -49,6 +40,42 @@ namespace Intranet.WorkflowStudio.WebForms
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
         protected global::System.Web.UI.WebControls.DropDownList ddlDef;
+
+        /// <summary>
+        /// Control lnkEstadoTodos.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.LinkButton lnkEstadoTodos;
+
+        /// <summary>
+        /// Control lnkEstadoEnCurso.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.LinkButton lnkEstadoEnCurso;
+
+        /// <summary>
+        /// Control lnkEstadoError.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.LinkButton lnkEstadoError;
+
+        /// <summary>
+        /// Control lnkEstadoFinalizado.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.LinkButton lnkEstadoFinalizado;
 
         /// <summary>
         /// Control ddlEstado.
@@ -114,39 +141,57 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.GridView gvInst;
 
         /// <summary>
-        /// Control pnlDetalle.
+        /// Control pnlDatos.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlDetalle;
+        protected global::System.Web.UI.WebControls.Panel pnlDatos;
 
         /// <summary>
-        /// Control lblTituloDetalle.
+        /// Control litDatos.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlGenericControl lblTituloDetalle;
+        protected global::System.Web.UI.WebControls.Literal litDatos;
 
         /// <summary>
-        /// Control preDetalle.
+        /// Control pnlDatosEmpty.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlGenericControl preDetalle;
+        protected global::System.Web.UI.WebControls.Panel pnlDatosEmpty;
 
         /// <summary>
-        /// Control divLogList.
+        /// Control pnlLogs.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlGenericControl divLogList;
+        protected global::System.Web.UI.WebControls.Panel pnlLogs;
+
+        /// <summary>
+        /// Control litLogs.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Literal litLogs;
+
+        /// <summary>
+        /// Control pnlLogsEmpty.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlLogsEmpty;
     }
 }

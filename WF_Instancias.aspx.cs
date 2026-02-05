@@ -14,17 +14,13 @@ namespace Intranet.WorkflowStudio.WebForms
 {
     public partial class WF_Instancias : System.Web.UI.Page
     {
-        private string Cnn
-        {
-            get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }
-        }
-
         protected void Page_Load(object sender, EventArgs e)
         {
             if (!IsPostBack)
             {
                 chkMostrarFinalizados.Checked = false;
                 ddlEstado.SelectedValue = "";
+                MarcarEstadoPills();
                 txtBuscar.Text = "";
                 CargarDefiniciones();
 
@@ -59,41 +55,69 @@ namespace Intranet.WorkflowStudio.WebForms
                     lnkBackTareas.Visible = true;
                     lnkBackTareas.NavigateUrl = "WF_Gerente_Tareas.aspx";
                 }
-                else
-                {
-                    // Si querés, lo mostramos siempre:
-                    lnkBackTareas.Visible = true;
-                    lnkBackTareas.NavigateUrl = "WF_Gerente_Tareas.aspx";
-                }
-
             }
+        }
+
+        protected void lnkEstado_Click(object sender, EventArgs e)
+        {
+            var lb = sender as LinkButton;
+            if (lb == null) return;
+
+            ddlEstado.SelectedValue = Convert.ToString(lb.CommandArgument ?? "").Trim();
+            MarcarEstadoPills();
+            CargarInstancias();
+        }
+
+        private void MarcarEstadoPills()
+        {
+            string estado = Convert.ToString(ddlEstado.SelectedValue ?? "").Trim();
+
+            // base classes (mantener el look "pill")
+            lnkEstadoTodos.CssClass = "btn btn-outline-secondary";
+            lnkEstadoEnCurso.CssClass = "btn btn-outline-primary";
+            lnkEstadoError.CssClass = "btn btn-outline-danger";
+            lnkEstadoFinalizado.CssClass = "btn btn-outline-dark";
+
+            if (string.IsNullOrWhiteSpace(estado))
+                lnkEstadoTodos.CssClass += " active";
+            else if (estado.Equals("EnCurso", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoEnCurso.CssClass += " active";
+            else if (estado.Equals("Error", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoError.CssClass += " active";
+            else if (estado.Equals("Finalizado", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoFinalizado.CssClass += " active";
         }
 
         private void CargarDefiniciones()
         {
-            ddlDef.Items.Clear();
+            string defIdQS =
+                Request.QueryString["defId"]
+                ?? Request.QueryString["WF_DefinicionId"];
 
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(@"
-                SELECT Id,
-                       Codigo + ' - v' + CAST(Version AS NVARCHAR(10)) AS Nombre
-                FROM dbo.WF_Definicion
-                WHERE Activo = 1
-                ORDER BY Codigo, Version DESC", cn))
+            string sql = @"
+SELECT Id, Codigo, Nombre
+FROM WF_Definicion
+WHERE Activo = 1
+ORDER BY Codigo;";
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
             {
+                var dt = new DataTable();
                 cn.Open();
-                using (SqlDataReader dr = cmd.ExecuteReader())
+                dt.Load(cmd.ExecuteReader());
+
+                ddlDef.DataSource = dt;
+                ddlDef.DataTextField = "Codigo";
+                ddlDef.DataValueField = "Id";
+                ddlDef.DataBind();
+
+                // Si no vino defId por querystring, elegir el primero
+                if (ddlDef.Items.Count > 0 && string.IsNullOrEmpty(defIdQS))
                 {
-                    ddlDef.DataSource = dr;
-                    ddlDef.DataValueField = "Id";
-                    ddlDef.DataTextField = "Nombre";
-                    ddlDef.DataBind();
+                    ddlDef.SelectedIndex = 0;
                 }
             }
-
-            // Null-safety: si no hay definiciones activas
-            if (ddlDef.Items.Count == 0)
-                ddlDef.Items.Add(new ListItem("(sin definiciones activas)", ""));
         }
 
         private void CargarInstancias()
@@ -162,260 +186,20 @@ ORDER BY Id DESC;";
             }
         }
 
-
-
         protected void ddlDef_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            CargarInstancias();
-        }
-
-        protected void btnRefrescar_Click(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            CargarInstancias();
-        }
-
-        protected void gvInst_PageIndexChanging(object sender, GridViewPageEventArgs e)
-        {
-            gvInst.PageIndex = e.NewPageIndex;
-            CargarInstancias();
-        }
-
-        protected void gvInst_RowCommand(object sender, GridViewCommandEventArgs e)
-        {
-            long instId = Convert.ToInt64(e.CommandArgument);
-
-            if (e.CommandName == "VerDatos")
-            {
-                VerDatos(instId);               // método SIN async
-                return;
-            }
-
-            if (e.CommandName == "VerLog")
-            {
-                VerLog(instId);                 // método SIN async
-                return;
-            }
-
-            if (e.CommandName == "Reejecutar")
-            {
-                string usuario = (User?.Identity?.IsAuthenticated ?? false)
-                    ? User.Identity.Name
-                    : "wf.ui";
-
-                long? nuevaId = null;
-
-                // Ejecutar la operación async correctamente en WebForms
-                RegisterAsyncTask(new PageAsyncTask(async ct =>
-                {
-                    nuevaId = await Intranet.WorkflowStudio.Runtime.WorkflowRuntime
-                                 .ReejecutarInstanciaAsync(instId, usuario);
-                }));
-
-                ExecuteRegisteredAsyncTasks();
-
-                if (nuevaId.HasValue)
-                {
-                    lblTituloDetalle.InnerText = "Nueva instancia creada: " + nuevaId.Value;
-                    preDetalle.InnerText = "Se re-ejecutó la instancia " + instId +
-                                           " → nueva Id = " + nuevaId.Value;
-                    pnlDetalle.Visible = true;
-
-                    // Refrescar la grilla para ver el nuevo registro
-                    CargarInstancias();
-                }
-                else
-                {
-                    lblTituloDetalle.InnerText = "Re-ejecución";
-                    preDetalle.InnerText = "No se devolvió un Id de nueva instancia.";
-                    pnlDetalle.Visible = true;
-                }
-                return;
-            }
-        }
-
-        protected void gvInst_RowDataBound(object sender, GridViewRowEventArgs e)
-        {
-            if (e.Row.RowType != DataControlRowType.DataRow) return;
-
-            var lbl = e.Row.FindControl("lblErrorMsg") as Label;
-            if (lbl == null) return;
-
-            lbl.Text = "";
-
-            // Estado (para pintar)
-            var estadoObj = DataBinder.Eval(e.Row.DataItem, "Estado");
-            var estado = Convert.ToString(estadoObj ?? "");
-
-            // Intentar extraer mensaje de error desde DatosContexto (JSON)
-            var datosCtx = Convert.ToString(DataBinder.Eval(e.Row.DataItem, "DatosContexto") ?? "");
-
-            string msg = TryExtractErrorMessageFromDatosContexto(datosCtx);
-
-            if (!string.IsNullOrWhiteSpace(msg))
-                lbl.Text = msg;
-
-            // Opcional: resaltar según estado
-            if (estado.Equals("Error", StringComparison.OrdinalIgnoreCase))
-                lbl.CssClass = "text-danger small";
-            else
-                lbl.CssClass = "text-muted small";
-        }
-
-        private static string TryExtractErrorMessageFromDatosContexto(string datosContexto)
-        {
-            if (string.IsNullOrWhiteSpace(datosContexto)) return null;
-
-            try
-            {
-                var jo = Newtonsoft.Json.Linq.JObject.Parse(datosContexto);
-
-                // soporta varias formas (por si cambió el formato)
-                var msg =
-                    (string)jo.SelectToken("error.message") ??
-                    (string)jo.SelectToken("wf.error.message") ??
-                    (string)jo.SelectToken("mensajeError") ??
-                    (string)jo.SelectToken("error") ??
-                    null;
-
-                if (string.IsNullOrWhiteSpace(msg)) return null;
-
-                msg = msg.Trim();
-                if (msg.Length > 180) msg = msg.Substring(0, 180) + "...";
-                return msg;
-            }
-            catch
-            {
-                // Si no es JSON, no mostramos nada
-                return null;
-            }
-        }
-
-
-
-
-        private void VerDatos(long instId)
-        {
-            string sql = "SELECT DatosEntrada, DatosContexto FROM dbo.WF_Instancia WHERE Id = @Id";
-            StringBuilder sb = new StringBuilder();
-
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(sql, cn))
-            {
-                cmd.Parameters.AddWithValue("@Id", instId);
-                cn.Open();
-                using (SqlDataReader dr = cmd.ExecuteReader())
-                {
-                    if (dr.Read())
-                    {
-                        sb.AppendLine("Datos de entrada:");
-                        sb.AppendLine(Convert.ToString(dr["DatosEntrada"]));
-                        sb.AppendLine();
-                        sb.AppendLine("Contexto / payload:");
-                        sb.AppendLine(Convert.ToString(dr["DatosContexto"]));
-                    }
-                    else
-                    {
-                        sb.AppendLine("No se encontraron datos.");
-                    }
-                }
-            }
-
-            lblTituloDetalle.InnerText = "Instancia " + instId + " – Datos";
-            preDetalle.InnerText = sb.ToString();
-            pnlDetalle.Visible = true;
-        }
-
-        private void VerLog(long instId)
-        {
-            string sql = @"
-        SELECT FechaLog, Nivel, Mensaje, NodoId, NodoTipo
-        FROM dbo.WF_InstanciaLog
-        WHERE WF_InstanciaId = @Id
-        ORDER BY FechaLog";
-
-            var html = new StringBuilder();
-
-            using (SqlConnection cn = new SqlConnection(Cnn))
-            using (SqlCommand cmd = new SqlCommand(sql, cn))
-            {
-                cmd.Parameters.AddWithValue("@Id", instId);
-                cn.Open();
-
-                using (SqlDataReader dr = cmd.ExecuteReader())
-                {
-                    if (!dr.HasRows)
-                    {
-                        html.Append("<div class='list-group-item'>Sin logs para esta instancia.</div>");
-                    }
-                    else
-                    {
-                        while (dr.Read())
-                        {
-                            DateTime fecha = dr.GetDateTime(0);
-                            string nivelDb = dr["Nivel"]?.ToString() ?? "Info";
-                            string mensaje = dr["Mensaje"]?.ToString() ?? "";
-
-                            string nodoId = (dr["NodoId"] == DBNull.Value) ? "" : dr["NodoId"].ToString();
-                            string nodoTipo = (dr["NodoTipo"] == DBNull.Value) ? "" : dr["NodoTipo"].ToString();
-
-                            // Detectar "técnico" (oculto por defecto)
-                            bool isTech = EsTecnico(mensaje);
-
-                            // Nivel “derivado” (si DB viene Info pero el mensaje marca Error)
-                            string nivel = DerivarNivel(nivelDb, mensaje);
-
-                            string badgeLevel = CssBadgeNivel(nivel);
-                            string nodoBadge = (!string.IsNullOrWhiteSpace(nodoId) || !string.IsNullOrWhiteSpace(nodoTipo))
-                                ? $"<span class='badge text-bg-light ms-2'>{HttpUtility.HtmlEncode(nodoId)} / {HttpUtility.HtmlEncode(nodoTipo)}</span>"
-                                : "";
-
-                            string msgHtml = HttpUtility.HtmlEncode(mensaje);
-                            // preservar saltos de línea si existieran
-                            msgHtml = msgHtml.Replace("\r\n", "\n").Replace("\n", "<br/>");
-                            msgHtml = LinkificarTareaId(msgHtml);
-
-                            string dataText = HttpUtility.HtmlAttributeEncode($"{fecha:dd/MM/yyyy HH:mm:ss} {nivel} {nodoId} {nodoTipo} {mensaje}");
-
-                            html.Append("<div class='list-group-item wf-log-item'");
-                            html.Append($" data-level='{HttpUtility.HtmlAttributeEncode(nivel)}'");
-                            html.Append($" data-tech='{(isTech ? "1" : "0")}'");
-                            html.Append($" data-text='{dataText}'>");
-
-                            html.Append("<div class='d-flex justify-content-between align-items-start'>");
-                            html.Append("<div>");
-                            html.Append($"<span class='badge {badgeLevel}'>{HttpUtility.HtmlEncode(nivel)}</span>");
-                            html.Append(nodoBadge);
-                            html.Append("</div>");
-                            html.Append($"<small class='text-muted'>{fecha:dd/MM/yyyy HH:mm:ss}</small>");
-                            html.Append("</div>");
-
-                            html.Append($"<div class='mt-1'>{msgHtml}</div>");
-
-                            html.Append("</div>");
-                        }
-                    }
-                }
-            }
-
-            lblTituloDetalle.InnerText = "Instancia " + instId + " – Log";
-
-            // IMPORTANTE: divLogList es runat="server"
-            divLogList.InnerHtml = html.ToString();
-
-            pnlDetalle.Visible = true;
-            ScriptManager.RegisterStartupScript(this, this.GetType(),
-    "wf_applyLogFilters", "setTimeout(function(){ if(window.applyLogFilters) window.applyLogFilters(); }, 0);", true);
-
-        }
-
-        protected void chkMostrarFinalizados_CheckedChanged(object sender, EventArgs e)
         {
             gvInst.PageIndex = 0;
             CargarInstancias();
         }
 
         protected void ddlEstado_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            MarcarEstadoPills();
+            CargarInstancias();
+        }
+
+        protected void chkMostrarFinalizados_CheckedChanged(object sender, EventArgs e)
         {
             gvInst.PageIndex = 0;
             CargarInstancias();
@@ -427,134 +211,156 @@ ORDER BY Id DESC;";
             CargarInstancias();
         }
 
-
-        private static bool EsTecnico(string mensaje)
+        protected void btnRefrescar_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(mensaje)) return false;
-
-            // Todo esto lo ocultamos por defecto (debug/ruido)
-            if (mensaje.IndexOf("[Logger DEBUG]", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            if (mensaje.IndexOf("raw=", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            if (mensaje.IndexOf("expanded=", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-
-            // Podés agregar más reglas si querés (por ahora minimal)
-            return false;
+            gvInst.PageIndex = 0;
+            CargarInstancias();
         }
 
-        private static string DerivarNivel(string nivelDb, string mensaje)
-        {
-            var n = (nivelDb ?? "Info").Trim();
-
-            // Si el mensaje sugiere error, lo subimos a Error (solo para UI)
-            if (!string.IsNullOrEmpty(mensaje))
-            {
-                if (mensaje.IndexOf("[Error]", StringComparison.OrdinalIgnoreCase) >= 0) return "Error";
-                if (mensaje.IndexOf(" ERROR", StringComparison.OrdinalIgnoreCase) >= 0) return "Error";
-                if (mensaje.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase)) return "Error";
-                if (mensaje.IndexOf("[Warning]", StringComparison.OrdinalIgnoreCase) >= 0) return "Warning";
-            }
-
-            return string.IsNullOrWhiteSpace(n) ? "Info" : n;
-        }
-
-        private static string CssBadgeNivel(string nivel)
-        {
-            // Bootstrap 5: text-bg-*
-            switch ((nivel ?? "").Trim().ToLowerInvariant())
-            {
-                case "error": return "text-bg-danger";
-                case "warning": return "text-bg-warning";
-                case "debug": return "text-bg-secondary";
-                default: return "text-bg-primary"; // Info
-            }
-        }
-
-        private static string LinkificarTareaId(string msgHtml)
-        {
-            // msgHtml ya viene HTML-encoded + <br/>, así que buscamos el patrón en texto encodeado igual.
-            // Como "tareaId=20076" no tiene chars especiales, lo podemos reemplazar directo.
-            // Si querés regex, también se puede.
-            int idx = msgHtml.IndexOf("tareaId=", StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) return msgHtml;
-
-            // Reemplazo simple con regex para capturar el número
-            return System.Text.RegularExpressions.Regex.Replace(
-                msgHtml,
-                @"tareaId=(\d+)",
-                m =>
-                {
-                    var id = m.Groups[1].Value;
-                    var url = "WF_Tareas.aspx?tareaId=" + id + "&returnTo=instancias";
-                    return "tareaId=<a href='" + url + "'><b>" + id + "</b></a>";
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
-            );
-        }
-
-
-        // =========================
-        // NUEVO: crear instancia + ejecutar workflow (async/await directo)
-        // =========================
         protected async void btnCrearInst_Click(object sender, EventArgs e)
         {
-            // 1) sacar la definición seleccionada
             int defId = 0;
-            if (ddlDef.Items.Count > 0 && !string.IsNullOrEmpty(ddlDef.SelectedValue))
-                int.TryParse(ddlDef.SelectedValue, out defId);
+            int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
 
-            // si no hay selección, intento tomar la primera
-            if (defId == 0 && ddlDef.Items.Count > 0)
-                int.TryParse(ddlDef.Items[0].Value, out defId);
+            string usuario =
+                (User != null && User.Identity != null && User.Identity.IsAuthenticated)
+                    ? User.Identity.Name
+                    : (Environment.UserName ?? "web");
 
-            if (defId == 0)
-            {
-                // no hay definiciones activas
-                lblTituloDetalle.InnerText = "Crear instancia";
-                preDetalle.InnerText = "No hay definiciones activas para crear una instancia.";
-                pnlDetalle.Visible = true;
-                return;
-            }
-
-            // 2) Datos de entrada de prueba
-            string datosEntradaJson = "{ \"demo\": true }";
-
-            // 3) Usuario actual
-            string usuario = (User?.Identity?.IsAuthenticated ?? false)
-                ? User.Identity.Name
-                : "wf.instancias";
-
-            long nuevaInstId;
+            string datosEntradaJson = null;
 
             try
             {
-                // CREA la instancia en WF_Instancia + ejecuta el workflow
-                nuevaInstId = await WorkflowRuntime.CrearInstanciaYEjecutarAsync(
+                long instId = await WorkflowRuntime.CrearInstanciaYEjecutarAsync(
                     defId,
                     datosEntradaJson,
                     usuario
                 );
+
+                txtBuscar.Text = instId.ToString();
+                ddlEstado.SelectedValue = "";
+                MarcarEstadoPills();
+                chkMostrarFinalizados.Checked = true;
+                CargarInstancias();
             }
             catch (Exception ex)
             {
-                // si hay cualquier error del motor, lo vemos acá
-                lblTituloDetalle.InnerText = "Error al crear instancia";
-                preDetalle.InnerText = ex.ToString();
-                pnlDetalle.Visible = true;
-                return;
+                pnlDatos.Visible = true;
+                pnlDatosEmpty.Visible = false;
+                litDatos.Text = Server.HtmlEncode("Error al crear/ejecutar instancia:\r\n" + ex.Message);
             }
+        }
 
-            // 4) Mostrar resultado y refrescar grilla
-            lblTituloDetalle.InnerText = "Crear instancia + ejecutar";
-            preDetalle.InnerText =
-                "Instancia creada y ejecutada.\r\n" +
-                "WF_DefinicionId = " + defId + "\r\n" +
-                "WF_InstanciaId  = " + nuevaInstId;
-
-            pnlDetalle.Visible = true;
-
+        protected void gvInst_PageIndexChanging(object sender, GridViewPageEventArgs e)
+        {
+            gvInst.PageIndex = e.NewPageIndex;
             CargarInstancias();
         }
 
+        protected void gvInst_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            int instId;
+            if (!int.TryParse(Convert.ToString(e.CommandArgument), out instId))
+                return;
 
+            if (e.CommandName == "Datos")
+            {
+                MostrarDatos(instId);
+            }
+            else if (e.CommandName == "Logs")
+            {
+                MostrarLogs(instId);
+            }
+            else if (e.CommandName == "Reejecutar")
+            {
+                Reejecutar(instId);
+            }
+        }
+
+        private void MostrarDatos(int instId)
+        {
+            string sql = "SELECT DatosContexto FROM WF_Instancia WHERE Id=@Id;";
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
+                cn.Open();
+                var val = cmd.ExecuteScalar();
+                string json = val == DBNull.Value || val == null ? "" : Convert.ToString(val);
+
+                pnlDatos.Visible = true;
+                pnlDatosEmpty.Visible = false;
+
+                litDatos.Text = Server.HtmlEncode(PrettyJson(json));
+            }
+        }
+
+        private void MostrarLogs(int instId)
+        {
+            string sql = @"
+SELECT TOP (500)
+    Fechalog,
+    Nivel,
+    Mensaje
+FROM WF_InstanciaLog
+WHERE WF_InstanciaId=@Id
+ORDER BY Id ASC;";
+
+            var sb = new StringBuilder();
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        sb.AppendFormat("{0:dd/MM/yyyy HH:mm:ss} [{1}] {2}\r\n",
+                            rd["Fechalog"], rd["Nivel"], rd["Mensaje"]);
+                    }
+                }
+            }
+
+            pnlLogs.Visible = true;
+            pnlLogsEmpty.Visible = false;
+            litLogs.Text = Server.HtmlEncode(sb.ToString());
+        }
+
+        private async void Reejecutar(int instId)
+        {
+            string usuario =
+                (User != null && User.Identity != null && User.Identity.IsAuthenticated)
+                    ? User.Identity.Name
+                    : (Environment.UserName ?? "web");
+
+            try
+            {
+                await WorkflowRuntime.ReejecutarInstanciaAsync(instId, usuario);
+
+                // refrescar
+                CargarInstancias();
+                MostrarLogs(instId);
+            }
+            catch (Exception ex)
+            {
+                pnlLogs.Visible = true;
+                pnlLogsEmpty.Visible = false;
+                litLogs.Text = Server.HtmlEncode("Error al reejecutar:\r\n" + ex.Message);
+            }
+        }
+
+        private string PrettyJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return "";
+            try
+            {
+                return JToken.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented);
+            }
+            catch
+            {
+                return json;
+            }
+        }
     }
 }
