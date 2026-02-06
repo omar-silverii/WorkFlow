@@ -225,14 +225,14 @@
 
                     <!-- Footer mini -->
                     <div class="mt-4 ws-muted" style="font-size:12px;">
-                        Workflow Studio • UI WebForms + SQL • Diseño minimal y profesional
+                        Workflow Studio • UI WebForms + SQL • Diseño y creación por EDI-SA&reg;
                     </div>
                 </div>
             </div>
 
                 <!-- Footer mini -->
                 <div class="mt-4 ws-muted" style="font-size:12px;">
-                    Workflow Studio • UI WebForms + SQL • Diseño minimal y profesional
+                    Workflow Studio • UI WebForms + SQL • Diseño y creación por EDI-SA&reg;
                 </div>
           
 

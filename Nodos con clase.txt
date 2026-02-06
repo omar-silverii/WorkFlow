@@ -1,0 +1,64 @@
+HChatNotify.cs						"chat.notify"					
+HControlDelay.cs						"control.delay"
+HControlRetry.cs					"control.retry"
+HDocEntrada.cs						"doc.entrada"
+HDocExtract.cs						"doc.extract"
+HDocTipoResolve.cs					"util.docTipo.resolve"
+HEmailSend.cs							"email.send"
+HEnd.cs							"util.end"
+HError.cs							"util.error"
+HFileRead.cs						"file.read"
+HFileWrite.cs						"file.write"
+HFtpPut.cs						"ftp.put"
+HHttpRequest.cs						"http.request"
+HHumanTask.cs						"human.task"
+HIf.cs							"control.if"
+HLogger.cs						"util.logger"
+HNotify.cs
+HParallel.cs						"control.parallel"	?				
+HQueueConsume.cs					"queue.consume.legacy"
+HQueuePublish.cs						"queue.publish"
+HQueuePublishSql.cs / HQueueConsumeSql				"queue.publish" /"queue.consume"
+HStart.cs						"util.start"
+HSubFlow.cs						"util.subflow"
+HUtilError.cs							"util.error"
+HUtilNotify.cs						"util.notify"
+ManejadorDelay.cs						"control.delay"
+ManejadorEmailSend.cs						"email.send"
+ManejadorLoop.cs					"control.loop"	?
+ManejadorSwitch.cs					"control.switch"
+TemplateUtil.cs
+
+"control.join"
+"control.ratelimit"
+"data.sql"
+"data.redis.get"
+"data.redis.set"
+"cloud.storage"
+"ftp.get"
+"doc.load"
+"transform.map"
+"code.function"
+"code.script"
+"state.vars"
+"config.secrets"
+"ai.call"
+"trigger.webhook"
+"trigger.cron"
+"trigger.queue"
+
+
+HControlDelay.cs
+ManejadorDelay.cs	"control.delay"
+
+HEmailSend.cs
+ManejadorEmailSend.cs	"email.send"
+	
+HError.cs
+HUtilError.cs		"util.error"	
+
+HQueuePublish.cs
+HQueuePublishSql.cs	"queue.publish"
+
+HQueueConsume.cs	"queue.consume.legacy"  No hay nodo
+HQueueConsumeSql	"queue.consume"         Si hay nodo
