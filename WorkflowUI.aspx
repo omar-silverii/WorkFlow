@@ -157,6 +157,9 @@
     <script src="Scripts/inspectors/inspector.if.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.delay.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.retry.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.control.ratelimit.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.control.parallel.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.control.join.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.subflow.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.logger.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.human.task.js?v=dev200"></script>
@@ -168,9 +171,13 @@
     <script src="Scripts/inspectors/inspector.doc.load.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.docTipo.resolve.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.error.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.ftp.get.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.ftp.put.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.email.send.js?v=dev200"></script>
-
+    <script src="Scripts/Inspectors/inspector.state.vars.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.transform.map.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.config.secrets.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.ai.call.js?v=dev200"></script>
     <!-- (Opcional) Demos -->
     <script src="Scripts/workflow.demo.js"></script>
 

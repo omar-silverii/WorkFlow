@@ -248,6 +248,18 @@ namespace Intranet.WorkflowStudio.WebForms
             Validar(wf);
 
             var ctx = new ContextoEjecucion(log);
+            // ✅ para que handlers como control.parallel puedan ejecutar ramas con el mismo motor/contexto
+            //ctx.Estado["wf.def"] = wf;
+            //ctx.Estado["wf.motor"] = this;
+
+            var items = System.Web.HttpContext.Current?.Items ?? Intranet.WorkflowStudio.Runtime.WorkflowAmbient.Items.Value;
+            if (items != null)
+            {
+                items["wf.def"] = wf;        // ✅ misma clave, pero en Items (no se persiste)
+                items["wf.motor"] = this;    // ✅ misma clave, pero en Items (no se persiste)
+
+                Intranet.WorkflowStudio.Runtime.WorkflowAmbient.Items.Value = items;
+            }
 
             // ===================== start override (resume) =====================
             string actual = null;
@@ -498,6 +510,183 @@ namespace Intranet.WorkflowStudio.WebForms
             _estadoPublisher?.Publish(ctx.Estado, null, null);
         }
 
+        public async Task EjecutarDesdeNodoAsync(
+    WorkflowDef wf,
+    ContextoEjecucion ctx,
+    string startNodeId,
+    string stopNodeId,
+    CancellationToken ct = default(CancellationToken))
+        {
+            if (wf == null) throw new ArgumentNullException(nameof(wf));
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            if (string.IsNullOrWhiteSpace(startNodeId)) return;
+
+            string actual = startNodeId;
+            int guard = 0;
+
+            while (!string.IsNullOrEmpty(actual) && guard++ < 2000)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // STOP: no ejecutar el stop node (join)
+                if (!string.IsNullOrWhiteSpace(stopNodeId) &&
+                    string.Equals(actual, stopNodeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (!wf.Nodes.TryGetValue(actual, out var nodo))
+                    throw new InvalidOperationException("Nodo no encontrado: " + actual);
+
+                if (!_handlers.TryGetValue(nodo.Type, out var manejador))
+                    throw new InvalidOperationException("No hay handler para: " + nodo.Type);
+
+                ResultadoEjecucion res = null;
+
+                // ====== COPIA control.retry (misma lógica que el motor principal) ======
+                if (string.Equals(nodo.Type, "control.retry", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
+                        await manejador.EjecutarAsync(ctx, nodo, ct);
+                    }
+                    catch (Exception exRetry)
+                    {
+                        ctx.Log($"[Retry] ERROR en control.retry: {exRetry.Message}");
+                    }
+
+                    var salRetry = (wf.Edges ?? new List<EdgeDef>())
+                        .Where(e => string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (salRetry.Count == 0)
+                        throw new InvalidOperationException("control.retry sin aristas salientes: " + nodo.Id);
+
+                    var edgeToTry =
+                        salRetry.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                        salRetry.FirstOrDefault();
+
+                    if (edgeToTry == null || string.IsNullOrWhiteSpace(edgeToTry.To))
+                        throw new InvalidOperationException("control.retry sin destino válido: " + nodo.Id);
+
+                    if (!wf.Nodes.TryGetValue(edgeToTry.To, out var nodoTarget))
+                        throw new InvalidOperationException("Nodo destino de retry no encontrado: " + edgeToTry.To);
+
+                    if (!_handlers.TryGetValue(nodoTarget.Type, out var handlerTarget))
+                        throw new InvalidOperationException("No hay handler para nodo destino de retry: " + nodoTarget.Type);
+
+                    int reintentos = GetIntParam(nodo, "reintentos", 3);
+                    int backoffMs = GetIntParam(nodo, "backoffMs", 500);
+                    if (reintentos < 0) reintentos = 0;
+                    if (reintentos > 50) reintentos = 50;
+                    if (backoffMs < 0) backoffMs = 0;
+                    if (backoffMs > 600000) backoffMs = 600000;
+
+                    int maxIntentos = reintentos + 1;
+
+                    ResultadoEjecucion resTarget = null;
+                    Exception ultimaEx = null;
+
+                    for (int intento = 1; intento <= maxIntentos; intento++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        try
+                        {
+                            _estadoPublisher?.Publish(ctx.Estado, nodoTarget.Id, nodoTarget.Type);
+                            ctx.Log($"[Retry] intento {intento}/{maxIntentos} -> {nodoTarget.Id} ({nodoTarget.Type})");
+                            resTarget = await handlerTarget.EjecutarAsync(ctx, nodoTarget, ct);
+                            ultimaEx = null;
+                        }
+                        catch (Exception ex)
+                        {
+                            ultimaEx = ex;
+                            ctx.Log($"[Retry] excepción en intento {intento}/{maxIntentos}: {ex.Message}");
+                            resTarget = new ResultadoEjecucion { Etiqueta = "error" };
+                        }
+
+                        _estadoPublisher?.Publish(ctx.Estado, nodoTarget.Id, nodoTarget.Type);
+
+                        var et = (resTarget != null && !string.IsNullOrEmpty(resTarget.Etiqueta)) ? resTarget.Etiqueta : "always";
+                        bool esError = string.Equals(et, "error", StringComparison.OrdinalIgnoreCase);
+
+                        if (!esError) break;
+
+                        if (intento < maxIntentos && backoffMs > 0)
+                        {
+                            ctx.Log($"[Retry] backoff {backoffMs}ms (sigue retry)");
+                            await Task.Delay(backoffMs, ct);
+                        }
+                    }
+
+                    if (ultimaEx != null)
+                        ctx.Log($"[Retry] agotados intentos. última excepción: {ultimaEx.Message}");
+
+                    var etiquetaTarget = (resTarget != null && !string.IsNullOrEmpty(resTarget.Etiqueta))
+                        ? resTarget.Etiqueta
+                        : "always";
+
+                    var salTarget = (wf.Edges ?? new List<EdgeDef>())
+                        .Where(e => string.Equals(e.From, nodoTarget.Id, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (salTarget.Count == 0)
+                        return;
+
+                    var nextAfterTarget =
+                        salTarget.FirstOrDefault(e => string.Equals(e.Condition, etiquetaTarget, StringComparison.OrdinalIgnoreCase)) ??
+                        salTarget.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                        salTarget[0];
+
+                    actual = nextAfterTarget.To;
+
+                    if (ctx.Estado != null &&
+                        ctx.Estado.TryGetValue("wf.detener", out var detValRetry) &&
+                        ContextoEjecucion.ToBool(detValRetry))
+                    {
+                        ctx.Log($"[Motor] ejecución detenida (desde retry) en nodo {nodoTarget.Id} ({nodoTarget.Type})");
+                        return;
+                    }
+
+                    continue;
+                }
+                // =====================================================================
+
+                _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
+                res = await manejador.EjecutarAsync(ctx, nodo, ct);
+                _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
+
+                if (ctx.Estado != null &&
+                    ctx.Estado.TryGetValue("wf.detener", out var detVal) &&
+                    ContextoEjecucion.ToBool(detVal))
+                {
+                    ctx.Log($"[Motor] ejecución detenida en nodo {nodo.Id} ({nodo.Type})");
+                    return;
+                }
+
+                var etiqueta = (res != null && !string.IsNullOrEmpty(res.Etiqueta)) ? res.Etiqueta : "always";
+
+                var salientes = (wf.Edges ?? new List<EdgeDef>())
+                    .Where(e => string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (salientes.Count == 0) return;
+
+                var siguiente =
+                    salientes.FirstOrDefault(e => string.Equals(e.Condition, etiqueta, StringComparison.OrdinalIgnoreCase)) ??
+                    salientes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
+                    salientes[0];
+
+                actual = siguiente.To;
+
+                if (string.Equals(nodo.Type, "util.end", StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+        }
+
+
+
         private static int GetIntParam(NodeDef nodo, string key, int def)
         {
             try
@@ -524,6 +713,9 @@ namespace Intranet.WorkflowStudio.WebForms
             }
             catch { return def; }
         }
+
+       
+
 
     }
 

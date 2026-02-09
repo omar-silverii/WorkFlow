@@ -349,8 +349,14 @@
     <Content Include="Content\bootstrap-grid.rtl.css.map" />
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
+    <Content Include="Scripts\Inspectors\inspector.ai.call.js" />
+    <Content Include="Scripts\Inspectors\inspector.config.secrets.js" />
     <Content Include="Scripts\Inspectors\inspector.control.delay.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.join.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.parallel.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.ratelimit.js" />
     <Content Include="Scripts\Inspectors\inspector.control.retry.js" />
+    <Content Include="Scripts\Inspectors\inspector.ftp.get.js" />
     <Content Include="Scripts\Inspectors\inspector.logger.js" />
     <Content Include="Scripts\Inspectors\inspector.chat.notify.js" />
     <Content Include="Scripts\Inspectors\inspector.core.js" />
@@ -367,6 +373,8 @@
     <Content Include="Scripts\Inspectors\inspector.human.task.js" />
     <Content Include="Scripts\Inspectors\inspector.if.js" />
     <Content Include="Scripts\Inspectors\inspector.queue.publish.js" />
+    <Content Include="Scripts\Inspectors\inspector.state.vars.js" />
+    <Content Include="Scripts\Inspectors\inspector.transform.map.js" />
     <Content Include="Scripts\Inspectors\inspector.util.docTipo.resolve.js" />
     <Content Include="Scripts\Inspectors\inspector.util.error.js" />
     <Content Include="Scripts\Inspectors\inspector.util.notify.js" />
@@ -397,6 +405,7 @@
     <Content Include="Api\ChatWebhookMock.ashx" />
     <Content Include="Api\WfDefiniciones.ashx" />
     <Content Include="Api\RetryTest.ashx" />
+    <Content Include="Api\AiMock.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -435,6 +444,9 @@
     <Content Include="Site.Mobile.Master" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Api\AiMock.ashx.cs">
+      <DependentUpon>AiMock.ashx</DependentUpon>
+    </Compile>
     <Compile Include="Api\ChatWebhookMock.ashx.cs">
       <DependentUpon>ChatWebhookMock.ashx</DependentUpon>
     </Compile>
@@ -459,8 +471,11 @@
     <Compile Include="Api\WfDefiniciones.ashx.cs">
       <DependentUpon>WfDefiniciones.ashx</DependentUpon>
     </Compile>
+    <Compile Include="App_Code\Handlers\HAiCall.cs" />
     <Compile Include="App_Code\Handlers\HChatNotify.cs" />
+    <Compile Include="App_Code\Handlers\HConfigSecrets.cs" />
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
+    <Compile Include="App_Code\Handlers\HControlRateLimit.cs" />
     <Compile Include="App_Code\Handlers\HControlRetry.cs" />
     <Compile Include="App_Code\Handlers\HDocEntrada.cs" />
     <Compile Include="App_Code\Handlers\HDocExtract.cs" />
@@ -470,6 +485,7 @@
     <Compile Include="App_Code\Handlers\HError.cs" />
     <Compile Include="App_Code\Handlers\HFileRead.cs" />
     <Compile Include="App_Code\Handlers\HFileWrite.cs" />
+    <Compile Include="App_Code\Handlers\HFtpGet.cs" />
     <Compile Include="App_Code\Handlers\HFtpPut.cs" />
     <Compile Include="App_Code\Handlers\HHttpRequest.cs" />
     <Compile Include="App_Code\Handlers\HHumanTask.cs" />
@@ -481,7 +497,9 @@
     <Compile Include="App_Code\Handlers\HQueueConsume.cs" />
     <Compile Include="App_Code\Handlers\HQueuePublishSql.cs" />
     <Compile Include="App_Code\Handlers\HStart.cs" />
+    <Compile Include="App_Code\Handlers\HStateVars.cs" />
     <Compile Include="App_Code\Handlers\HSubFlow.cs" />
+    <Compile Include="App_Code\Handlers\HTransformMap.cs" />
     <Compile Include="App_Code\Handlers\HUtilError.cs" />
     <Compile Include="App_Code\Handlers\HUtilNotify.cs" />
     <Compile Include="App_Code\Handlers\ManejadorSwitch.cs" />

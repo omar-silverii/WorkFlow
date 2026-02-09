@@ -29,23 +29,17 @@ ManejadorLoop.cs					"control.loop"	?
 ManejadorSwitch.cs					"control.switch"
 TemplateUtil.cs
 
-"control.join"
-"control.ratelimit"
-"data.sql"
+
 "data.redis.get"
 "data.redis.set"
 "cloud.storage"
-"ftp.get"
+
 "doc.load"
 "transform.map"
 "code.function"
 "code.script"
-"state.vars"
-"config.secrets"
-"ai.call"
-"trigger.webhook"
-"trigger.cron"
-"trigger.queue"
+
+
 
 
 HControlDelay.cs

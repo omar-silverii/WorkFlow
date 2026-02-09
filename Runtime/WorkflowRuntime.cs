@@ -219,7 +219,11 @@ WHERE Id = @Id;", cn))
                 new HFileWrite(),
                 new HDocExtract(),
                 new HControlDelay(),
+                new HFtpGet(),
                 new HFtpPut(),
+                new HStateVars(),
+                new HTransformMap(),
+                new HConfigSecrets(),
                 new HEmailSend(),
                 new HQueuePublishSql(),
                 new HQueueConsumeSql(),
@@ -227,7 +231,9 @@ WHERE Id = @Id;", cn))
                 new HDocTipoResolve(),
                 new HChatNotify(),
                 new HControlRetry(),
-                new HSubflow()
+                new HControlRateLimit(),
+                new HSubflow(),
+                new HAiCall()
             };
 
             await WorkflowRunner.EjecutarAsync(
@@ -318,7 +324,11 @@ WHERE Id = @Id;", cn))
                 new HFileWrite(),
                 new HDocExtract(),
                 new HControlDelay(),
+                new HFtpGet(),
                 new HFtpPut(),
+                new HStateVars(),
+                new HTransformMap(),
+                new HConfigSecrets(),
                 new HEmailSend(),
                 new HChatNotify(),
                 new HQueuePublishSql(),
@@ -326,7 +336,9 @@ WHERE Id = @Id;", cn))
                 new HDocLoad(),
                 new HDocTipoResolve(),
                 new HControlRetry(),
-                new HSubflow()
+                new HControlRateLimit(),
+                new HSubflow(),
+                new HAiCall()
             };
 
             await WorkflowRunner.EjecutarAsync(
@@ -692,7 +704,11 @@ WHERE Id = @Id;", cn))
                 new HFileWrite(),
                 new HDocExtract(),
                 new HControlDelay(),
+                new HFtpGet(),
                 new HFtpPut(),
+                new HStateVars(),
+                new HTransformMap(),
+                new HConfigSecrets(),
                 new HEmailSend(),
                 new HChatNotify(),
                 new HQueuePublishSql(),
@@ -700,7 +716,11 @@ WHERE Id = @Id;", cn))
                 new HDocLoad(),
                 new HDocTipoResolve(),
                 new HControlRetry(),
-                new HSubflow()
+                new HControlRateLimit(),
+                new HSubflow(),
+                new HAiCall()
+
+
             };
 
             await WorkflowRunner.EjecutarAsync(
@@ -711,6 +731,42 @@ WHERE Id = @Id;", cn))
             );
 
             PersistirFinal(info.InstanciaId, logs);
+        }
+
+        private static Dictionary<string, object> CargarSeedDesdeDatosContexto(long instId)
+        {
+            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                var json = CargarDatosContextoInstancia(instId);
+                if (string.IsNullOrWhiteSpace(json)) return seed;
+
+                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(json);
+                if (root == null) return seed;
+
+                var estadoTok = root["estado"];
+                if (estadoTok == null) return seed;
+
+                var dict = estadoTok.ToObject<Dictionary<string, object>>();
+                if (dict == null) return seed;
+
+                foreach (var kv in dict)
+                {
+                    var k = kv.Key ?? "";
+                    if (k.StartsWith("__", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(k, "wf.def", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(k, "wf.motor", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    seed[kv.Key] = kv.Value;
+                }
+
+                return seed;
+            }
+            catch
+            {
+                return seed;
+            }
         }
 
         private static void MarcarTareaCompletada(long tareaId, string resultado, string usuario, string datosJson)
@@ -782,33 +838,37 @@ WHERE Id = @Id;", cn))
             return JsonConvert.SerializeObject(payload, Formatting.None);
         }
 
-        private static Dictionary<string, object> CargarSeedDesdeDatosContexto(long instId)
+       
+
+
+
+        private static IDictionary<string, object> FiltrarEstadoParaPersistencia(IDictionary<string, object> estado)
         {
-            var seed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var r = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (estado == null) return r;
 
-            try
+            foreach (var kv in estado)
             {
-                var json = CargarDatosContextoInstancia(instId);
-                if (string.IsNullOrWhiteSpace(json)) return seed;
+                var k = kv.Key ?? "";
 
-                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(json);
-                if (root == null) return seed;
+                // A) Claves internas: nunca persistir/mostrar
+                if (k.StartsWith("__", StringComparison.OrdinalIgnoreCase))
+                    continue;
 
-                var estadoTok = root["estado"];
-                if (estadoTok == null) return seed;
+                // B) Legado por si quedó
+                if (string.Equals(k, "wf.def", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(k, "wf.motor", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var dict = estadoTok.ToObject<Dictionary<string, object>>();
-                if (dict == null) return seed;
+                // C) Blindaje por tipo (infraestructura): nunca persistir
+                if (kv.Value is WorkflowDef) continue;
+                if (kv.Value is MotorFlujo) continue;
 
-                foreach (var kv in dict)
-                    seed[kv.Key] = kv.Value;
-
-                return seed;
+                r[k] = kv.Value;
             }
-            catch
-            {
-                return seed;
-            }
+
+            return r;
         }
+
+
     }
 }

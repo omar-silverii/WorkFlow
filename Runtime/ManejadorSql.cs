@@ -1,4 +1,5 @@
 ﻿using Intranet.WorkflowStudio.WebForms;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -19,6 +20,9 @@ namespace Intranet.WorkflowStudio.Runtime
             NodeDef nodo,
             CancellationToken ct)
         {
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            if (nodo == null) throw new ArgumentNullException(nameof(nodo));
+
             // 1) tomar parámetros
             var p = nodo.Parameters ?? new Dictionary<string, object>();
 
@@ -45,11 +49,31 @@ namespace Intranet.WorkflowStudio.Runtime
                 return new ResultadoEjecucion { Etiqueta = "error" };
             }
 
-            // 3) parámetros opcionales
+            // ✅ FIX PROFESIONAL:
+            // Expandir templates también en el SQL (permite usar transform.map: ${payload.sql.query})
+            // Si no hay ${...}, queda igual.
+            sql = ctx.ExpandString(sql);
+
+            // 3) parámetros opcionales:
+            // Soportar "parameters" (histórico) y "params" (más natural para el JSON)
             Dictionary<string, object> sqlParams = null;
-            if (p.ContainsKey("parameters") && p["parameters"] is Newtonsoft.Json.Linq.JObject jobj)
+
+            object pParamsObj = null;
+            if (p.ContainsKey("parameters")) pParamsObj = p["parameters"];
+            else if (p.ContainsKey("params")) pParamsObj = p["params"];
+
+            if (pParamsObj is JObject jobj)
             {
                 sqlParams = jobj.ToObject<Dictionary<string, object>>();
+            }
+            else if (pParamsObj is Dictionary<string, object> dict)
+            {
+                sqlParams = dict;
+            }
+            else if (pParamsObj is IDictionary<string, object> idict)
+            {
+                sqlParams = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in idict) sqlParams[kv.Key] = kv.Value;
             }
 
             // 4) resolver cadena de conexión
@@ -75,13 +99,9 @@ namespace Intranet.WorkflowStudio.Runtime
                         {
                             object val = kv.Value;
 
-                            // Si es string, usamos la misma interpolación que en otros handlers:
-                            // esto expande cualquier ${...} dentro del texto, no solo si es todo el valor.
+                            // Si es string, expandimos ${...}
                             if (val is string s)
-                            {
-                                // ctx.ExpandString ya sabe leer ctx.Estado["doc"], "wf.*", "tarea.*", etc.
                                 val = ctx.ExpandString(s);
-                            }
 
                             cmd.Parameters.AddWithValue("@" + kv.Key, val ?? DBNull.Value);
                         }
@@ -99,7 +119,6 @@ namespace Intranet.WorkflowStudio.Runtime
             }
             catch (Exception ex)
             {
-                // Acá caés cuando la tabla no existe, constraint, timeout, etc.
                 ctx.Log($"[data.sql/error] {ex.GetType().Name}: {ex.Message}");
                 ctx.Estado["sql.error"] = ex.Message;
 
@@ -155,6 +174,5 @@ WHERE Codigo = @Codigo AND EsActivo = 1;";
                 }
             }
         }
-
     }
 }
