@@ -86,6 +86,96 @@
                                 <span class="ws-muted">Cerrada</span>
                                 <b><asp:Label ID="lblCerrada" runat="server" /></b>
                             </div>
+
+                        <hr class="my-3" />
+
+                        <div>
+                            <div class="ws-muted mb-2">Documentos del caso</div>
+
+                            <asp:Panel ID="pnlDocs" runat="server" Visible="false">
+                                <div class="list-group">
+                                    <asp:Repeater ID="rptDocs" runat="server">
+                                        <ItemTemplate>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <div class="fw-semibold">
+                                                        <%# Eval("Tipo") %>
+                                                        <span class="text-muted small">docId: <%# Eval("DocumentoId") %></span>
+                                                    </div>
+                                                    <div class="text-muted small">
+                                                        carpetaId: <%# Eval("CarpetaId") %> | ficheroId: <%# Eval("FicheroId") %>
+                                                        <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("Scope"))) ? "" : (" | " + Eval("Scope")) %>
+                                                    </div>
+                                                </div>
+                                                <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-primary"
+                                                    NavigateUrl='<%# Eval("ViewerUrl") %>' Target="_blank"
+                                                    Visible='<%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'>
+                                                    Ver (visor)
+                                                </asp:HyperLink>
+                                            </div>
+                                        </ItemTemplate>
+                                    </asp:Repeater>
+                                </div>
+                            </asp:Panel>
+
+                            <asp:Panel ID="pnlDocsEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                (Sin documentos asociados)
+                            </asp:Panel>
+                        </div>
+
+                            <div class="mt-3 p-3 rounded-3 border bg-white">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div><b>Auditoría documental</b></div>
+    <span class="badge text-bg-secondary">WF_InstanciaDocumento</span>
+  </div>
+
+  <asp:Panel ID="pnlDocAudit" runat="server" Visible="false">
+      <div class="d-flex align-items-center gap-2 mb-2">
+  <asp:CheckBox ID="chkDocAuditDedup" runat="server" AutoPostBack="true"
+    OnCheckedChanged="chkDocAuditDedup_CheckedChanged" />
+  <span class="small text-muted">Mostrar deduplicado (último por documento/scope)</span>
+</div>
+
+    <asp:GridView ID="gvDocAudit" runat="server"
+      CssClass="table table-sm table-hover align-middle"
+      AutoGenerateColumns="false"
+      GridLines="None">
+      <Columns>
+        <asp:BoundField DataField="FechaAlta" HeaderText="Fecha" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" />
+        <asp:BoundField DataField="Accion" HeaderText="Acción" />
+        <asp:BoundField DataField="Scope" HeaderText="Scope" />
+        <asp:BoundField DataField="NodoTipo" HeaderText="Nodo" />
+        <asp:BoundField DataField="Tipo" HeaderText="Tipo" />
+        <asp:BoundField DataField="DocumentoId" HeaderText="DocumentoId" />
+
+        <asp:TemplateField HeaderText="Visor">
+          <ItemTemplate>
+            <asp:HyperLink runat="server"
+              NavigateUrl='<%# Eval("ViewerUrl") %>'
+              Text="Ver (visor)"
+              Target="_blank"
+              Visible='<%# !String.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'
+              CssClass="btn btn-sm btn-outline-primary" />
+          </ItemTemplate>
+        </asp:TemplateField>
+
+        <asp:TemplateField HeaderText="Índices">
+          <ItemTemplate>
+            <span class="text-muted" style="font-size:12px;">
+              <%# Server.HtmlEncode(Convert.ToString(Eval("IndicesJson"))) %>
+            </span>
+          </ItemTemplate>
+        </asp:TemplateField>
+      </Columns>
+    </asp:GridView>
+  </asp:Panel>
+
+  <asp:Panel ID="pnlDocAuditEmpty" runat="server" Visible="true" CssClass="ws-muted">
+    Sin auditoría documental para esta instancia.
+  </asp:Panel>
+</div>
+
+
                         </div>
 
                         <div class="mt-3">

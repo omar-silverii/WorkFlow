@@ -7,56 +7,65 @@
 // </generado automáticamente>
 //------------------------------------------------------------------------------
 
-namespace Intranet.WorkflowStudio.WebForms
+namespace Intranet.WorkflowStudio.WebForms.Controls
 {
 
 
-    public partial class _Default
+    public partial class WsTopbar
     {
 
         /// <summary>
-        /// Control form1.
+        /// Control lnkBrand.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlForm form1;
+        protected global::System.Web.UI.WebControls.HyperLink lnkBrand;
 
         /// <summary>
-        /// Control lblDocCount48.
+        /// Control lnkInicio.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblDocCount48;
+        protected global::System.Web.UI.WebControls.HyperLink lnkInicio;
 
         /// <summary>
-        /// Control lblInstCount48.
+        /// Control lnkWorkflows.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblInstCount48;
+        protected global::System.Web.UI.HtmlControls.HtmlAnchor lnkWorkflows;
 
         /// <summary>
-        /// Control rptDocLast.
+        /// Control lnkDocumentos.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Repeater rptDocLast;
+        protected global::System.Web.UI.HtmlControls.HtmlAnchor lnkDocumentos;
 
         /// <summary>
-        /// Control pnlDocLastEmpty.
+        /// Control lnkTareas.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlDocLastEmpty;
+        protected global::System.Web.UI.HtmlControls.HtmlAnchor lnkTareas;
+
+        /// <summary>
+        /// Control lnkAdmin.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.HyperLink lnkAdmin;
     }
 }

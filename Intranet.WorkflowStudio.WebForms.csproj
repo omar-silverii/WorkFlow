@@ -314,6 +314,7 @@
     <Content Include="Content\bootstrap.rtl.css" />
     <Content Include="Content\bootstrap.rtl.min.css" />
     <Content Include="Content\Site.css" />
+    <Content Include="Controls\WsTopbar.ascx" />
     <Content Include="Default.aspx" />
     <Content Include="favicon.ico" />
     <Content Include="Global.asax" />
@@ -356,6 +357,8 @@
     <Content Include="Scripts\Inspectors\inspector.control.parallel.js" />
     <Content Include="Scripts\Inspectors\inspector.control.ratelimit.js" />
     <Content Include="Scripts\Inspectors\inspector.control.retry.js" />
+    <Content Include="Scripts\Inspectors\inspector.doc.attach.js" />
+    <Content Include="Scripts\Inspectors\inspector.doc.search.js" />
     <Content Include="Scripts\Inspectors\inspector.ftp.get.js" />
     <Content Include="Scripts\Inspectors\inspector.logger.js" />
     <Content Include="Scripts\Inspectors\inspector.chat.notify.js" />
@@ -477,8 +480,10 @@
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
     <Compile Include="App_Code\Handlers\HControlRateLimit.cs" />
     <Compile Include="App_Code\Handlers\HControlRetry.cs" />
+    <Compile Include="App_Code\Handlers\HDocAttach.cs" />
     <Compile Include="App_Code\Handlers\HDocEntrada.cs" />
     <Compile Include="App_Code\Handlers\HDocExtract.cs" />
+    <Compile Include="App_Code\Handlers\HDocSearch.cs" />
     <Compile Include="App_Code\Handlers\HDocTipoResolve.cs" />
     <Compile Include="App_Code\Handlers\HEmailSend.cs" />
     <Compile Include="App_Code\Handlers\HEnd.cs" />
@@ -510,6 +515,13 @@
     <Compile Include="App_Code\Manifest.cs" />
     <Compile Include="App_Code\ManifestService.cs" />
     <Compile Include="App_Code\MotorFlujoMinimo.cs" />
+    <Compile Include="Controls\WsTopbar.ascx.cs">
+      <DependentUpon>WsTopbar.ascx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Controls\WsTopbar.ascx.designer.cs">
+      <DependentUpon>WsTopbar.ascx</DependentUpon>
+    </Compile>
     <Compile Include="DocumentProcessing\HDocLoad.cs" />
     <Compile Include="Poliza_Bandeja.aspx.cs">
       <DependentUpon>Poliza_Bandeja.aspx</DependentUpon>

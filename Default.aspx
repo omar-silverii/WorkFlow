@@ -1,4 +1,4 @@
-﻿<%@ Page Language="C#" AutoEventWireup="true" %>
+﻿<%@ Page Language="C#" AutoEventWireup="true" CodeBehind="Default.aspx.cs" Inherits="Intranet.WorkflowStudio.WebForms._Default" %>
 <!DOCTYPE html>
 <html lang="es">
 <head runat="server">
@@ -60,10 +60,12 @@
                         </li>
 
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Ejecuciones</a>
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Tareas</a>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="WF_Instancias.aspx">▶ Instancias</a></li>
-                                <li><a class="dropdown-item" href="WF_Instancias.aspx#logs">📜 Logs</a></li>
+                                <li><a class="dropdown-item" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a></li>
+                                <li><a class="dropdown-item" href="WF_Gerente_Tareas.aspx">🧑‍💼 Tareas (Gerencia)</a></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><a class="dropdown-item" href="WF_Instancias.aspx">▶ Ejecuciones (Instancias)</a></li>
                             </ul>
                         </li>
 
@@ -86,7 +88,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     <a class="btn btn-primary" href="WorkflowUI.aspx">➕ Nuevo Workflow</a>
-                    <a class="btn btn-outline-secondary" href="WF_Instancias.aspx">▶ Ver ejecuciones</a>
+                    <a class="btn btn-outline-secondary" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a>
                 </div>
             </div>
 
@@ -103,7 +105,9 @@
                         <div class="list-group list-group-flush">
                             <a class="list-group-item list-group-item-action px-0" href="WorkflowUI.aspx">🔀 Editor de Workflow</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Definiciones.aspx">📋 Definiciones</a>
-                            <a class="list-group-item list-group-item-action px-0" href="WF_Instancias.aspx">▶ Instancias</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Gerente_Tareas.aspx">🧑‍💼 Tareas (Gerencia)</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Instancias.aspx">▶ Ejecuciones (Instancias)</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipo.aspx">📁 Tipos de Documento</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipoReglas.aspx">🧠 Reglas Extract</a>
                         </div>
@@ -115,7 +119,10 @@
                             <li>Definí el <b>DocTipo</b> del documento.</li>
                             <li>Cargá las <b>Reglas</b> de extracción.</li>
                             <li>Diseñá el <b>Workflow</b> en el editor.</li>
-                            <li>Ejecutá y revisá <b>instancias/logs</b>.</li>
+                            <li>Ejecutá y revisá <b>ejecuciones</b> (instancias/logs).</li>
+                            <li>Resolvé <b>tus tareas</b> (bandeja del usuario).</li>
+                            <li>Supervisá <b>tareas</b> (gerencia).</li>
+                            <li>Asociá <b>documentos</b> al caso (integración DMS).</li>
                         </ol>
                     </div>
                 </div>
@@ -128,26 +135,19 @@
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <div class="ws-icon">🔀</div>
-                                            <h5 class="mt-2 mb-1">Crear / Editar Workflow</h5>
-                                            <div class="ws-muted">
-                                                Diseñá flujos con nodos (Start/If/Http/SQL/DocTipo/Extract, etc.) y guardalos en SQL.
-                                            </div>
-                                        </div>
+                                    <div class="ws-icon">🔀</div>
+                                    <h5 class="mt-2 mb-1">Crear / Editar Workflow</h5>
+                                    <div class="ws-muted">
+                                        Diseñá flujos con nodos (Start/If/Http/SQL/DocTipo/Extract, etc.) y guardalos en SQL.
                                     </div>
-
                                     <div class="d-flex gap-2 mt-3">
                                         <a class="btn btn-primary" href="WorkflowUI.aspx">Abrir editor</a>
-                                        <a class="btn btn-outline-secondary" href="WF_Definiciones.aspx">Ver definiciones</a>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Card 2 -->
-                        <!-- Card: Definiciones de Workflow -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -157,34 +157,46 @@
                                         Listado de workflows guardados. Consultá el JSON, versioná, analizá estructura
                                         y reutilizá definiciones existentes.
                                     </div>
-
                                     <div class="d-flex gap-2 mt-3">
                                         <a class="btn btn-primary" href="WF_Definiciones.aspx">Abrir definiciones</a>
-                                        <a class="btn btn-outline-secondary" href="WorkflowUI.aspx">Crear nuevo</a>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Card 3 -->
+                        <!-- Card 3: Mis tareas -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
-                                    <div class="ws-icon">▶️</div>
-                                    <h5 class="mt-2 mb-1">Ejecuciones (Instancias)</h5>
+                                    <div class="ws-icon">🧑‍💻</div>
+                                    <h5 class="mt-2 mb-1">Mis tareas</h5>
                                     <div class="ws-muted">
-                                        Seguimiento de instancias ejecutadas, re-ejecución y logs por paso.
+                                        Bandeja del usuario logueado. Tareas pendientes, resolución y seguimiento del trabajo diario.
                                     </div>
-
                                     <div class="d-flex gap-2 mt-3">
-                                        <a class="btn btn-primary" href="WF_Instancias.aspx">Abrir instancias</a>
-                                        <a class="btn btn-outline-secondary" href="WF_Instancias.aspx#logs">Ver logs</a>
+                                        <a class="btn btn-primary" href="WF_Tareas.aspx">Abrir mis tareas</a>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Card 4 -->
+                        <!-- Card 4: Gerencia de tareas -->
+                        <div class="col-12 col-md-6">
+                            <div class="card ws-card h-100">
+                                <div class="card-body">
+                                    <div class="ws-icon">🧑‍💼</div>
+                                    <h5 class="mt-2 mb-1">Gerencia de tareas</h5>
+                                    <div class="ws-muted">
+                                        Bandeja de supervisión. Asignación/seguimiento de tareas y control por workflow.
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <a class="btn btn-primary" href="WF_Gerente_Tareas.aspx">Ver tareas</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 5 -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -193,7 +205,6 @@
                                     <div class="ws-muted">
                                         Catálogo de documentos de la empresa (DocTipo) y reglas de extracción asociadas (sin tocar regex en el editor).
                                     </div>
-
                                     <div class="d-flex gap-2 mt-3 flex-wrap">
                                         <a class="btn btn-primary" href="WF_DocTipo.aspx">Tipos de documento</a>
                                         <a class="btn btn-outline-secondary" href="WF_DocTipoReglas.aspx">Reglas de extracción</a>
@@ -202,9 +213,77 @@
                             </div>
                         </div>
 
-                      
+                        <!-- Card 6: Actividad documental -->
+                        <div class="col-12 col-md-6">
+                            <div class="card ws-card h-100">
+                                <div class="card-body">
+                                    <div class="ws-icon">🧾</div>
+                                    <h5 class="mt-2 mb-1">Actividad documental</h5>
+                                    <div class="ws-muted">
+                                        Adjuntos y movimientos registrados por el motor (auditoría documental).
+                                    </div>
 
-                        <!-- Card 5 (placeholder futuro) -->
+                                    <div class="d-flex gap-3 mt-3 flex-wrap">
+                                        <div class="ws-muted" style="font-size:12px;">
+                                            <div class="fw-semibold text-dark">
+                                                <asp:Label ID="lblDocCount48" runat="server" Text="0"></asp:Label>
+                                            </div>
+                                            Docs (48h)
+                                        </div>
+
+                                        <div class="ws-muted" style="font-size:12px;">
+                                            <div class="fw-semibold text-dark">
+                                                <asp:Label ID="lblInstCount48" runat="server" Text="0"></asp:Label>
+                                            </div>
+                                            Instancias (48h)
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <asp:Repeater ID="rptDocLast" runat="server">
+                                            <HeaderTemplate>
+                                                <div class="list-group">
+                                            </HeaderTemplate>
+
+                                            <ItemTemplate>
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <div class="fw-semibold">
+                                                            <%# Eval("Tipo") %>
+                                                            <span class="text-muted small">docId: <%# Eval("DocumentoId") %></span>
+                                                        </div>
+                                                        <div class="text-muted small">
+                                                            Instancia: <%# Eval("WF_InstanciaId") %> · <%# Eval("FechaAltaFmt") %>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="d-flex gap-2">
+                                                        <a class="btn btn-sm btn-outline-secondary"
+                                                           href='WF_Instancias.aspx?inst=<%# Eval("WF_InstanciaId") %>'>
+                                                            Ver
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </ItemTemplate>
+
+                                            <FooterTemplate>
+                                                </div>
+                                            </FooterTemplate>
+                                        </asp:Repeater>
+
+                                        <asp:Panel ID="pnlDocLastEmpty" runat="server" Visible="false" CssClass="ws-muted small">
+                                            Sin actividad documental en las últimas 48 horas.
+                                        </asp:Panel>
+                                    </div>
+
+                                    <div class="d-flex gap-2 mt-3">
+                                        <a class="btn btn-outline-secondary" href="WF_Instancias.aspx">Ver ejecuciones</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 7 (placeholder futuro): Configuración / Catálogos -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -213,7 +292,6 @@
                                     <div class="ws-muted">
                                         Espacio para crecer (conexiones, parámetros globales, plantillas, colas, etc.).
                                     </div>
-
                                     <div class="d-flex gap-2 mt-3">
                                         <a class="btn btn-outline-secondary disabled" href="#" tabindex="-1" aria-disabled="true">Próximamente</a>
                                     </div>
@@ -228,13 +306,7 @@
                         Workflow Studio • UI WebForms + SQL • Diseño y creación por EDI-SA&reg;
                     </div>
                 </div>
-            </div>
-
-                <!-- Footer mini -->
-                <div class="mt-4 ws-muted" style="font-size:12px;">
-                    Workflow Studio • UI WebForms + SQL • Diseño y creación por EDI-SA&reg;
-                </div>
-          
+            </div>                        
 
 
         </main>
@@ -244,4 +316,3 @@
     </form>
 </body>
 </html>
-

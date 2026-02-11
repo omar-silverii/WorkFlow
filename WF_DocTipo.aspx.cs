@@ -13,6 +13,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            try { Topbar1.ActiveSection = "Tipos de documento"; } catch { }
+
             if (!IsPostBack)
             {
                 ddlEstado.SelectedValue = "1"; // por defecto Activos

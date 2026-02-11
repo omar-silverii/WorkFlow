@@ -1,4 +1,6 @@
 ﻿<%@ Page Language="C#" Async="true" AutoEventWireup="true" CodeBehind="WF_Definiciones.aspx.cs" Inherits="Intranet.WorkflowStudio.WebForms.WF_Definiciones" %>
+<%@ Register Src="~/Controls/WsTopbar.ascx" TagPrefix="ws" TagName="Topbar" %>
+
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head runat="server">
@@ -7,13 +9,20 @@
     <!-- Intranet: sin llamadas externas -->
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
     <style>
-        body { padding: 12px; }
+        body { background: #f6f7fb; }
         .grid-small td, .grid-small th { padding: 4px 6px; font-size: .82rem; }
         pre.json-view { max-height: 280px; overflow: auto; background: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: .7rem; }
+        ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
+        .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
     </style>
 </head>
 <body>
 <form id="form1" runat="server">
+    <!-- Topbar coherente -->
+    <ws:Topbar runat="server" ID="Topbar1" />
+
+    <main class="container-fluid px-3 px-md-4 py-4">
+
     <div class="container-fluid">
         <h4 class="mb-3">Workflows – Definiciones</h4>
 
@@ -88,6 +97,7 @@
             <pre id="preJson" runat="server" class="json-view"></pre>
         </asp:Panel>
     </div>
+    </main>
 </form>
 </body>
 </html>

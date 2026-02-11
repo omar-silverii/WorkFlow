@@ -1,6 +1,4 @@
 ﻿<%@ Page Language="C#" Async="true" AutoEventWireup="true" CodeBehind="WorkflowUI.aspx.cs" Inherits="Intranet.WorkflowStudio.WebForms.WorkflowUI" %>
-<%@ Register Src="~/Controls/WsTopbar.ascx" TagPrefix="ws" TagName="Topbar" %>
-
 <!DOCTYPE html>
 <html>
 <head runat="server">
@@ -9,24 +7,9 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css" />
-
-  <style>
-     body { background: #f6f7fb; }
-     .form-control-plaintext { padding-left: 0; }
-     .ws-title { font-weight: 700; letter-spacing: .2px; }
-     .ws-muted { color: rgba(0,0,0,.65); }
-     .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
-     .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
- </style>
-
 </head>
 <body>
   <form id="form1" runat="server" ClientIDMode="Static">
-
-         <!-- Topbar coherente -->
-   <ws:Topbar runat="server" ID="Topbar1" />
-
-   <main class="container-fluid px-3 px-md-4 py-4">
       <asp:ScriptManager ID="sm1" runat="server" EnablePageMethods="true" />
       <asp:HiddenField ID="hfWorkflow" runat="server" ClientIDMode="Static" ValidateRequestMode="Disabled" />
       <asp:HiddenField ID="hfDefId" runat="server" ClientIDMode="Static" />
@@ -157,7 +140,6 @@
         <pre><code id="outText"></code></pre>
       </div>
     </div>
-    </main>
    </form>
 
     <!-- JS de la IU -->

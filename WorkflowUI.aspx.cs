@@ -21,6 +21,8 @@ namespace Intranet.WorkflowStudio.WebForms
     {
         protected void Page_Load(object sender, EventArgs e)
         {
+            try { Topbar1.ActiveSection = "Workflows"; } catch { }
+
             // Si nos llaman con ?defId=### abrimos esa definición y rehidratamos el canvas
             if (!IsPostBack)
             {

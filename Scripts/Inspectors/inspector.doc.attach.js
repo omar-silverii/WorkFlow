@@ -1,7 +1,7 @@
-﻿// Scripts/Inspectors/inspector.doc.attach.js
+// Scripts/Inspectors/inspector.doc.attach.js
 (() => {
     const { register, helpers } = window.WF_Inspector;
-    const { el, section } = helpers;
+    const { el, section, rowButtons, btn } = helpers;
 
     function toBool(v, defVal) {
         if (v === true) return true;
@@ -17,51 +17,20 @@
         try { return JSON.parse(txt); } catch { return null; }
     }
 
-    function wireActions(body, node, ctx) {
-        const row = el('div', '');
-        row.className = 'd-flex gap-2 mt-3';
-
-        const btnSave = el('button', 'btn btn-sm btn-primary');
-        btnSave.type = 'button';
-        btnSave.textContent = 'Guardar';
-
-        const btnDel = el('button', 'btn btn-sm btn-outline-danger');
-        btnDel.type = 'button';
-        btnDel.textContent = 'Eliminar nodo';
-
-        function callSave() {
-            if (ctx && typeof ctx.saveNode === 'function') {
-                try { ctx.saveNode(node.id); return; } catch { }
-                try { ctx.saveNode(); return; } catch { }
-            }
-            if (ctx && typeof ctx.onSave === 'function') { ctx.onSave(node); return; }
-            if (ctx && ctx.actions && typeof ctx.actions.save === 'function') { ctx.actions.save(node); return; }
-            console.warn('[doc.attach] No se encontró handler de Guardar en ctx.');
+    function setNodeTitle(ctx, node) {
+        const elNode = ctx.nodeEl(node.id);
+        if (elNode) {
+            const t = elNode.querySelector('.node__title');
+            if (t) t.textContent = node.label || '';
         }
-
-        function callDelete() {
-            if (ctx && typeof ctx.deleteNode === 'function') {
-                try { ctx.deleteNode(node.id); return; } catch { }
-                try { ctx.deleteNode(); return; } catch { }
-            }
-            if (ctx && typeof ctx.onDelete === 'function') { ctx.onDelete(node); return; }
-            if (ctx && ctx.actions && typeof ctx.actions.delete === 'function') { ctx.actions.delete(node); return; }
-            console.warn('[doc.attach] No se encontró handler de Eliminar en ctx.');
-        }
-
-        btnSave.addEventListener('click', callSave);
-        btnDel.addEventListener('click', callDelete);
-
-        row.appendChild(btnSave);
-        row.appendChild(btnDel);
-        body.appendChild(row);
     }
 
     register('doc.attach', (node, ctx, dom) => {
+        const { ensurePosition } = ctx;
         const { body, title, sub } = dom;
         body.innerHTML = '';
 
-        if (title) title.textContent = node.label || 'Adjuntar documento (DMS)';
+        if (title) title.textContent = node.label || 'Documento: Adjuntar (DMS)';
         if (sub) sub.textContent = node.key || '';
 
         const p = node.params || {};
@@ -135,9 +104,45 @@
         inpOut.addEventListener('input', () => { p.output = inpOut.value; node.params = p; });
         body.appendChild(section('Salida ACK (output path)', inpOut));
 
+        // persist
         node.params = p;
 
-        // ✅ Acciones (igual que otros nodos)
-        wireActions(body, node, ctx);
+        // ===== Botones estándar =====
+        const bSave = btn('Guardar');
+        const bDel = btn('Eliminar nodo');
+
+        bSave.onclick = () => {
+            node.label = (inpLbl.value || '').trim() || node.label || 'Documento: Adjuntar (DMS)';
+            node.params = p;
+
+            ensurePosition(node);
+            setNodeTitle(ctx, node);
+
+            window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
+            setTimeout(() => { try { ctx.drawEdges(); } catch (e) { } }, 0);
+        };
+
+        bDel.onclick = () => {
+            if (Array.isArray(ctx.edges)) {
+                for (let i = ctx.edges.length - 1; i >= 0; i--) {
+                    const e = ctx.edges[i];
+                    if (!e) continue;
+                    if (e.from === node.id || e.to === node.id) ctx.edges.splice(i, 1);
+                }
+            }
+            if (Array.isArray(ctx.nodes)) {
+                for (let i = ctx.nodes.length - 1; i >= 0; i--) {
+                    const n = ctx.nodes[i];
+                    if (n && n.id === node.id) ctx.nodes.splice(i, 1);
+                }
+            }
+            const elNode = ctx.nodeEl(node.id);
+            if (elNode) elNode.remove();
+
+            ctx.drawEdges();
+            ctx.select(null);
+        };
+
+        body.appendChild(rowButtons(bSave, bDel));
     });
 })();

@@ -77,6 +77,8 @@
         { key: "ftp.put", label: "FTP: Subir", tint: "#0284c7", icon: "upload" },
         { key: "doc.entrada", label: "Entrada de documento", tint: "#0284c7", icon: "file" },
         { key: "doc.load", label: "Documento: Cargar archivo", tint: "#0284c7", icon: "file" },
+        { key: "doc.search", label: "Documento: Buscar (DMS)", tint: "#0284c7", icon: "globe" },
+        { key: "doc.attach", label: "Documento: Adjuntar (DMS)", tint: "#0284c7", icon: "file" },
 
         // Transformación & Lógica
         { key: "transform.map", label: "Transformar (Mapeo)", tint: "#16a34a", icon: "code" },
@@ -95,7 +97,7 @@
     var GROUPS = [
         { name: "Utilidad / Operación", items: ["util.start", "util.end", "util.logger", "util.docTipo.resolve", "util.notify", "util.error", "util.subflow", "human.task"] },
         { name: "Control", items: ["control.if", "control.switch", "control.parallel", "control.join", "control.loop", "control.delay", "control.retry", "control.ratelimit"] },
-        { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada", "doc.load"] },
+        { name: "Datos e Integraciones", items: ["http.request", "data.sql", "data.redis.get", "data.redis.set", "file.read", "file.write", "email.send", "chat.notify", "cloud.storage", "queue.publish", "queue.consume", "ftp.get", "ftp.put", "doc.entrada", "doc.load", "doc.search", "doc.attach"] },
         { name: "Transformación y Lógica", items: ["transform.map", "code.function", "code.script", "state.vars", "config.secrets", "ai.call", "doc.extract"] }
     ];
 

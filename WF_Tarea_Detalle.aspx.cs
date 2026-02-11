@@ -16,6 +16,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            try { Topbar1.ActiveSection = "Documentos"; } catch { }
+
             if (!IsPostBack)
             {
                 if (!long.TryParse(Request.QueryString["id"], out var tareaId))
