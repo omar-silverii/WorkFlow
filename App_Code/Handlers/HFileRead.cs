@@ -9,24 +9,6 @@ using Newtonsoft.Json; // <-- NUEVO
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    /// <summary>
-    /// Handler para el nodo "file.read".
-    /// Lee un archivo del disco del servidor y lo deja en ctx.Estado[salida].
-    /// Parámetros esperados (nodo.Parameters):
-    ///   - path     : ruta del archivo (puede contener ${...})
-    ///   - encoding : nombre de encoding (ej: "utf-8", "latin1") (opcional, default utf-8)
-    ///   - salida   : nombre de la clave en el contexto donde guardar el contenido (opcional, default "archivo")
-    ///   - asJson   : "true" para parsear JSON y guardar objeto en ctx.Estado[salida] (opcional, default false)
-    ///   - zipMode  : "auto" (default), "none", "zip", "gzip"
-    ///   - zipEntry : nombre de la entrada dentro del ZIP (opcional; si no se indica, toma la primera)
-    ///   - useCache : "true" (default) para evitar releer en resume si ctx.Estado[salida] ya existe
-    ///
-    /// En caso de error serio:
-    ///   - loguea [file.read/error] ...
-    ///   - setea ctx.Estado["file.read.lastError"]
-    ///   - setea ctx.Estado["wf.error"] = true
-    ///   - retorna Etiqueta = "error" (para enganchar con util.error).
-    /// </summary>
     public class HFileRead : IManejadorNodo
     {
         public string TipoNodo => "file.read";
@@ -45,7 +27,9 @@ namespace Intranet.WorkflowStudio.WebForms
 
             string pathTpl = GetString(p, "path");
             string encodingName = GetString(p, "encoding") ?? "utf-8";
-            string salida = GetString(p, "salida") ?? "archivo";
+
+            // ✅ Compatibilidad: aceptar "output" como alias de "salida"
+            string salida = GetString(p, "salida") ?? GetString(p, "output") ?? "archivo";
 
             // NUEVO: parsear JSON
             bool asJson = false;
@@ -158,8 +142,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 {
                     try
                     {
-                        // Puede ser objeto, array, string, número, etc.
-                        //valor = JsonConvert.DeserializeObject(contenido);
                         var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
                         valor = ser.DeserializeObject(contenido);
                         ctx.Log($"[file.read] JSON parseado OK en salida='{salida}'.");
@@ -199,49 +181,41 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private static string GetString(IDictionary<string, object> p, string key)
         {
-            if (p != null && p.TryGetValue(key, out var v) && v != null)
-                return Convert.ToString(v);
-            return null;
+            if (p == null) return null;
+            if (!p.TryGetValue(key, out var v) || v == null) return null;
+            return Convert.ToString(v);
         }
 
-        private static bool LooksLikeZip(byte[] bytes)
+        // (resto del archivo igual al tuyo)
+        private static bool LooksLikeZip(byte[] raw)
         {
-            return bytes != null &&
-                   bytes.Length >= 4 &&
-                   bytes[0] == 0x50 &&
-                   bytes[1] == 0x4B;
+            if (raw == null || raw.Length < 4) return false;
+            return raw[0] == 0x50 && raw[1] == 0x4B && (raw[2] == 0x03 || raw[2] == 0x05 || raw[2] == 0x07) && (raw[3] == 0x04 || raw[3] == 0x06 || raw[3] == 0x08);
         }
 
-        private static bool LooksLikeGzip(byte[] bytes)
+        private static bool LooksLikeGzip(byte[] raw)
         {
-            return bytes != null &&
-                   bytes.Length >= 2 &&
-                   bytes[0] == 0x1F &&
-                   bytes[1] == 0x8B;
+            if (raw == null || raw.Length < 2) return false;
+            return raw[0] == 0x1F && raw[1] == 0x8B;
         }
 
         private static byte[] ReadZipEntry(byte[] zipBytes, string entryName, ContextoEjecucion ctx)
         {
             using (var ms = new MemoryStream(zipBytes))
-            using (var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: false))
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true))
             {
-                if (zip.Entries.Count == 0)
-                    throw new InvalidOperationException("file.read: el ZIP no contiene entradas.");
-
-                ZipArchiveEntry entry;
+                ZipArchiveEntry entry = null;
 
                 if (!string.IsNullOrWhiteSpace(entryName))
-                {
                     entry = zip.GetEntry(entryName);
-                    if (entry == null)
-                        throw new InvalidOperationException($"file.read: la entrada '{entryName}' no existe en el ZIP.");
-                }
-                else
-                {
-                    entry = zip.Entries[0];
-                }
 
-                ctx.Log($"[file.read] Leyendo entrada ZIP '{entry.FullName}' ({entry.Length} bytes).");
+                if (entry == null && zip.Entries.Count > 0)
+                    entry = zip.Entries[0];
+
+                if (entry == null)
+                    throw new InvalidOperationException("ZIP sin entradas.");
+
+                ctx.Log($"[file.read] ZIP entry='{entry.FullName}' size={entry.Length}.");
 
                 using (var es = entry.Open())
                 using (var outMs = new MemoryStream())
@@ -252,7 +226,6 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
-
         private static byte[] ReadGzip(byte[] gzBytes, ContextoEjecucion ctx)
         {
             using (var ms = new MemoryStream(gzBytes))
@@ -260,7 +233,7 @@ namespace Intranet.WorkflowStudio.WebForms
             using (var outMs = new MemoryStream())
             {
                 gz.CopyTo(outMs);
-                ctx.Log($"[file.read] GZIP descomprimido a {outMs.Length} bytes.");
+                ctx.Log($"[file.read] GZIP decompressed bytes={outMs.Length}.");
                 return outMs.ToArray();
             }
         }

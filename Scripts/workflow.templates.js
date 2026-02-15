@@ -1,258 +1,72 @@
-﻿; (() => {
-    // NO reasignamos window.PARAM_TEMPLATES; siempre mutamos el objeto existente.
-    const PT = (window.PARAM_TEMPLATES = window.PARAM_TEMPLATES || {});
-    const merge = (key, obj) => (PT[key] = Object.assign({}, obj, PT[key] || {}));
-    const mergeGroup = (key, obj) => (PT[key] = Object.assign({}, PT[key] || {}, obj));
+﻿/* Scripts/workflow.templates.js
+  Plantillas mínimas para nodos del catálogo.
+  - No inventa runtime: solo provee defaults para el inspector.
+*/
+(function (global) {
+    function merge(key, obj) {
+        global.PARAM_TEMPLATES = global.PARAM_TEMPLATES || {};
+        global.PARAM_TEMPLATES[key] = Object.assign({}, global.PARAM_TEMPLATES[key] || {}, obj || {});
+    }
 
-    // --- HTTP ---
-    const HTTP_DEFAULTS = {
-        timeoutMs: 8000,
-        failOnStatus: false,
-        failStatusMin: 400
-    };
+    function mergeGroup(groupKey, obj) {
+        global.PARAM_TEMPLATES = global.PARAM_TEMPLATES || {};
+        global.PARAM_TEMPLATES[groupKey] = Object.assign({}, global.PARAM_TEMPLATES[groupKey] || {}, obj || {});
+    }
 
-    merge('http.request', Object.assign({
-        url: '/Api/Ping.ashx',
-        method: 'GET',
-        headers: {},
-        query: {},
-        body: null,
-        contentType: ''
-    }, HTTP_DEFAULTS));
-
-    mergeGroup('http.request.templates', {
-        ping_get: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'GET: /Api/Ping.ashx',
-            url: '/Api/Ping.ashx',
-            method: 'GET',
-            headers: {},
-            query: {},
-            body: null,
-            contentType: ''
-        }),
-
-        get_con_query: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'GET con query: ?clienteId',
-            url: '/Api/Score.ashx',
-            method: 'GET',
-            headers: {},
-            query: { clienteId: '${solicitud.clienteId}' },
-            body: null,
-            contentType: ''
-        }),
-
-        post_json: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'POST JSON',
-            url: '/api/demo',
-            method: 'POST',
-            headers: {},
-            query: {},
-            body: { nro: '${payload.data.nro}', importe: '${payload.data.prima}' },
-            contentType: 'application/json'
-        }),
-
-        put_json: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'PUT JSON',
-            url: '/api/demo',
-            method: 'PUT',
-            headers: {},
-            query: {},
-            body: { id: '${payload.id}', valor: 'actualizado' },
-            contentType: 'application/json'
-        }),
-
-        delete_simple: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'DELETE (simple)',
-            url: '/api/demo/${payload.id}',
-            method: 'DELETE',
-            headers: {},
-            query: {},
-            body: null,
-            contentType: ''
-        }),
-
-        // 👉 Estas 2 normalmente querés que fallen por status para integrarse con Retry
-        cliente_por_id: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'Cliente por id (GET)',
-            url: '/Api/Cliente.ashx',
-            method: 'GET',
-            headers: {},
-            query: { id: '${solicitud.clienteId}' },
-            body: null,
-            contentType: '',
-            failOnStatus: true,
-            failStatusMin: 400
-        }),
-
-        cliente_demo_777: Object.assign({}, HTTP_DEFAULTS, {
-            label: 'Cliente DEMO id=777 (GET)',
-            url: '/Api/Cliente.ashx',
-            method: 'GET',
-            headers: {},
-            query: { id: 777 },
-            body: null,
-            contentType: '',
-            failOnStatus: true,
-            failStatusMin: 400
-        })
-    });
-
-
-    // --- IF ---
-    merge('control.if', { expression: '${payload.status} == 200' });
-    mergeGroup('control.if.templates', {
-        status_200: { label: 'status == 200', expression: '${payload.status} == 200' },
-        sql_rows_gt_0: { label: 'sql.rows > 0', expression: '${sql.rows} > 0' },
-        has_payload_nro: { label: 'Existe payload.data.nro', expression: '${payload.data.nro}' },
-        equals_ok: { label: 'payload.result == "OK"', expression: '${payload.result} == "OK"' },
-        score_ge_700: { label: 'payload.score >= 700', expression: '${payload.score} >= 700' },
-    });
-
-    // --- DELAY ---
-    merge('control.delay', { ms: 1000, message: 'Esperando...' });
-
-    // --- RETRY ---
-    merge('control.retry', { reintentos: 3, backoffMs: 500, message: '' });
-    mergeGroup('control.retry.templates', {
-        retry_x3: { label: 'Reintentar x3', reintentos: 3, backoffMs: 500, message: '' },
-        retry_x5: { label: 'Reintentar x5', reintentos: 5, backoffMs: 800, message: '' },
-        retry_rapido: { label: 'Rápido (x3, 200ms)', reintentos: 3, backoffMs: 200, message: '' }
-    });
-
-    // --- LOGGER ---
-    merge('util.logger', { level: 'Info', message: 'Mensaje' });
-    mergeGroup('util.logger.templates', {
-        info: { label: 'Info: Comenzó', level: 'Info', message: 'Comenzó' },
-        warning: {
-            label: 'Warning: Valor extraño',
-            level: 'Warning',
-            message: 'Valor inesperado: ${payload.valor}',
-        },
-        error_http: {
-            label: 'Error: Falló HTTP',
-            level: 'Error',
-            message: 'Falló HTTP: status=${payload.status}',
-        },
-    });
-
-    // --- DATA.SQL ---
-    merge('data.sql', {
-        connectionStringName: 'DefaultConnection',
-        query: 'INSERT INTO PolizasDemo (Numero, Asegurado) VALUES (@NroPoliza, @Asegurado);',
-        parameters: { NroPoliza: '${payload.data.nro}', Asegurado: 'Póliza ${payload.data.nro}' },
-    });
-    mergeGroup('data.sql.templates', {
-        insert_poliza_demo: {
-            label: 'INSERT: PolizasDemo',
-            query: 'INSERT INTO PolizasDemo (Numero, Asegurado) VALUES (@NroPoliza, @Asegurado);',
-            parameters: { NroPoliza: '${payload.data.nro}', Asegurado: 'Póliza ${payload.data.nro}' },
-        },
-        update_asegurado_por_numero: {
-            label: 'UPDATE Asegurado por Numero',
-            query: 'UPDATE PolizasDemo SET Asegurado = @Asegurado WHERE Numero = @NroPoliza;',
-            parameters: {
-                NroPoliza: '${payload.data.nro}',
-                Asegurado: 'Póliza ${payload.data.nro} (actualizada)',
-            },
-        },
-        delete_por_numero: {
-            label: 'DELETE por Numero',
-            query: 'DELETE FROM PolizasDemo WHERE Numero = @NroPoliza;',
-            parameters: { NroPoliza: '${payload.data.nro}' },
-        },
-        select_top10: {
-            label: 'SELECT TOP 10',
-            query: 'SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;',
-            parameters: {},
-        },
-        merge_upsert_demo: {
-            label: 'MERGE Upsert por Numero',
-            query:
-                'MERGE PolizasDemo AS T USING (SELECT @NroPoliza AS Numero, @Asegurado AS Asegurado) AS S ON (T.Numero = S.Numero) WHEN MATCHED THEN UPDATE SET Asegurado = S.Asegurado WHEN NOT MATCHED THEN INSERT (Numero, Asegurado) VALUES (S.Numero, S.Asegurado);',
-            parameters: { NroPoliza: '${payload.data.nro}', Asegurado: 'Póliza ${payload.data.nro}' },
-        },
-    });
-
-    // --- NOTIFY / CHAT / QUEUE / DOC / ERROR / START-END ---
-    merge('util.notify', {
-        tipo: 'email',
-        destino: 'ops@miempresa.com',
-        asunto: 'Asunto',
-        mensaje: 'Mensaje',
-    });
-    mergeGroup('util.notify.templates', {
-        email_emision_ok: {
-            label: 'Email: Emisión OK',
-            tipo: 'email',
-            destino: 'ops@miempresa.com',
-            asunto: 'Póliza emitida',
-            mensaje: 'Póliza ${payload.data.nro} emitida OK',
-        },
-        email_rechazo: {
-            label: 'Email: Rechazo',
-            tipo: 'email',
-            destino: 'ops@miempresa.com',
-            asunto: 'Rechazo de Solicitud',
-            mensaje: 'Rechazo por score bajo',
-        },
-    });
-
-    merge('chat.notify', { canal: '#ops', mensaje: 'Mensaje' });
-    mergeGroup('chat.notify.templates', {
-        ops_ok: { label: 'Chat: OK a #ops', canal: '#ops', mensaje: 'Póliza ${payload.data.nro} OK' },
-        ops_error: {
-            label: 'Chat: Error a #ops',
-            canal: '#ops',
-            mensaje: 'Error en ${payload.step}: ${payload.error}',
-        },
-    });
-
-    merge('queue.publish', {
-        broker: 'rabbitmq',
-        queue: 'jobs',
-        payload: { job: 'imprimir_poliza', polizaId: '${payload.polizaId}' },
-    });
-    mergeGroup('queue.publish.templates', {
-        imprimir_poliza: {
-            label: 'Job: Imprimir póliza',
-            broker: 'rabbitmq',
-            queue: 'jobs',
-            payload: { job: 'imprimir_poliza', polizaId: '${payload.polizaId}' },
-        },
-    });
-
-    merge('doc.entrada', {
-        modo: 'simulado',
-        salida: 'solicitud',
-        extensiones: ['pdf', 'docx'],
-        maxMB: 10,
-    });
-
-    merge('util.subflow', { ref: '', input: {} });
-
-    mergeGroup('util.subflow.templates', {
-        demo_subflow: {
-            label: 'Demo: llamar subflow por Key',
-            ref: 'DEMO.SUBFLOW',
-            input: { clienteId: '${input.clienteId}', nota: 'llamado desde PADRE' }
-        }
-    });
-
-    merge('util.error', { capturar: true, volverAIntentar: false, notificar: true });
+    // --- START/END/LOGGER
     merge('util.start', {});
     merge('util.end', {});
+    merge('util.logger', { message: 'Hola! ${wf.instanceId}', level: 'Info' });
 
-    console.log('[WF templates] cargado. Keys=', Object.keys(window.PARAM_TEMPLATES || {}));
-    console.log('[WF templates] http.request.templates=', Object.keys((window.PARAM_TEMPLATES || {})['http.request.templates'] || {}));
+    // --- HTTP
+    merge('http.request', {
+        method: 'GET',
+        url: 'https://api.example.com/status',
+        headers: { 'Accept': 'application/json' },
+        outputPrefix: 'payload'
+    });
 
-   
-    // === avisar que las plantillas ya están listas ===
-    (function () {
-        function fire() {
-            try { window.dispatchEvent(new Event('wf-templates-ready')); }
-            catch (e) { var evt = document.createEvent('Event'); evt.initEvent('wf-templates-ready', true, true); window.dispatchEvent(evt); }
-        }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fire);
-        else fire();
-    })();
-})();
+    // --- SQL
+    merge('data.sql', {
+        connectionStringName: 'DefaultConnection',
+        query: 'SELECT 1 AS ok;',
+        outputPrefix: 'sql'
+    });
+
+    // --- FILE READ/WRITE
+    merge('file.read', { path: 'C:\\\\temp\\\\input.json', asJson: true, output: 'input' });
+    merge('file.write', { path: 'C:\\\\temp\\\\out.txt', text: 'Hola', append: false });
+
+    // --- IF ---
+    merge('control.if', { field: 'payload.status', op: '==', value: '200' });
+
+    mergeGroup('control.if.templates', {
+        status_200: { label: 'status == 200', field: 'payload.status', op: '==', value: '200' },
+        sql_rows_gt_0: { label: 'sql.rows > 0', field: 'sql.rows', op: '>', value: '0' },
+        has_payload_nro: { label: 'Existe payload.data.nro', field: 'payload.data.nro', op: 'exists' },
+        equals_ok: { label: 'payload.result == "OK"', field: 'payload.result', op: '==', value: 'OK' },
+        score_ge_700: { label: 'payload.score >= 700', field: 'payload.score', op: '>=', value: '700' },
+    });
+
+    // --- SWITCH
+    merge('control.switch', { expr: '${payload.tipo}', cases: ['A', 'B'], defaultLabel: 'Otro' });
+
+    // --- DELAY
+    merge('control.delay', { ms: 2000, label: 'Pausa' });
+
+    // --- RETRY
+    merge('control.retry', { maxAttempts: 3, delayMs: 1000 });
+
+    // --- LOOP
+    merge('control.loop', { itemsPath: 'input.items', itemVar: 'item', indexVar: 'i' });
+
+    // --- DOC.ENTRADA / DOC.ATTACH / DOC.SEARCH / DOC.LOAD (defaults mínimos)
+    merge('doc.entrada', { output: 'biz.case.rootDoc' });
+    merge('doc.attach', { docPath: 'biz.case.rootDoc', output: 'biz.case.attachments' });
+    merge('doc.search', { output: 'biz.doc.search', criteria: { Numero: 'OC-0001' } });
+    merge('doc.load', { path: 'C:\\\\temp\\\\archivo.pdf', mode: 'auto', outputPrefix: 'payload' });
+
+    // --- STATE VARS
+    merge('state.vars', { set: { 'biz.demo.flag': true } });
+
+})(window);

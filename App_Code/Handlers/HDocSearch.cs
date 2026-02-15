@@ -2,6 +2,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
 using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -15,15 +18,16 @@ namespace Intranet.WorkflowStudio.WebForms
     /// Handler para "doc.search"
     /// - El workflow NO maneja archivos; solo referencias documentales.
     /// - Busca documentos en el DMS (vía HTTP) por criterios/índices y devuelve una lista de referencias.
+    /// - Si no hay endpoint configurado, hace fallback DEMO a DB (WF_InstanciaDocumento) sin mentir.
     ///
     /// Parámetros:
-    ///   searchUrl            (string)  URL absoluta/relativa del endpoint de búsqueda (si no viene, usa ${wf.dms.searchUrl})
-    ///   criteria             (object)  criterios/índices a enviar (strings soportan ${...})
-    ///   max                  (int)     máximo de ítems (opcional)
-    ///   useIntranetCredentials (bool)  si true usa ctx.HttpIntranet (Windows credentials) si está disponible
-    ///   viewerUrlTemplate    (string)  template para armar viewerUrl, ej: "https://dms/visor?doc={documentoId}"
-    ///                              (si no viene, usa ${wf.dms.viewerUrlTemplate})
-    ///   output               (string)  path destino en estado (default: "biz.doc.search")
+    ///   searchUrl              (string)  URL del endpoint (si no viene, usa ${wf.dms.searchUrl})
+    ///   criteria               (object)  criterios/índices a enviar (strings soportan ${...})
+    ///   max                    (int)     máximo de ítems (opcional)
+    ///   useIntranetCredentials (bool)    si true usa ctx.HttpIntranet (Windows credentials) si está disponible
+    ///   viewerUrlTemplate      (string)  template para armar viewerUrl, ej: "https://dms/visor?doc={documentoId}"
+    ///                                (si no viene, usa ${wf.dms.viewerUrlTemplate})
+    ///   output                 (string)  path destino en estado (default: "biz.doc.search")
     ///
     /// Respuesta esperada del endpoint:
     ///   - Array JSON de items, o
@@ -43,15 +47,6 @@ namespace Intranet.WorkflowStudio.WebForms
             var outputPath = (GetString(p, "output") ?? "biz.doc.search").Trim();
             var useIntranet = GetBool(p, "useIntranetCredentials", true);
 
-            // URL del endpoint (permite ${...})
-            var urlTpl = GetString(p, "searchUrl");
-            if (string.IsNullOrWhiteSpace(urlTpl))
-                urlTpl = ctx.ExpandString("${wf.dms.searchUrl}");
-
-            var searchUrl = ctx.ExpandString(urlTpl ?? "");
-            if (string.IsNullOrWhiteSpace(searchUrl))
-                throw new InvalidOperationException("doc.search: falta 'searchUrl' (o wf.dms.searchUrl en estado).");
-
             // criteria (objeto) - expandimos strings recursivamente
             var criteriaObj = GetObj(p, "criteria");
             JToken criteriaTok = criteriaObj == null ? new JObject() : JToken.FromObject(criteriaObj);
@@ -64,16 +59,32 @@ namespace Intranet.WorkflowStudio.WebForms
                     max = imax;
             }
 
+            var viewerTpl = GetString(p, "viewerUrlTemplate");
+            if (string.IsNullOrWhiteSpace(viewerTpl))
+                viewerTpl = ctx.ExpandString("${wf.dms.viewerUrlTemplate}");
+            viewerTpl = ctx.ExpandString(viewerTpl ?? "");
+
+            // URL del endpoint (permite ${...})
+            var urlTpl = GetString(p, "searchUrl");
+            if (string.IsNullOrWhiteSpace(urlTpl))
+                urlTpl = ctx.ExpandString("${wf.dms.searchUrl}");
+
+            var searchUrl = ctx.ExpandString(urlTpl ?? "");
+
+            // ✅ Si no hay endpoint configurado, fallback DEMO a DB (real, sin inventar)
+            if (string.IsNullOrWhiteSpace(searchUrl))
+            {
+                var resDb = SearchInDb(criteriaTok, max ?? 50, viewerTpl);
+                ContextoEjecucion.SetPath(ctx.Estado, outputPath, resDb);
+                ctx.Log($"[doc.search] DEMO(DB) OK items={resDb["count"]}");
+                return new ResultadoEjecucion { Etiqueta = "always" };
+            }
+
             var payload = new JObject
             {
                 ["criteria"] = criteriaTok
             };
             if (max.HasValue) payload["max"] = max.Value;
-
-            var viewerTpl = GetString(p, "viewerUrlTemplate");
-            if (string.IsNullOrWhiteSpace(viewerTpl))
-                viewerTpl = ctx.ExpandString("${wf.dms.viewerUrlTemplate}");
-            viewerTpl = ctx.ExpandString(viewerTpl ?? "");
 
             var client = PickClient(ctx, useIntranet);
             var started = DateTime.UtcNow;
@@ -132,6 +143,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
                     var result = new JObject
                     {
+                        ["mode"] = "http",
                         ["status"] = (int)resp.StatusCode,
                         ["count"] = outItems.Count,
                         ["tookMs"] = took,
@@ -153,6 +165,176 @@ namespace Intranet.WorkflowStudio.WebForms
                 return ctx.HttpIntranet;
             return ctx.Http;
         }
+
+        private static JObject SearchInDb(JToken criteriaTok, int max, string viewerTpl)
+        {
+            if (max <= 0) max = 50;
+            if (max > 200) max = 200;
+
+            // ✅ Armamos una query útil desde criteria:
+            // - criteria.texto (preferido)
+            // - o valores de keys conocidas (documentoId, tipo, carpetaId, ficheroId, etc.)
+            // - o cualquier string dentro del objeto
+            var q = BuildQueryFromCriteria(criteriaTok);
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return new JObject
+                {
+                    ["mode"] = "db",
+                    ["status"] = 200,
+                    ["count"] = 0,
+                    ["tookMs"] = 0,
+                    ["items"] = new JArray()
+                };
+            }
+
+            if (q.Length > 200) q = q.Substring(0, 200);
+
+            var outItems = new JArray();
+            var started = DateTime.UtcNow;
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP (@TopN)
+    FechaAlta,
+    Tipo,
+    DocumentoId,
+    CarpetaId,
+    FicheroId,
+    ViewerUrl,
+    IndicesJson
+FROM dbo.WF_InstanciaDocumento
+WHERE
+    (ISNULL(DocumentoId,'') LIKE @Q
+     OR ISNULL(Tipo,'') LIKE @Q
+     OR ISNULL(CarpetaId,'') LIKE @Q
+     OR ISNULL(FicheroId,'') LIKE @Q
+     OR ISNULL(IndicesJson,'') LIKE @Q
+     OR ISNULL(ViewerUrl,'') LIKE @Q)
+ORDER BY Id DESC;", cn))
+            {
+                cmd.Parameters.Add("@TopN", SqlDbType.Int).Value = max;
+                cmd.Parameters.Add("@Q", SqlDbType.NVarChar, 300).Value = "%" + q + "%";
+
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        var norm = new JObject
+                        {
+                            ["documentoId"] = Convert.ToString(rd["DocumentoId"] ?? ""),
+                            ["carpetaId"] = Convert.ToString(rd["CarpetaId"] ?? ""),
+                            ["ficheroId"] = Convert.ToString(rd["FicheroId"] ?? ""),
+                            ["tipo"] = Convert.ToString(rd["Tipo"] ?? "")
+                        };
+
+                        var indicesJson = Convert.ToString(rd["IndicesJson"] ?? "");
+                        if (!string.IsNullOrWhiteSpace(indicesJson))
+                        {
+                            try { norm["indices"] = JToken.Parse(indicesJson); }
+                            catch { norm["indices"] = new JObject { ["raw"] = indicesJson }; }
+                        }
+
+                        var viewerUrl = Convert.ToString(rd["ViewerUrl"] ?? "");
+                        if (!string.IsNullOrWhiteSpace(viewerUrl))
+                            norm["viewerUrl"] = viewerUrl;
+                        else if (!string.IsNullOrWhiteSpace(viewerTpl))
+                        {
+                            var built = ApplyViewerTemplate(viewerTpl, norm);
+                            if (!string.IsNullOrWhiteSpace(built))
+                                norm["viewerUrl"] = built;
+                        }
+
+                        outItems.Add(norm);
+                    }
+                }
+            }
+
+            var took = (int)Math.Max(0, (DateTime.UtcNow - started).TotalMilliseconds);
+
+            return new JObject
+            {
+                ["mode"] = "db",
+                ["status"] = 200,
+                ["query"] = q,
+                ["count"] = outItems.Count,
+                ["tookMs"] = took,
+                ["items"] = outItems
+            };
+        }
+
+        private static string BuildQueryFromCriteria(JToken criteriaTok)
+        {
+            try
+            {
+                if (criteriaTok == null) return "";
+
+                // Si viene { texto: "..." } lo usamos directo
+                if (criteriaTok.Type == JTokenType.Object)
+                {
+                    var o = (JObject)criteriaTok;
+
+                    var texto = o["texto"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(texto)) return texto.Trim();
+
+                    // Keys comunes
+                    foreach (var k in new[] { "documentoId", "docId", "tipo", "carpetaId", "ficheroId", "numero", "proveedor" })
+                    {
+                        var v = o[k];
+                        if (v != null && v.Type == JTokenType.String)
+                        {
+                            var s = v.ToString();
+                            if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+                        }
+                    }
+
+                    // Si no hay key conocida, buscamos el primer string no vacío recursivo
+                    var found = FindFirstString(criteriaTok);
+                    return found ?? "";
+                }
+
+                if (criteriaTok.Type == JTokenType.String)
+                    return criteriaTok.ToString().Trim();
+
+                return FindFirstString(criteriaTok) ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private static string FindFirstString(JToken t)
+        {
+            if (t == null) return null;
+
+            if (t.Type == JTokenType.String)
+            {
+                var s = t.ToString();
+                return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+            }
+
+            if (t.Type == JTokenType.Object)
+            {
+                foreach (var p in ((JObject)t).Properties())
+                {
+                    var r = FindFirstString(p.Value);
+                    if (!string.IsNullOrWhiteSpace(r)) return r;
+                }
+            }
+            else if (t.Type == JTokenType.Array)
+            {
+                foreach (var it in (JArray)t)
+                {
+                    var r = FindFirstString(it);
+                    if (!string.IsNullOrWhiteSpace(r)) return r;
+                }
+            }
+
+            return null;
+        }
+
 
         private static JArray ExtractItemsArray(JToken data)
         {
@@ -176,9 +358,9 @@ namespace Intranet.WorkflowStudio.WebForms
             var o = new JObject();
 
             o["documentoId"] = FirstNonEmpty(src, "documentoId", "docId", "idDocumento", "id");
-            o["carpetaId"]   = FirstNonEmpty(src, "carpetaId", "folderId", "idCarpeta");
-            o["ficheroId"]   = FirstNonEmpty(src, "ficheroId", "fileId", "idFichero", "fichero");
-            o["tipo"]        = FirstNonEmpty(src, "tipo", "docTipo", "tipoDocumento");
+            o["carpetaId"] = FirstNonEmpty(src, "carpetaId", "folderId", "idCarpeta");
+            o["ficheroId"] = FirstNonEmpty(src, "ficheroId", "fileId", "idFichero", "fichero");
+            o["tipo"] = FirstNonEmpty(src, "tipo", "docTipo", "tipoDocumento");
 
             // índices (objeto)
             var indices = src["indices"];
@@ -213,7 +395,6 @@ namespace Intranet.WorkflowStudio.WebForms
         private static string ApplyViewerTemplate(string tpl, JObject norm)
         {
             // Template simple: {documentoId} {carpetaId} {ficheroId} {tipo}
-            // (sin inventar motor nuevo; es solo reemplazo directo)
             string s = tpl ?? "";
             foreach (var k in new[] { "documentoId", "carpetaId", "ficheroId", "tipo" })
             {

@@ -39,8 +39,9 @@
         // 4) Salida en contexto
         // =======================
         const inpSalida = el('input', 'input');
-        // dónde se va a guardar el contenido en ctx.Estado
-        inpSalida.value = p.salida || 'archivo';
+        // ✅ Compatibilidad: aceptar alias "output" si viene de JSON viejo/externo
+        // El runtime usa "salida", así que guardamos siempre como "salida".
+        inpSalida.value = (p.salida || p.output || 'archivo');
         const sSalida = section('Salida (key en contexto)', inpSalida);
 
         // =======================
@@ -67,6 +68,7 @@
             node.params = {
                 path: inpPath.value || '',
                 encoding: inpEnc.value || 'utf-8',
+                // ✅ Unificamos en "salida" (como espera el handler)
                 salida: inpSalida.value || 'archivo',
                 asJson: !!inpAsJson.checked
             };
@@ -118,7 +120,6 @@
             ctx.drawEdges();
             ctx.select(null);
         };
-
 
         // =======================
         // 6) Armar DOM del inspector

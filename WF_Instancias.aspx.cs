@@ -1,10 +1,10 @@
-﻿using Intranet.WorkflowStudio.Runtime;
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Text;
 using System.Web;
 using System.Web.UI;
@@ -14,186 +14,186 @@ namespace Intranet.WorkflowStudio.WebForms
 {
     public partial class WF_Instancias : System.Web.UI.Page
     {
-        private long _instanciaActualId
-        {
-            get { return (ViewState["__instActualId"] == null) ? 0 : (long)ViewState["__instActualId"]; }
-            set { ViewState["__instActualId"] = value; }
-        }
+        private static long _instanciaActualId = 0;
 
-        protected void chkDocAuditDedup_CheckedChanged(object sender, EventArgs e)
+        // Modo deep-link (?inst=xxxx)
+        private int? InstIdFromQuery
         {
-            if (_instanciaActualId > 0)
+            get
             {
-                BindDocAudit(_instanciaActualId);
-                BindDocsFromDb(_instanciaActualId);
+                object o = ViewState["InstIdFromQuery"];
+                if (o == null) return null;
+                int v;
+                return int.TryParse(Convert.ToString(o), out v) ? (int?)v : null;
             }
+            set { ViewState["InstIdFromQuery"] = value; }
         }
-
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            try { Topbar1.ActiveSection = "Ejecuciones"; } catch { }
-
             if (!IsPostBack)
             {
-                chkMostrarFinalizados.Checked = false;
-                ddlEstado.SelectedValue = "";
-                MarcarEstadoPills();
-                txtBuscar.Text = "";
-                CargarDefiniciones();
-
-                // Acepto varios nombres de parámetro:
-                // ?defId=28  (viejo)
-                // ?WF_DefinicionId=28  (el que estás usando desde WF_Tarea_Detalle)
-                string defIdQS =
-                    Request.QueryString["defId"]
-                    ?? Request.QueryString["WF_DefinicionId"];
-
-                if (!string.IsNullOrEmpty(defIdQS))
-                {
-                    ViewState["InstanciaSeleccionada"] = defIdQS;
-
-                    ListItem li = ddlDef.Items.FindByValue(defIdQS);
-                    if (li != null)
-                    {
-                        ddlDef.ClearSelection();
-                        li.Selected = true;
-                    }
-                }
+                // 1) Leer ?inst=xxxx (si viene, manda sobre defId)
+                int instQs;
+                if (int.TryParse(Convert.ToString(Request.QueryString["inst"]), out instQs) && instQs > 0)
+                    InstIdFromQuery = instQs;
                 else
+                    InstIdFromQuery = null;
+
+                BindDefiniciones();
+
+                ddlEstado.SelectedValue = "";
+                chkMostrarFinalizados.Checked = true;
+
+                // 2) Si hay inst, forzar la definición real (ignorar defId si vino mal)
+                if (InstIdFromQuery.HasValue)
                 {
-                    ViewState["InstanciaSeleccionada"] = null;
+                    int defReal = GetDefIdByInstancia(InstIdFromQuery.Value);
+                    if (defReal > 0)
+                    {
+                        var it = ddlDef.Items.FindByValue(defReal.ToString());
+                        if (it != null) ddlDef.SelectedValue = defReal.ToString();
+                    }
+
+                    // Para que quede visible el target
+                    txtBuscar.Text = InstIdFromQuery.Value.ToString();
                 }
+
+                MarcarEstadoPills();
                 CargarInstancias();
 
-                // Si venimos desde tareas, habilitamos botón "Volver a tareas"
-                var returnTo = Request.QueryString["returnTo"];
-                if (!string.IsNullOrWhiteSpace(returnTo) && returnTo.Equals("tareas", StringComparison.OrdinalIgnoreCase))
+                // 3) Auto abrir datos/logs del deep-link (solo en el primer load)
+                if (InstIdFromQuery.HasValue)
                 {
-                    lnkBackTareas.Visible = true;
-                    lnkBackTareas.NavigateUrl = "WF_Gerente_Tareas.aspx";
+                    MostrarDatos(InstIdFromQuery.Value);
+                    MostrarLogs(InstIdFromQuery.Value);
                 }
-                chkDocAuditDedup.Checked = true;
 
-                pnlDocAuditCard.Visible = false;
-
-                // NUEVO: deep link a instancia (?inst=90364)
-                string instQS = Request.QueryString["inst"];
-                long instIdQS;
-                if (!string.IsNullOrWhiteSpace(instQS) && long.TryParse(instQS, out instIdQS) && instIdQS > 0)
+                // al entrar, ocultamos ambas tarjetas (no hay selección)
+                // OJO: si vino inst y hay datos, MostrarDatos/Logs vuelve a prender lo que corresponde
+                // y ShowDocs/BindDocAudit manejan visibilidad de cards
+                // Si no hay docs/auditoría, quedan ocultas.
+                if (!InstIdFromQuery.HasValue)
                 {
-                    IrAInstancia(instIdQS);
+                    pnlDocsCard.Visible = false;
+                    pnlDocAuditCard.Visible = false;
                 }
             }
         }
 
-        private void IrAInstancia(long instId)
+        private int GetDefIdByInstancia(int instId)
         {
-            // 1) Detectar la definición de esa instancia
-            int defId = 0;
-            string estado = null;
-
-            string sql = "SELECT WF_DefinicionId, Estado FROM WF_Instancia WHERE Id=@Id;";
+            const string sql = "SELECT WF_DefinicionId FROM WF_Instancia WHERE Id=@Id;";
             using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
             using (var cmd = new SqlCommand(sql, cn))
             {
-                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instId;
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
                 cn.Open();
-                using (var rd = cmd.ExecuteReader())
-                {
-                    if (!rd.Read())
-                        return;
+                var v = cmd.ExecuteScalar();
+                if (v == null || v == DBNull.Value) return 0;
 
-                    defId = Convert.ToInt32(rd["WF_DefinicionId"]);
-                    estado = Convert.ToString(rd["Estado"] ?? "");
-                }
+                int defId;
+                return int.TryParse(Convert.ToString(v), out defId) ? defId : 0;
             }
-
-            // 2) Seleccionar la definición en el dropdown
-            var li = ddlDef.Items.FindByValue(defId.ToString());
-            if (li != null)
-            {
-                ddlDef.ClearSelection();
-                li.Selected = true;
-            }
-
-            // 3) Ajustar filtros para que el listado la incluya
-            // Si es finalizado, hay que permitir mostrar finalizados.
-            if (!string.IsNullOrWhiteSpace(estado) && estado.Equals("Finalizado", StringComparison.OrdinalIgnoreCase))
-                chkMostrarFinalizados.Checked = true;
-
-            ddlEstado.SelectedValue = ""; // no filtrar por estado, para no excluirla
-            MarcarEstadoPills();
-
-            // 4) Buscar por Id
-            txtBuscar.Text = instId.ToString();
-
-            // 5) Recargar listado y mostrar datos directamente
-            gvInst.PageIndex = 0;
-            CargarInstancias();
-            MostrarDatos((int)instId);
         }
 
-        protected void lnkEstado_Click(object sender, EventArgs e)
+        private void BindDefiniciones()
         {
-            var lb = sender as LinkButton;
-            if (lb == null) return;
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+SELECT Id, [Key]
+FROM dbo.WF_Definicion
+ORDER BY Id DESC;", cn))
+            {
+                cn.Open();
+                var dt = new DataTable();
+                dt.Load(cmd.ExecuteReader());
 
-            ddlEstado.SelectedValue = Convert.ToString(lb.CommandArgument ?? "").Trim();
-            MarcarEstadoPills();
-            CargarInstancias();
+                ddlDef.DataSource = dt;
+                ddlDef.DataTextField = "Key";
+                ddlDef.DataValueField = "Id";
+                ddlDef.DataBind();
+
+                // Si NO hay inst en query, respetar defId del query
+                if (!InstIdFromQuery.HasValue)
+                {
+                    var qsDef = Request.QueryString["defId"];
+                    if (!string.IsNullOrWhiteSpace(qsDef))
+                    {
+                        var it = ddlDef.Items.FindByValue(qsDef);
+                        if (it != null) ddlDef.SelectedValue = qsDef;
+                    }
+                }
+            }
+        }
+
+        private string EstadoSeleccionado
+        {
+            get { return Convert.ToString(ddlEstado.SelectedValue ?? "").Trim(); }
         }
 
         private void MarcarEstadoPills()
         {
-            string estado = Convert.ToString(ddlEstado.SelectedValue ?? "").Trim();
-
-            // base classes (mantener el look "pill")
             lnkEstadoTodos.CssClass = "btn btn-outline-secondary";
             lnkEstadoEnCurso.CssClass = "btn btn-outline-primary";
             lnkEstadoError.CssClass = "btn btn-outline-danger";
-            lnkEstadoFinalizado.CssClass = "btn btn-outline-dark";
+            lnkEstadoFinalizado.CssClass = "btn btn-outline-success";
 
-            if (string.IsNullOrWhiteSpace(estado))
-                lnkEstadoTodos.CssClass += " active";
-            else if (estado.Equals("EnCurso", StringComparison.OrdinalIgnoreCase))
-                lnkEstadoEnCurso.CssClass += " active";
-            else if (estado.Equals("Error", StringComparison.OrdinalIgnoreCase))
-                lnkEstadoError.CssClass += " active";
-            else if (estado.Equals("Finalizado", StringComparison.OrdinalIgnoreCase))
-                lnkEstadoFinalizado.CssClass += " active";
+            var est = EstadoSeleccionado ?? "";
+            if (string.IsNullOrWhiteSpace(est))
+                lnkEstadoTodos.CssClass = "btn btn-secondary";
+            else if (est.Equals("EnCurso", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoEnCurso.CssClass = "btn btn-primary";
+            else if (est.Equals("Error", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoError.CssClass = "btn btn-danger";
+            else if (est.Equals("Finalizado", StringComparison.OrdinalIgnoreCase))
+                lnkEstadoFinalizado.CssClass = "btn btn-success";
         }
 
-        private void CargarDefiniciones()
+        protected void lnkEstado_Click(object sender, EventArgs e)
         {
-            string defIdQS =
-                Request.QueryString["defId"]
-                ?? Request.QueryString["WF_DefinicionId"];
+            var l = sender as LinkButton;
+            ddlEstado.SelectedValue = l?.CommandArgument ?? "";
+            gvInst.PageIndex = 0;
 
-            string sql = @"
-SELECT Id, Codigo, Nombre
-FROM WF_Definicion
-WHERE Activo = 1
-ORDER BY Codigo;";
+            MarcarEstadoPills();
+            CargarInstancias();
+        }
 
-            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
-            using (var cmd = new SqlCommand(sql, cn))
-            {
-                var dt = new DataTable();
-                cn.Open();
-                dt.Load(cmd.ExecuteReader());
+        protected void ddlDef_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Cambió la def manualmente => ya no estamos en deep-link
+            InstIdFromQuery = null;
 
-                ddlDef.DataSource = dt;
-                ddlDef.DataTextField = "Codigo";
-                ddlDef.DataValueField = "Id";
-                ddlDef.DataBind();
+            gvInst.PageIndex = 0;
+            CargarInstancias();
+        }
 
-                // Si no vino defId por querystring, elegir el primero
-                if (ddlDef.Items.Count > 0 && string.IsNullOrEmpty(defIdQS))
-                {
-                    ddlDef.SelectedIndex = 0;
-                }
-            }
+        protected void ddlEstado_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            MarcarEstadoPills();
+            CargarInstancias();
+        }
+
+        protected void chkMostrarFinalizados_CheckedChanged(object sender, EventArgs e)
+        {
+            gvInst.PageIndex = 0;
+            CargarInstancias();
+        }
+
+        protected void btnRefrescar_Click(object sender, EventArgs e)
+        {
+            CargarInstancias();
+        }
+
+        protected void btnBuscar_Click(object sender, EventArgs e)
+        {
+            // Búsqueda manual => salir de deep-link
+            InstIdFromQuery = null;
+
+            gvInst.PageIndex = 0;
+            CargarInstancias();
         }
 
         private void CargarInstancias()
@@ -205,18 +205,46 @@ ORDER BY Codigo;";
             string estado = Convert.ToString(ddlEstado.SelectedValue ?? "").Trim();
             string q = (txtBuscar.Text ?? "").Trim();
 
+            // ✅ Si estamos en deep-link por instancia, traer SOLO esa fila (Id exacto)
+            if (InstIdFromQuery.HasValue && InstIdFromQuery.Value > 0)
+            {
+                string sqlExact = @"
+SELECT TOP (1)
+    Id,
+    WF_DefinicionId,
+    Estado,
+    FechaInicio,
+    FechaFin,
+    DatosContexto
+FROM WF_Instancia
+WHERE Id = @InstId
+ORDER BY Id DESC;";
+
+                using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+                using (var cmd = new SqlCommand(sqlExact, cn))
+                {
+                    cmd.Parameters.Add("@InstId", SqlDbType.Int).Value = InstIdFromQuery.Value;
+
+                    var dt = new DataTable();
+                    cn.Open();
+                    dt.Load(cmd.ExecuteReader());
+
+                    gvInst.DataSource = dt;
+                    gvInst.DataBind();
+                }
+
+                return;
+            }
+
             var where = new List<string>();
             where.Add("WF_DefinicionId = @DefId");
 
-            // Por defecto: ocultar finalizados
             if (!mostrarFinalizados)
                 where.Add("Estado <> 'Finalizado'");
 
-            // Filtro por estado
             if (!string.IsNullOrWhiteSpace(estado))
                 where.Add("Estado = @Estado");
 
-            // Buscar (SIEMPRE por DatosContexto; y si es numérico, también por Id contiene)
             bool qEsNumero = false;
             long dummy;
             if (!string.IsNullOrWhiteSpace(q))
@@ -259,77 +287,30 @@ ORDER BY Id DESC;";
 
                 gvInst.DataSource = dt;
                 gvInst.DataBind();
-
-                pnlDocAuditCard.Visible = false;
-                pnlDocAudit.Visible = false;
-                pnlDocAuditEmpty.Visible = true;
-                gvDocAudit.DataSource = null;
-                gvDocAudit.DataBind();
             }
-        }
-
-        protected void ddlDef_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            CargarInstancias();
-        }
-
-        protected void ddlEstado_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            MarcarEstadoPills();
-            CargarInstancias();
-        }
-
-        protected void chkMostrarFinalizados_CheckedChanged(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            CargarInstancias();
-        }
-
-        protected void btnBuscar_Click(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            CargarInstancias();
-        }
-
-        protected void btnRefrescar_Click(object sender, EventArgs e)
-        {
-            gvInst.PageIndex = 0;
-            CargarInstancias();
         }
 
         protected async void btnCrearInst_Click(object sender, EventArgs e)
         {
-            int defId = 0;
-            int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
-
-            string usuario =
-                (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-                    ? User.Identity.Name
-                    : (Environment.UserName ?? "web");
-
-            string datosEntradaJson = null;
-
             try
             {
-                long instId = await WorkflowRuntime.CrearInstanciaYEjecutarAsync(
-                    defId,
-                    datosEntradaJson,
-                    usuario
-                );
+                int defId = 0;
+                int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
+                if (defId <= 0) return;
+
+                string usuario = (Context?.User?.Identity?.Name ?? "").Trim();
+                var instId = await Runtime.WorkflowRuntime.CrearInstanciaYEjecutarAsync(defId, null, usuario);
 
                 txtBuscar.Text = instId.ToString();
-                ddlEstado.SelectedValue = "";
-                MarcarEstadoPills();
-                chkMostrarFinalizados.Checked = true;
                 CargarInstancias();
+                MostrarDatos((int)instId);
+                MostrarLogs((int)instId);
             }
             catch (Exception ex)
             {
-                pnlDatos.Visible = true;
-                pnlDatosEmpty.Visible = false;
-                litDatos.Text = Server.HtmlEncode("Error al crear/ejecutar instancia:\r\n" + ex.Message);
+                pnlLogs.Visible = true;
+                pnlLogsEmpty.Visible = false;
+                litLogs.Text = Server.HtmlEncode("Error al crear/ejecutar instancia:\n" + ex.Message);
             }
         }
 
@@ -341,13 +322,14 @@ ORDER BY Id DESC;";
 
         protected void gvInst_RowCommand(object sender, GridViewCommandEventArgs e)
         {
+            if (e == null || string.IsNullOrWhiteSpace(e.CommandName))
+                return;
+
             int instId;
             if (!int.TryParse(Convert.ToString(e.CommandArgument), out instId))
                 return;
 
-            // NUEVO: recordar instancia seleccionada para toggle y consistencia UX
             _instanciaActualId = instId;
-            pnlDocAuditCard.Visible = true;
 
             if (e.CommandName == "Datos")
             {
@@ -356,18 +338,29 @@ ORDER BY Id DESC;";
             else if (e.CommandName == "Logs")
             {
                 MostrarLogs(instId);
-
-                // NUEVO: también refrescamos auditoría documental
-                BindDocAudit(instId);
             }
-            else if (e.CommandName == "Reejecutar")
+            else if (e.CommandName == "Reej")
             {
-                Reejecutar(instId);
+                try
+                {
+                    string usuario = (Context?.User?.Identity?.Name ?? "").Trim();
+                    var newId = Runtime.WorkflowRuntime.ReejecutarInstanciaAsync(instId, usuario).GetAwaiter().GetResult();
+
+                    txtBuscar.Text = newId.ToString();
+                    CargarInstancias();
+                    MostrarDatos((int)newId);
+                    MostrarLogs((int)newId);
+                }
+                catch (Exception ex)
+                {
+                    pnlLogs.Visible = true;
+                    pnlLogsEmpty.Visible = false;
+                    litLogs.Text = Server.HtmlEncode("Error al reejecutar:\n" + ex.Message);
+                }
             }
         }
 
-
-        private void MostrarDatos(int instId)
+        void MostrarDatos(int instId)
         {
             string sql = "SELECT DatosContexto FROM WF_Instancia WHERE Id=@Id;";
             using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
@@ -383,227 +376,26 @@ ORDER BY Id DESC;";
 
                 litDatos.Text = Server.HtmlEncode(PrettyJson(json));
 
-                // NUEVO: documentos del caso desde auditoría documental (DB)
-                BindDocsFromDb(instId);
+                // docs desde DatosContexto
+                BindDocsFromDatosContexto(json);
 
-                _instanciaActualId = instId;
-                pnlDocAuditCard.Visible = true;
+                // auditoría desde DB
                 BindDocAudit(instId);
             }
-
         }
 
-        private void BindDocsFromDb(long instanciaId)
-        {
-            try
-            {
-                var rows = new List<DocUiRow>();
-
-                bool dedup = (chkDocAuditDedup != null && chkDocAuditDedup.Checked);
-
-                string sqlHistorico = @"
-SELECT TOP 200
-    DocumentoId, CarpetaId, FicheroId, Tipo, ViewerUrl, TareaId, EsRoot, FechaAlta
-FROM dbo.WF_InstanciaDocumento
-WHERE WF_InstanciaId = @Inst
-ORDER BY FechaAlta DESC, Id DESC;";
-
-                // Deduplicado: último por (DocumentoId + EsRoot + TareaId)
-                string sqlDedup = @"
-;WITH X AS (
-    SELECT *,
-        ROW_NUMBER() OVER(
-            PARTITION BY ISNULL(DocumentoId,''), EsRoot, ISNULL(TareaId,'')
-            ORDER BY FechaAlta DESC, Id DESC
-        ) AS rn
-    FROM dbo.WF_InstanciaDocumento
-    WHERE WF_InstanciaId = @Inst
-)
-SELECT TOP 200
-    DocumentoId, CarpetaId, FicheroId, Tipo, ViewerUrl, TareaId, EsRoot, FechaAlta
-FROM X
-WHERE rn = 1
-ORDER BY FechaAlta DESC;";
-
-                using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
-                using (var cmd = new SqlCommand(dedup ? sqlDedup : sqlHistorico, cn))
-                {
-                    cmd.Parameters.Add("@Inst", SqlDbType.BigInt).Value = instanciaId;
-                    cn.Open();
-
-                    using (var rd = cmd.ExecuteReader())
-                    {
-                        while (rd.Read())
-                        {
-                            rows.Add(new DocUiRow
-                            {
-                                DocumentoId = Convert.ToString(rd["DocumentoId"] ?? ""),
-                                CarpetaId = Convert.ToString(rd["CarpetaId"] ?? ""),
-                                FicheroId = Convert.ToString(rd["FicheroId"] ?? ""),
-                                Tipo = Convert.ToString(rd["Tipo"] ?? ""),
-                                ViewerUrl = Convert.ToString(rd["ViewerUrl"] ?? ""),
-                                TareaId = Convert.ToString(rd["TareaId"] ?? "")
-                            });
-                        }
-                    }
-                }
-
-                ShowDocs(rows);
-            }
-            catch
-            {
-                ShowDocs(new List<DocUiRow>());
-            }
-        }
-
-        private void BindDocAudit(long instanciaId)
-        {
-            var dt = new DataTable();
-
-            var csItem = ConfigurationManager.ConnectionStrings["DefaultConnection"];
-            if (csItem == null) throw new InvalidOperationException("ConnectionString 'DefaultConnection' no encontrada.");
-            var cnn = csItem.ConnectionString;
-
-            // Toggle: deduplicado vs histórico
-            bool dedup = (chkDocAuditDedup != null && chkDocAuditDedup.Checked);
-
-            string sqlHistorico = @"
-SELECT TOP 200
-    FechaAlta,
-    Accion,
-    CASE WHEN EsRoot = 1 THEN 'Root' ELSE 'Attachment' END AS Scope,
-    NodoTipo,
-    TareaId,
-    Tipo,
-    DocumentoId,
-    ViewerUrl,
-    IndicesJson
-FROM dbo.WF_InstanciaDocumento
-WHERE WF_InstanciaId = @Inst
-ORDER BY FechaAlta DESC;";
-
-            // Deduplicado: último por (DocumentoId + EsRoot + TareaId)
-            string sqlDedup = @"
-;WITH X AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY
-                ISNULL(DocumentoId,''), EsRoot, ISNULL(TareaId,'')
-            ORDER BY FechaAlta DESC, Id DESC
-        ) AS rn
-    FROM dbo.WF_InstanciaDocumento
-    WHERE WF_InstanciaId = @Inst
-)
-SELECT
-    FechaAlta,
-    Accion,
-    CASE WHEN EsRoot = 1 THEN 'Root' ELSE 'Attachment' END AS Scope,
-    NodoTipo,
-    TareaId,
-    Tipo,
-    DocumentoId,
-    ViewerUrl,
-    IndicesJson
-FROM X
-WHERE rn = 1
-ORDER BY FechaAlta DESC;";
-
-            using (var cn = new SqlConnection(cnn))
-            using (var cmd = new SqlCommand(dedup ? sqlDedup : sqlHistorico, cn))
-            {
-                cmd.Parameters.Add("@Inst", SqlDbType.BigInt).Value = instanciaId;
-                using (var da = new SqlDataAdapter(cmd))
-                {
-                    da.Fill(dt);
-                }
-            }
-
-            if (dt.Rows.Count == 0)
-            {
-                pnlDocAudit.Visible = false;
-                pnlDocAuditEmpty.Visible = true;
-                gvDocAudit.DataSource = null;
-                gvDocAudit.DataBind();
-                return;
-            }
-
-            pnlDocAudit.Visible = true;
-            pnlDocAuditEmpty.Visible = false;
-
-            gvDocAudit.DataSource = dt;
-            gvDocAudit.DataBind();
-        }
-
-
-        private void MostrarLogs(int instId)
-        {
-            string sql = @"
-SELECT TOP (500)
-    Fechalog,
-    Nivel,
-    Mensaje
-FROM WF_InstanciaLog
-WHERE WF_InstanciaId=@Id
-ORDER BY Id ASC;";
-
-            var sb = new StringBuilder();
-            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
-            using (var cmd = new SqlCommand(sql, cn))
-            {
-                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
-                cn.Open();
-                using (var rd = cmd.ExecuteReader())
-                {
-                    while (rd.Read())
-                    {
-                        sb.AppendFormat("{0:dd/MM/yyyy HH:mm:ss} [{1}] {2}\r\n",
-                            rd["Fechalog"], rd["Nivel"], rd["Mensaje"]);
-                    }
-                }
-            }
-
-            pnlLogs.Visible = true;
-            pnlLogsEmpty.Visible = false;
-            litLogs.Text = Server.HtmlEncode(sb.ToString());
-
-            pnlDocAuditCard.Visible = true;
-            BindDocAudit(instId);
-        }
-
-        private async void Reejecutar(int instId)
-        {
-            string usuario =
-                (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-                    ? User.Identity.Name
-                    : (Environment.UserName ?? "web");
-
-            try
-            {
-                await WorkflowRuntime.ReejecutarInstanciaAsync(instId, usuario);
-
-                // refrescar
-                CargarInstancias();
-                MostrarLogs(instId);
-
-                // NUEVO: refrescar auditoría documental post-ejecución
-                BindDocAudit(instId);
-            }
-            catch (Exception ex)
-            {
-                pnlLogs.Visible = true;
-                pnlLogsEmpty.Visible = false;
-                litLogs.Text = Server.HtmlEncode("Error al reejecutar:\r\n" + ex.Message);
-            }
-
-        }
-
-        private string PrettyJson(string json)
+        // ✅ CAMBIO MÍNIMO: si viene envuelto {logs, estado}, mostrar solo estado
+        string PrettyJson(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return "";
             try
             {
-                return JToken.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented);
+                var tok = JToken.Parse(json);
+
+                if (tok is JObject o && o["estado"] != null)
+                    tok = o["estado"];
+
+                return tok.ToString(Newtonsoft.Json.Formatting.Indented);
             }
             catch
             {
@@ -611,8 +403,6 @@ ORDER BY Id ASC;";
             }
         }
 
-
-        // ===== Documentos (Caso) =====
         private class DocUiRow
         {
             public string DocumentoId { get; set; }
@@ -645,12 +435,10 @@ ORDER BY Id ASC;";
                 var biz = root["biz"] as JObject;
                 var bcase = biz?["case"] as JObject;
 
-                // rootDoc
                 var rootDoc = bcase?["rootDoc"] as JObject;
                 if (rootDoc != null)
                     rows.Add(ToRow(rootDoc));
 
-                // attachments[]
                 var atts = bcase?["attachments"] as JArray;
                 if (atts != null)
                 {
@@ -674,6 +462,8 @@ ORDER BY Id ASC;";
         {
             if (rows != null && rows.Count > 0)
             {
+                pnlDocsCard.Visible = true;
+
                 pnlDocs.Visible = true;
                 pnlDocsEmpty.Visible = false;
 
@@ -682,8 +472,11 @@ ORDER BY Id ASC;";
             }
             else
             {
+                // ✅ ocultar card completo si no hay docs
+                pnlDocsCard.Visible = false;
+
                 pnlDocs.Visible = false;
-                pnlDocsEmpty.Visible = true;
+                pnlDocsEmpty.Visible = false;
 
                 rptDocs.DataSource = null;
                 rptDocs.DataBind();
@@ -701,6 +494,128 @@ ORDER BY Id ASC;";
                 ViewerUrl = Convert.ToString(doc["viewerUrl"] ?? ""),
                 TareaId = Convert.ToString(doc["tareaId"] ?? "")
             };
+        }
+
+        private void BindDocAudit(long instanciaId)
+        {
+            var dt = new DataTable();
+
+            bool dedup = (chkDocAuditDedup != null && chkDocAuditDedup.Checked);
+
+            string sqlHistorico = @"
+SELECT TOP 200
+    FechaAlta,
+    Accion,
+    CASE WHEN EsRoot = 1 THEN 'Root' ELSE 'Attachment' END AS Scope,
+    NodoTipo,
+    TareaId,
+    Tipo,
+    DocumentoId,
+    ViewerUrl,
+    IndicesJson
+FROM dbo.WF_InstanciaDocumento
+WHERE WF_InstanciaId = @Inst
+ORDER BY FechaAlta DESC;";
+
+            string sqlDedup = @"
+;WITH X AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                ISNULL(DocumentoId,''), EsRoot, ISNULL(TareaId,'')
+            ORDER BY FechaAlta DESC, Id DESC
+        ) AS rn
+    FROM dbo.WF_InstanciaDocumento
+    WHERE WF_InstanciaId = @Inst
+)
+SELECT
+    FechaAlta,
+    Accion,
+    CASE WHEN EsRoot = 1 THEN 'Root' ELSE 'Attachment' END AS Scope,
+    NodoTipo,
+    TareaId,
+    Tipo,
+    DocumentoId,
+    ViewerUrl,
+    IndicesJson
+FROM X
+WHERE rn = 1
+ORDER BY FechaAlta DESC;";
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(dedup ? sqlDedup : sqlHistorico, cn))
+            {
+                cmd.Parameters.Add("@Inst", SqlDbType.BigInt).Value = instanciaId;
+                using (var da = new SqlDataAdapter(cmd))
+                {
+                    da.Fill(dt);
+                }
+            }
+
+            if (dt.Rows.Count == 0)
+            {
+                // ✅ ocultar card completo si no hay auditoría
+                pnlDocAuditCard.Visible = false;
+
+                pnlDocAudit.Visible = false;
+                pnlDocAuditEmpty.Visible = false;
+
+                gvDocAudit.DataSource = null;
+                gvDocAudit.DataBind();
+                return;
+            }
+
+            pnlDocAuditCard.Visible = true;
+
+            pnlDocAudit.Visible = true;
+            pnlDocAuditEmpty.Visible = false;
+
+            gvDocAudit.DataSource = dt;
+            gvDocAudit.DataBind();
+        }
+
+        protected void chkDocAuditDedup_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_instanciaActualId > 0)
+            {
+                BindDocAudit(_instanciaActualId);
+            }
+        }
+
+        void MostrarLogs(int instId)
+        {
+            string sql = @"
+SELECT TOP (500)
+    Fechalog,
+    Nivel,
+    Mensaje
+FROM WF_InstanciaLog
+WHERE WF_InstanciaId=@Id
+ORDER BY Id ASC;";
+
+            var sb = new StringBuilder();
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        sb.AppendFormat("{0:dd/MM/yyyy HH:mm:ss} [{1}] {2}\r\n",
+                            rd["Fechalog"], rd["Nivel"], rd["Mensaje"]);
+                    }
+                }
+            }
+
+            pnlLogs.Visible = true;
+            pnlLogsEmpty.Visible = false;
+            litLogs.Text = Server.HtmlEncode(sb.ToString());
+
+            // auditoría también desde logs
+            BindDocAudit(instId);
         }
     }
 }

@@ -351,9 +351,12 @@
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
     <Content Include="Scripts\Inspectors\inspector.ai.call.js" />
+    <Content Include="Scripts\Inspectors\inspector.code.function.js" />
+    <Content Include="Scripts\Inspectors\inspector.code.script.js" />
     <Content Include="Scripts\Inspectors\inspector.config.secrets.js" />
     <Content Include="Scripts\Inspectors\inspector.control.delay.js" />
     <Content Include="Scripts\Inspectors\inspector.control.join.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.loop.js" />
     <Content Include="Scripts\Inspectors\inspector.control.parallel.js" />
     <Content Include="Scripts\Inspectors\inspector.control.ratelimit.js" />
     <Content Include="Scripts\Inspectors\inspector.control.retry.js" />
@@ -474,8 +477,11 @@
     <Compile Include="Api\WfDefiniciones.ashx.cs">
       <DependentUpon>WfDefiniciones.ashx</DependentUpon>
     </Compile>
+    <Compile Include="App_Code\CodeFunctionRegistry.cs" />
     <Compile Include="App_Code\Handlers\HAiCall.cs" />
     <Compile Include="App_Code\Handlers\HChatNotify.cs" />
+    <Compile Include="App_Code\Handlers\HCodeFunction.cs" />
+    <Compile Include="App_Code\Handlers\HCodeScript.cs" />
     <Compile Include="App_Code\Handlers\HConfigSecrets.cs" />
     <Compile Include="App_Code\Handlers\HControlDelay.cs" />
     <Compile Include="App_Code\Handlers\HControlRateLimit.cs" />

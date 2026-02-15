@@ -21,8 +21,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 {
                     var label = prop.Name;
                     var expr = prop.Value?.ToString();
-                    bool ok = HIf.Evaluar(expr, ctx);
-                    ctx.Log($"[Switch] caso '{label}' => {(ok ? "True" : "False")}");
+                    string logExpr;
+                    bool ok = HIf.Evaluar(expr, ctx, out logExpr);
+                    ctx.Log($"[Switch] caso '{label}' => {(ok ? "True" : "False")} ({logExpr})");
                     if (ok) { elegido = label; break; }
                 }
             }

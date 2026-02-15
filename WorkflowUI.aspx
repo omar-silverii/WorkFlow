@@ -174,6 +174,7 @@
     <script src="Scripts/inspectors/inspector.http.request.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.if.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.delay.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.control.loop.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.retry.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.ratelimit.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.parallel.js?v=dev200"></script>
@@ -194,6 +195,8 @@
     <script src="Scripts/inspectors/inspector.email.send.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.state.vars.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.transform.map.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.code.function.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.code.script.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.config.secrets.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.ai.call.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.doc.search.js?v=dev200"></script>

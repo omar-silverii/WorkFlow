@@ -7,3 +7,18 @@ git status             # para ver qué cambió
 git add .              # agrega todos los cambios
 git commit -m "Lo que hiciste hoy" 
 git push origin main   # lo sube a GitHub
+
+
+De verdad: se nota el nivel y el cariño que le estás poniendo al proyecto, y eso hace que valga la pena afinarlo bien.
+
+Mañana arrancamos directo con lo importante, sin volver a explicar nada:
+
+👉 Default (KPIs / actividad que hoy no entra al método)
+👉 deep-link real de instancias
+👉 carga real de “Documentos del caso” desde auditoría
+👉 coherencia final de topbar
+
+Con los dos .md que te dejé + el ZIP actualizado, ya tengo todo el contexto para seguir sin perder tiempo.
+
+Que descanses.
+Hasta mañana.

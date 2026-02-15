@@ -29,7 +29,7 @@
 </head>
 <body>
 <form id="form1" runat="server">
-     <!-- Topbar coherente -->
+    <!-- Topbar coherente -->
     <ws:Topbar runat="server" ID="Topbar1" />
 
     <main class="container-fluid px-3 px-md-4 py-4">
@@ -65,17 +65,14 @@
                         <asp:LinkButton ID="lnkEstadoTodos" runat="server" CssClass="btn btn-outline-secondary" OnClick="lnkEstado_Click" CommandArgument="">Todos</asp:LinkButton>
                         <asp:LinkButton ID="lnkEstadoEnCurso" runat="server" CssClass="btn btn-outline-primary" OnClick="lnkEstado_Click" CommandArgument="EnCurso">En curso</asp:LinkButton>
                         <asp:LinkButton ID="lnkEstadoError" runat="server" CssClass="btn btn-outline-danger" OnClick="lnkEstado_Click" CommandArgument="Error">Error</asp:LinkButton>
-                        <asp:LinkButton ID="lnkEstadoFinalizado" runat="server" CssClass="btn btn-outline-dark" OnClick="lnkEstado_Click" CommandArgument="Finalizado">Finalizado</asp:LinkButton>
+                        <asp:LinkButton ID="lnkEstadoFinalizado" runat="server" CssClass="btn btn-outline-success" OnClick="lnkEstado_Click" CommandArgument="Finalizado">Finalizado</asp:LinkButton>
                     </div>
-
-                    <asp:DropDownList ID="ddlEstado" runat="server"
-                        CssClass="form-select form-select-sm"
-                        AutoPostBack="true"
-                        OnSelectedIndexChanged="ddlEstado_SelectedIndexChanged">
+                    <asp:DropDownList ID="ddlEstado" runat="server" CssClass="form-select form-select-sm"
+                        AutoPostBack="true" OnSelectedIndexChanged="ddlEstado_SelectedIndexChanged">
                         <asp:ListItem Text="(Todos)" Value="" />
                         <asp:ListItem Text="EnCurso" Value="EnCurso" />
-                        <asp:ListItem Text="Finalizado" Value="Finalizado" />
                         <asp:ListItem Text="Error" Value="Error" />
+                        <asp:ListItem Text="Finalizado" Value="Finalizado" />
                     </asp:DropDownList>
                 </div>
 
@@ -123,54 +120,47 @@
                     <div class="card ws-card">
                         <div class="card-body">
                             <div class="d-flex align-items-center justify-content-between mb-2">
-                                <div class="ws-title">Listado</div>
-                                <div class="ws-chip ws-chip-muted">TOP 500</div>
+                                <div>
+                                    <div class="ws-title">Listado</div>
+                                    <div class="ws-muted small">TOP 500</div>
+                                </div>
+                                <div>
+                                    <span class="ws-chip ws-chip-muted">TOP 500</span>
+                                </div>
                             </div>
 
-                            <div class="ws-grid">
-                                <asp:GridView ID="gvInst" runat="server"
-                                    CssClass="table table-sm table-striped mb-0"
-                                    AutoGenerateColumns="false"
-                                    AllowPaging="true"
-                                    PageSize="20"
-                                    OnPageIndexChanging="gvInst_PageIndexChanging"
-                                    OnRowCommand="gvInst_RowCommand">
-                                    <Columns>
-                                        <asp:BoundField DataField="Id" HeaderText="Id" ItemStyle-Width="70px" />
-                                        <asp:BoundField DataField="Estado" HeaderText="Estado" ItemStyle-Width="100px" />
-                                        <asp:BoundField DataField="FechaInicio" HeaderText="Inicio" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" ItemStyle-Width="160px" />
-                                        <asp:BoundField DataField="FechaFin" HeaderText="Fin" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" ItemStyle-Width="160px" />
+                            <asp:GridView ID="gvInst" runat="server" CssClass="table table-sm table-hover ws-grid"
+                                AutoGenerateColumns="false" GridLines="None"
+                                AllowPaging="true" PageSize="20"
+                                OnPageIndexChanging="gvInst_PageIndexChanging"
+                                OnRowCommand="gvInst_RowCommand">
+                                <Columns>
+                                    <asp:BoundField DataField="Id" HeaderText="Id" />
+                                    <asp:BoundField DataField="Estado" HeaderText="Estado" />
+                                    <asp:BoundField DataField="FechaInicio" HeaderText="Inicio" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" />
+                                    <asp:BoundField DataField="FechaFin" HeaderText="Fin" DataFormatString="{0:dd/MM/yyyy HH:mm:ss}" />
 
-                                        <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="170px">
-                                            <ItemTemplate>
-                                                <asp:LinkButton ID="lnkDatos" runat="server"
-                                                    CommandName="Datos"
-                                                    CommandArgument='<%# Eval("Id") %>'
-                                                    CssClass="btn btn-sm btn-outline-primary">Datos</asp:LinkButton>
+                                    <asp:TemplateField HeaderText="Acciones">
+                                        <ItemTemplate>
+                                            <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-primary"
+                                                CommandName="Datos" CommandArgument='<%# Eval("Id") %>'>Datos</asp:LinkButton>
+                                            <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-secondary"
+                                                CommandName="Logs" CommandArgument='<%# Eval("Id") %>'>Logs</asp:LinkButton>
+                                            <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-success"
+                                                CommandName="Reej" CommandArgument='<%# Eval("Id") %>'>Reej.</asp:LinkButton>
+                                        </ItemTemplate>
+                                    </asp:TemplateField>
+                                </Columns>
+                            </asp:GridView>
 
-                                                <asp:LinkButton ID="lnkLogs" runat="server"
-                                                    CommandName="Logs"
-                                                    CommandArgument='<%# Eval("Id") %>'
-                                                    CssClass="btn btn-sm btn-outline-secondary">Logs</asp:LinkButton>
-
-                                                <asp:LinkButton ID="lnkReej" runat="server"
-                                                    CommandName="Reejecutar"
-                                                    CommandArgument='<%# Eval("Id") %>'
-                                                    CssClass="btn btn-sm btn-outline-success"
-                                                    OnClientClick="return confirm('Reejecutar la instancia seleccionada?');">Reej.</asp:LinkButton>
-                                            </ItemTemplate>
-                                        </asp:TemplateField>
-                                    </Columns>
-                                </asp:GridView>
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- DERECHA: datos / docs / auditoría / logs -->
+                <!-- DERECHA: detalles -->
                 <div class="col-md-5">
 
-                    <!-- Datos -->
+                    <!-- DatosContexto -->
                     <div class="card ws-card mb-3">
                         <div class="card-body">
                             <div class="ws-title mb-2">Datos (DatosContexto)</div>
@@ -185,46 +175,49 @@
                         </div>
                     </div>
 
-                    <!-- Documentos -->
-                    <div class="card ws-card mb-3">
-                        <div class="card-body">
-                            <div class="ws-title mb-2">Documentos (Caso)</div>
+                    <!-- Documentos (Caso) - SOLO si hay datos -->
+                    <asp:Panel ID="pnlDocsCard" runat="server" Visible="false">
+                        <div class="card ws-card mb-3">
+                            <div class="card-body">
+                                <div class="ws-title mb-2">Documentos (Caso)</div>
 
-                            <asp:Panel ID="pnlDocs" runat="server" Visible="false">
-                                <div class="list-group">
-                                    <asp:Repeater ID="rptDocs" runat="server">
-                                        <ItemTemplate>
-                                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <div class="fw-semibold">
-                                                        <%# Eval("Tipo") %>
-                                                        <span class="text-muted small">docId: <%# Eval("DocumentoId") %></span>
+                                <asp:Panel ID="pnlDocs" runat="server" Visible="false">
+                                    <div class="list-group">
+                                        <asp:Repeater ID="rptDocs" runat="server">
+                                            <ItemTemplate>
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <div class="fw-semibold">
+                                                            <%# Eval("Tipo") %>
+                                                            <span class="text-muted small">docId: <%# Eval("DocumentoId") %></span>
+                                                        </div>
+                                                        <div class="text-muted small">
+                                                            carpetaId: <%# Eval("CarpetaId") %> | ficheroId: <%# Eval("FicheroId") %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("TareaId"))) ? "" : (" | tareaId: " + Eval("TareaId")) %>
+                                                        </div>
                                                     </div>
-                                                    <div class="text-muted small">
-                                                        carpetaId: <%# Eval("CarpetaId") %> | ficheroId: <%# Eval("FicheroId") %>
-                                                        <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("TareaId"))) ? "" : (" | tareaId: " + Eval("TareaId")) %>
+                                                    <div class="d-flex gap-2">
+                                                        <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-primary"
+                                                            NavigateUrl='<%# Eval("ViewerUrl") %>' Target="_blank"
+                                                            Visible='<%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'>
+                                                            Ver
+                                                        </asp:HyperLink>
                                                     </div>
                                                 </div>
-                                                <div class="d-flex gap-2">
-                                                    <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-primary"
-                                                        NavigateUrl='<%# Eval("ViewerUrl") %>' Target="_blank"
-                                                        Visible='<%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'>
-                                                        Ver (visor)
-                                                    </asp:HyperLink>
-                                                </div>
-                                            </div>
-                                        </ItemTemplate>
-                                    </asp:Repeater>
-                                </div>
-                            </asp:Panel>
+                                            </ItemTemplate>
+                                        </asp:Repeater>
+                                    </div>
+                                </asp:Panel>
 
-                            <asp:Panel ID="pnlDocsEmpty" runat="server" Visible="true" CssClass="ws-muted small">
-                                Seleccioná una instancia y presioná “Datos” para ver documentos del caso.
-                            </asp:Panel>
+                                <!-- dejamos el pnlDocsEmpty pero el card completo se oculta cuando no hay docs -->
+                                <asp:Panel ID="pnlDocsEmpty" runat="server" Visible="false" CssClass="ws-muted small">
+                                    Seleccioná una instancia y presioná “Datos” para ver documentos del caso.
+                                </asp:Panel>
+                            </div>
                         </div>
-                    </div>
+                    </asp:Panel>
 
-                    <!-- Auditoría documental -->
+                    <!-- Auditoría documental - SOLO si hay datos -->
                     <asp:Panel ID="pnlDocAuditCard" runat="server" Visible="false">
                         <div class="card ws-card mb-3">
                             <div class="card-body">
@@ -247,33 +240,25 @@
                                             <asp:BoundField DataField="Accion" HeaderText="Acción" />
                                             <asp:BoundField DataField="Scope" HeaderText="Scope" />
                                             <asp:BoundField DataField="NodoTipo" HeaderText="Nodo" />
-                                            <asp:BoundField DataField="TareaId" HeaderText="TareaId" />
+                                            <asp:BoundField DataField="TareaId" HeaderText="Tarea" />
                                             <asp:BoundField DataField="Tipo" HeaderText="Tipo" />
-                                            <asp:BoundField DataField="DocumentoId" HeaderText="DocumentoId" />
+                                            <asp:BoundField DataField="DocumentoId" HeaderText="DocId" />
 
                                             <asp:TemplateField HeaderText="Visor">
                                                 <ItemTemplate>
-                                                    <asp:HyperLink runat="server"
-                                                        NavigateUrl='<%# Eval("ViewerUrl") %>'
-                                                        Text="Ver (visor)"
-                                                        Target="_blank"
-                                                        Visible='<%# !String.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'
-                                                        CssClass="btn btn-sm btn-outline-primary" />
-                                                </ItemTemplate>
-                                            </asp:TemplateField>
-
-                                            <asp:TemplateField HeaderText="Índices">
-                                                <ItemTemplate>
-                                                    <span class="text-muted" style="font-size:12px;">
-                                                        <%# Server.HtmlEncode(Convert.ToString(Eval("IndicesJson"))) %>
-                                                    </span>
+                                                    <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-primary"
+                                                        NavigateUrl='<%# Eval("ViewerUrl") %>' Target="_blank"
+                                                        Visible='<%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'>
+                                                        Ver
+                                                    </asp:HyperLink>
                                                 </ItemTemplate>
                                             </asp:TemplateField>
                                         </Columns>
                                     </asp:GridView>
                                 </asp:Panel>
 
-                                <asp:Panel ID="pnlDocAuditEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                <!-- dejamos el empty pero el card completo se oculta cuando no hay filas -->
+                                <asp:Panel ID="pnlDocAuditEmpty" runat="server" Visible="false" CssClass="ws-muted small">
                                     Seleccioná una instancia y presioná “Datos” o “Logs” para ver auditoría documental.
                                 </asp:Panel>
                             </div>
