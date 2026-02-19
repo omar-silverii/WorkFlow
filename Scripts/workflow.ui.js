@@ -627,7 +627,11 @@
                 if (!hasCmd) errors.push("Nodo " + id + ": falta 'query' (o 'commandText').");
             }
             if (type === 'control.if') {
-                if (!p.expression) errors.push("Nodo " + id + ": 'expression' requerido.");
+                const hasExpr = !!(p.expression && String(p.expression).trim());
+                const hasSimple = !!(p.field && String(p.field).trim()) && !!(p.op && String(p.op).trim());
+                if (!hasExpr && !hasSimple) {
+                    errors.push("Nodo " + id + ": falta condición (modo simple: field/op o modo técnico: expression).");
+                }
             }
             if (p.position) {
                 if (typeof p.position.x !== 'number' || typeof p.position.y !== 'number')
@@ -749,13 +753,13 @@
             var n = wf.Nodes[id];
             var meta = findCat(n.Type) || { key: n.Type, label: n.Type, tint: '#94a3b8', icon: 'box' };
 
-            var hasPos = n.Parameters &&
-                n.Parameters.position &&
-                typeof n.Parameters.position.x === 'number' &&
-                typeof n.Parameters.position.y === 'number';
-
-            var x = hasPos ? n.Parameters.position.x : (120 + (nodes.length * 40));
-            var y = hasPos ? n.Parameters.position.y : (120 + (nodes.length * 10));
+            var par = n.Parameters || n.params || {};
+            var hasPos = par &&
+                    par.position &&
+                    typeof par.position.x === 'number' &&
+                    typeof par.position.y === 'number';
+            var x = hasPos ? par.position.x : (120 + (nodes.length * 40));
+            var y = hasPos ? par.position.y : (120 + (nodes.length * 10));
 
             var newN = {
                 id: id,
@@ -765,7 +769,7 @@
                 y: y,
                 tint: meta.tint,
                 icon: meta.icon,
-                params: n.Parameters ? deepClone(n.Parameters) : {}
+                params: deepClone(par)
             };
             ensurePosition(newN);
             nodes.push(newN);
@@ -876,6 +880,19 @@
         return wf; // WF_applyGraphFromObject va a volver a decir "wf inválido o sin Nodes"
     }
 
+    // Cargar el JSON del TextBox (JsonServidor) en el canvas (sin postback)
+    window.WF_cargarJsonServidorEnCanvas = function () {
+        var tb = document.getElementById('JsonServidor');
+        var raw = tb ? (tb.value || '').trim() : '';
+        if (!raw) { alert('No hay JSON en el cuadro.'); return; }
+        try {
+            var wf = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            window.WF_loadFromJson(wf);
+        } catch (e) {
+            console.warn(e);
+            alert('JSON inválido. Revisá el contenido pegado.');
+        }
+    };
 
     // API pública para cargar desde JSON (string u objeto)
     window.WF_loadFromJson = function (jsonOrObject) {

@@ -350,6 +350,7 @@
     <Content Include="Content\bootstrap-grid.rtl.css.map" />
     <Content Include="Content\bootstrap-grid.min.css.map" />
     <Content Include="Content\bootstrap-grid.css.map" />
+    <Content Include="Scripts\Inspectors\fieldPicker.js" />
     <Content Include="Scripts\Inspectors\inspector.ai.call.js" />
     <Content Include="Scripts\Inspectors\inspector.code.function.js" />
     <Content Include="Scripts\Inspectors\inspector.code.script.js" />
@@ -360,7 +361,9 @@
     <Content Include="Scripts\Inspectors\inspector.control.parallel.js" />
     <Content Include="Scripts\Inspectors\inspector.control.ratelimit.js" />
     <Content Include="Scripts\Inspectors\inspector.control.retry.js" />
+    <Content Include="Scripts\Inspectors\inspector.control.switch.js" />
     <Content Include="Scripts\Inspectors\inspector.doc.attach.js" />
+    <Content Include="Scripts\Inspectors\inspector.doc.extract.js" />
     <Content Include="Scripts\Inspectors\inspector.doc.search.js" />
     <Content Include="Scripts\Inspectors\inspector.ftp.get.js" />
     <Content Include="Scripts\Inspectors\inspector.logger.js" />
@@ -368,7 +371,6 @@
     <Content Include="Scripts\Inspectors\inspector.core.js" />
     <Content Include="Scripts\Inspectors\inspector.data.sql.js" />
     <Content Include="Scripts\Inspectors\inspector.doc.entrada.js" />
-    <Content Include="Scripts\Inspectors\inspector.doc.extract.js" />
     <Content Include="Scripts\Inspectors\inspector.doc.load.js" />
     <Content Include="Scripts\Inspectors\inspector.edge.js" />
     <Content Include="Scripts\Inspectors\inspector.email.send.js" />
@@ -412,6 +414,8 @@
     <Content Include="Api\WfDefiniciones.ashx" />
     <Content Include="Api\RetryTest.ashx" />
     <Content Include="Api\AiMock.ashx" />
+    <Content Include="Api\WorkflowFieldRegistry.ashx" />
+    <Content Include="Api\DocPreview.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -459,6 +463,9 @@
     <Compile Include="Api\Cliente.ashx.cs">
       <DependentUpon>Cliente.ashx</DependentUpon>
     </Compile>
+    <Compile Include="Api\DocPreview.ashx.cs">
+      <DependentUpon>DocPreview.ashx</DependentUpon>
+    </Compile>
     <Compile Include="Api\Echo.ashx.cs">
       <DependentUpon>Echo.ashx</DependentUpon>
     </Compile>
@@ -476,6 +483,9 @@
     </Compile>
     <Compile Include="Api\WfDefiniciones.ashx.cs">
       <DependentUpon>WfDefiniciones.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WorkflowFieldRegistry.ashx.cs">
+      <DependentUpon>WorkflowFieldRegistry.ashx</DependentUpon>
     </Compile>
     <Compile Include="App_Code\CodeFunctionRegistry.cs" />
     <Compile Include="App_Code\Handlers\HAiCall.cs" />
@@ -541,6 +551,7 @@
     <Compile Include="Runtime\ManejadorSql.cs" />
     <Compile Include="Runtime\WfNumbers.cs" />
     <Compile Include="Runtime\WorkflowAmbient.cs" />
+    <Compile Include="Runtime\WorkflowFieldRegistryBuilder.cs" />
     <Compile Include="Runtime\WorkflowRunner.cs" />
     <Compile Include="Runtime\WorkflowRuntime.cs" />
     <Compile Include="App_Start\BundleConfig.cs" />

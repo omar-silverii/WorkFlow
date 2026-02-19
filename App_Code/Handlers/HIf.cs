@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -20,13 +21,14 @@ namespace Intranet.WorkflowStudio.WebForms
             //   field: "payload.status"   (sin ${})
             //   op:    == != >= <= > < contains not_contains starts_with ends_with exists not_exists empty not_empty
             //   value: string (puede incluir ${...})
-            string field = null, op = null, value = null;
+            string field = null, op = null, value = null, transform = null;
 
             if (p != null)
             {
                 if (p.TryGetValue("field", out var vf)) field = Convert.ToString(vf);
                 if (p.TryGetValue("op", out var vo)) op = Convert.ToString(vo);
                 if (p.TryGetValue("value", out var vv)) value = Convert.ToString(vv);
+                if (p.TryGetValue("transform", out var vt)) transform = Convert.ToString(vt);
             }
 
             // Modo avanzado (legacy): "expression"
@@ -40,7 +42,7 @@ namespace Intranet.WorkflowStudio.WebForms
             // Si hay simple (field/op), preferimos SIMPLE
             if (!string.IsNullOrWhiteSpace(field) || !string.IsNullOrWhiteSpace(op))
             {
-                ok = EvaluarSimple(field, op, value, ctx, out logText);
+                ok = EvaluarSimple(field, op, value, transform, ctx, out logText);
                 ctx.Log("[If] " + logText + " => " + (ok ? "True" : "False"));
                 return Task.FromResult(new ResultadoEjecucion { Etiqueta = ok ? "true" : "false" });
             }
@@ -50,7 +52,7 @@ namespace Intranet.WorkflowStudio.WebForms
             return Task.FromResult(new ResultadoEjecucion { Etiqueta = ok ? "true" : "false" });
         }
 
-        internal static bool EvaluarSimple(string field, string op, string value, ContextoEjecucion ctx, out string logExpr)
+        internal static bool EvaluarSimple(string field, string op, string value, string transform, ContextoEjecucion ctx, out string logExpr)
         {
             logExpr = "(sin condición)";
             if (ctx == null) return false;
@@ -99,12 +101,14 @@ namespace Intranet.WorkflowStudio.WebForms
             if (opNorm == "not_empty")
                 return left != null && !string.IsNullOrWhiteSpace(Convert.ToString(left));
 
-            // booleans
-            if (TryToBool(left, out var lb) && TryToBool(right, out var rb))
+            // booleans (solo para == / !=; para el resto seguir evaluando números)
+            if (opNorm == "==" || opNorm == "!=" || opNorm == "eq" || opNorm == "neq")
             {
-                if (opNorm == "==" || opNorm == "eq") return lb == rb;
-                if (opNorm == "!=" || opNorm == "neq") return lb != rb;
-                return false;
+                if (TryToBool(left, out var lb) && TryToBool(right, out var rb))
+                {
+                    if (opNorm == "==" || opNorm == "eq") return lb == rb;
+                    return lb != rb; // opNorm == "!=" || "neq"
+                }
             }
 
             // números
@@ -124,8 +128,8 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             // strings
-            var ls = Convert.ToString(left) ?? "";
-            var rs = Convert.ToString(right) ?? "";
+            var ls = ApplyTransform(Convert.ToString(left) ?? "", transform);
+            var rs = ApplyTransform(Convert.ToString(right) ?? "", transform);
 
             if (opNorm == "==" || opNorm == "eq")
                 return string.Equals(ls, rs, StringComparison.OrdinalIgnoreCase);
@@ -147,6 +151,28 @@ namespace Intranet.WorkflowStudio.WebForms
 
             // fallback: no soportado
             return false;
+        }
+        private static string ApplyTransform(string s, string transform)
+        {
+            s = s ?? "";
+            var t = (transform ?? "").Trim().ToLowerInvariant();
+
+            switch (t)
+            {
+                case "trim":
+                    return s.Trim();
+
+                case "lower":
+                    return s.ToLowerInvariant();
+
+                case "upper":
+                    return s.ToUpperInvariant();
+
+                case "none":
+                case "":
+                default:
+                    return s;
+            }
         }
 
         private static bool NeedsValue(string opNorm)
@@ -271,12 +297,14 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 logExpr = "${" + lhsPath + "} " + op + " " + rhsRaw;
 
-                // booleans
-                if (TryToBool(left, out var lb) && TryToBool(right, out var rb))
+                // booleans (solo para == / !=; para el resto seguir evaluando números)
+                if (op == "==" || op == "!=")
                 {
-                    if (op == "==") return lb == rb;
-                    if (op == "!=") return lb != rb;
-                    return false;
+                    if (TryToBool(left, out var lb) && TryToBool(right, out var rb))
+                    {
+                        if (op == "==") return lb == rb;
+                        return lb != rb; // op == "!="
+                    }
                 }
 
                 // números
@@ -359,6 +387,10 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             d = 0m;
             if (o == null) return false;
+
+            // Desenvuelve JValue (Newtonsoft) si viene del JSON
+            if (o is JValue jv)
+                o = jv.Value;
 
             if (o is decimal dd) { d = dd; return true; }
             if (o is int i) { d = i; return true; }

@@ -166,6 +166,7 @@
     <script src="Scripts/workflow.ui.js?v=dev200"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
+    <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.core.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.file.read.js?v=dev201"></script>
     <script src="Scripts/inspectors/inspector.file.write.js?v=dev200"></script>    
@@ -173,6 +174,7 @@
     <script src="Scripts/inspectors/inspector.edge.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.http.request.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.if.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.control.switch.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.delay.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.control.loop.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.retry.js?v=dev200"></script>

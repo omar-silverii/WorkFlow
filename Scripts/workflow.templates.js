@@ -41,12 +41,145 @@
     merge('control.if', { field: 'payload.status', op: '==', value: '200' });
 
     mergeGroup('control.if.templates', {
-        status_200: { label: 'status == 200', field: 'payload.status', op: '==', value: '200' },
-        sql_rows_gt_0: { label: 'sql.rows > 0', field: 'sql.rows', op: '>', value: '0' },
-        has_payload_nro: { label: 'Existe payload.data.nro', field: 'payload.data.nro', op: 'exists' },
-        equals_ok: { label: 'payload.result == "OK"', field: 'payload.result', op: '==', value: 'OK' },
-        score_ge_700: { label: 'payload.score >= 700', field: 'payload.score', op: '>=', value: '700' },
+        // =========================
+        // HTTP / INTEGRACIONES
+        // =========================
+        http_status_200: {
+            label: 'HTTP: status == 200',
+            field: 'payload.status',
+            op: '==',
+            value: '200'
+        },
+
+        http_status_2xx: {
+            label: 'HTTP: status entre 200 y 299',
+            field: 'payload.status',
+            op: '>=',
+            value: '200'
+            // Nota: para 2xx completo se usa otro IF: status <= 299
+            // (preferimos mantener plantillas simples)
+        },
+
+        http_status_le_299: {
+            label: 'HTTP: status <= 299',
+            field: 'payload.status',
+            op: '<=',
+            value: '299'
+        },
+
+        // =========================
+        // SQL / CONSULTAS
+        // =========================
+        sql_rows_gt_0: {
+            label: 'SQL: hay registros (rows > 0)',
+            field: 'sql.rows',
+            op: '>',
+            value: '0'
+        },
+
+        // =========================
+        // EXISTENCIA / VACÍO
+        // =========================
+        campo_existe: {
+            label: 'Campo existe',
+            field: 'payload.campo',
+            op: 'exists'
+        },
+
+        campo_no_existe: {
+            label: 'Campo NO existe',
+            field: 'payload.campo',
+            op: 'not_exists'
+        },
+
+        campo_vacio: {
+            label: 'Campo vacío',
+            field: 'payload.campo',
+            op: 'empty'
+        },
+
+        campo_no_vacio: {
+            label: 'Campo NO vacío',
+            field: 'payload.campo',
+            op: 'not_empty'
+        },
+
+        // =========================
+        // TEXTO (CON TRANSFORM)
+        // =========================
+        texto_igual_normalizado: {
+            label: 'Texto igual (trim)',
+            field: 'payload.texto',
+            transform: 'trim',
+            op: '==',
+            value: 'VALOR'
+        },
+
+        texto_contiene_ci: {
+            label: 'Texto contiene (sin distinguir mayúsculas)',
+            field: 'payload.texto',
+            transform: 'lower',
+            op: 'contains',
+            value: 'valor'
+        },
+
+        texto_no_contiene_ci: {
+            label: 'Texto NO contiene (sin distinguir mayúsculas)',
+            field: 'payload.texto',
+            transform: 'lower',
+            op: 'not_contains',
+            value: 'valor'
+        },
+
+        texto_empieza_con_ci: {
+            label: 'Texto empieza con (sin distinguir mayúsculas)',
+            field: 'payload.texto',
+            transform: 'lower',
+            op: 'starts_with',
+            value: 'prefijo'
+        },
+
+        texto_termina_con_ci: {
+            label: 'Texto termina con (sin distinguir mayúsculas)',
+            field: 'payload.texto',
+            transform: 'lower',
+            op: 'ends_with',
+            value: 'sufijo'
+        },
+
+        // =========================
+        // NUMÉRICOS (GENÉRICOS)
+        // =========================
+        numero_mayor_igual: {
+            label: 'Número mayor o igual (>=)',
+            field: 'payload.numero',
+            op: '>=',
+            value: '0'
+        },
+
+        numero_menor_igual: {
+            label: 'Número menor o igual (<=)',
+            field: 'payload.numero',
+            op: '<=',
+            value: '0'
+        },
+
+        numero_mayor: {
+            label: 'Número mayor (>)',
+            field: 'payload.numero',
+            op: '>',
+            value: '0'
+        },
+
+        numero_menor: {
+            label: 'Número menor (<)',
+            field: 'payload.numero',
+            op: '<',
+            value: '0'
+        }
     });
+
+
 
     // --- SWITCH
     merge('control.switch', { expr: '${payload.tipo}', cases: ['A', 'B'], defaultLabel: 'Otro' });

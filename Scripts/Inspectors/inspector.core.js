@@ -13,7 +13,11 @@
         function addRow(k, v) {
             const tr = el('tr');
             const kIn = el('input', 'input'); kIn.placeholder = 'nombre'; if (k != null) kIn.value = k;
-            const vIn = el('input', 'input'); vIn.placeholder = 'valor'; if (v != null) vIn.value = v;
+            const vIn = el('textarea', 'input');
+            vIn.placeholder = 'valor';
+            if (v != null) vIn.value = v;
+            vIn.rows = 2;
+            vIn.style.resize = 'vertical';
             tr.appendChild(kIn); tr.appendChild(vIn); tbl.appendChild(tr);
             function maybeAddAnother() {
                 const rows = tbl.querySelectorAll('tr');
@@ -54,6 +58,22 @@
     }
     function btn(text) { const b = el('button', 'btn'); b.type = 'button'; b.textContent = text; return b; }
 
+    function inputText(value, placeholder) {
+        const i = el('input', 'input');
+        if (value != null) i.value = value;
+        if (placeholder) i.placeholder = placeholder;
+        return i;
+    }
+
+    function textArea(value, placeholder, rows) {
+        const t = el('textarea', 'input'); // usa misma clase "input" para estilo consistente
+        if (value != null) t.value = value;
+        if (placeholder) t.placeholder = placeholder;
+        t.rows = rows || 3;
+        t.style.resize = 'vertical';
+        return t;
+    }
+
     // ========== REGISTRO ==========
     const registry = Object.create(null);
     function register(key, renderer) { registry[key] = renderer; }
@@ -91,7 +111,10 @@
             return s;
         })();
 
-        const ta = el('textarea', 'textarea'); ta.value = JSON.stringify(node.params || {}, null, 2);
+        const ta = el('textarea', 'input');
+        ta.value = JSON.stringify(node.params || {}, null, 2);
+        ta.rows = 10;
+        ta.style.resize = 'vertical';
         const sPar = section('Parámetros (JSON)', ta);
 
         const bSave = btn('Guardar');
@@ -200,5 +223,9 @@
         }
     }
 
-    window.WF_Inspector = { register, render, helpers: { $, el, kvTable, section, rowButtons, btn } };
+    window.WF_Inspector = {
+        register,
+        render,
+        helpers: { $, el, kvTable, section, rowButtons, btn, inputText, textArea }
+    };
 })();

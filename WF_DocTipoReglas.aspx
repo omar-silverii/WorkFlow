@@ -96,14 +96,6 @@
                             <input id="inpCampo" type="text" placeholder="Ej: Total" />
                         </div>
 
-                        <div style="max-width:140px;">
-                            <label>Destino</label>
-                            <select id="selDestino">
-                                <option value="input">input.* (legacy)</option>
-                                <option value="biz">biz.* (nuevo)</option>
-                            </select>
-                        </div>
-
                         <div style="max-width:160px;">
                             <label>TipoDato</label>
                             <select id="selTipoDato">
@@ -180,8 +172,8 @@
 
                     <div class="ws-row mt-2">
                         <div>
-                            <input id="fileTxt" type="file" accept=".txt" />
-                            <div class="ws-muted small">Por ahora .txt. Docx/PDF se integra después con tu pipeline real.</div>
+                            <input id="fileTxt" type="file" accept=".txt,.pdf,.docx" />
+                            <div class="ws-muted small">Soporta .txt, .docx y .pdf (extrae texto, sin OCR).</div>
                         </div>
                         <div style="max-width:160px;">
                             <button type="button" id="btnLoadPreview" class="btn btn-outline-secondary w-100">Cargar preview</button>
@@ -210,7 +202,7 @@
         const btnReload = document.getElementById('btnReload');
 
         const inpCampo = document.getElementById('inpCampo');
-        const selDestino = document.getElementById('selDestino');
+        
         const selTipoDato = document.getElementById('selTipoDato');
         const inpOrden = document.getElementById('inpOrden');
         const inpGrupo = document.getElementById('inpGrupo');
@@ -231,14 +223,18 @@
 
         let reglas = [];
         let editingId = 0;
+        let lastPickedLabel = '';
 
-        function normalizeKey(s) {
+        function normalizeCampo(s) {
             s = (s || '').trim();
             if (!s) return 'campo';
             s = s.toLowerCase();
             s = s.normalize('NFD').replace(/\p{Diacritic}/gu, '');
-            s = s.replace(/[^a-z0-9]+/g, '_');
+            // permitimos letras, números, underscore y punto
+            s = s.replace(/[^a-z0-9._]+/g, '_');
             s = s.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+            // evita ".."
+            s = s.replace(/\.+/g, '.').replace(/^\.+|\.+$/g, '');
             return s || 'campo';
         }
 
@@ -281,6 +277,31 @@
 
         function escapeHtml(s) {
             return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function escRegex(s) {
+            return (s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Genera regex de forma "segura" y automática.
+        // - Si detecta label (ej Motivo), captura la 1ra línea no vacía después del label.
+        // - Si no hay label, captura EXACTAMENTE lo seleccionado (con límites de línea) para no “derivar”.
+        function buildAutoRegex(selectedValue, labelDetected) {
+            const val = (selectedValue || '').trim();
+            const lab = (labelDetected || '').trim();
+
+            if (!val) return '';
+
+            // Caso "label: valor en líneas siguientes"
+            if (lab) {
+                // Captura una sola línea (no vacía) después del label
+                // Ej: Motivo:\nReposición automática...
+                return escRegex(lab) + "\\s*:\\s*(?:\\r?\\n)+\\s*([^\\r\\n]+)";
+            }
+
+            // Default: exact match de la selección (para evitar que capture otra cosa)
+            const ex = escRegex(val);
+            return "(?:^|\\r?\\n)\\s*(" + ex + ")\\s*(?:\\r?\\n|$)";
         }
 
         function renderReglas() {
@@ -331,7 +352,6 @@
             inpOrden.value = 10;
             inpGrupo.value = 1;
             selActivo.value = '1';
-            if (selDestino) selDestino.value = 'input';
             inpEjemplo.value = '';
             taHint.value = '';
         }
@@ -367,6 +387,28 @@
             inpEjemplo.value = selected;
             taHint.value = ctx;
 
+            // Detecta label anterior tipo "Motivo:" (una línea que termina en ":")
+            lastPickedLabel = '';
+            try {
+                const upto = full.substring(0, idx);
+                const lines = upto.replace(/\r\n/g, "\n").split("\n");
+
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const ln = (lines[i] || '').trim();
+                    if (!ln) continue;
+
+                    // Ej: "Motivo:" / "Aprobación requerida:" / "Solicitante:"
+                    if (/^[A-Za-zÁÉÍÓÚÑáéíóúñ][^:\n]{0,40}:\s*$/.test(ln)) {
+                        lastPickedLabel = ln.replace(/:\s*$/, '');
+                        break;
+                    }
+
+                    // si encontramos una línea “normal” y ya estamos lejos, cortamos
+                    if (ln.length > 0 && ln.indexOf(':') === -1 && (lines.length - i) > 10) break;
+                }
+            } catch { /* no rompe */ }
+
+
             setStatus('Ejemplo capturado ✅', true);
         }
 
@@ -374,22 +416,43 @@
             setTimeout(captureSelectionFromPreview, 0);
         });
 
+        async function apiLoadPreviewFile(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+
+            const r = await fetch('/Api/DocPreview.ashx', {
+                method: 'POST',
+                body: fd
+            });
+
+            if (!r.ok) throw new Error('DocPreview ' + r.status);
+            return await r.json();
+        }
+
         btnLoadPreview.onclick = async () => {
             try {
+                // 1) Si hay archivo, lo mandamos al server para extraer texto real
                 if (fileTxt.files && fileTxt.files.length > 0) {
                     const f = fileTxt.files[0];
-                    const txt = await f.text();
-                    prePreview.textContent = txt;
-                    setStatus('Preview cargado desde archivo ✅', true);
+                    const resp = await apiLoadPreviewFile(f);
+                    if (!resp.ok) { setStatus(resp.error || 'Error preview', false); return; }
+
+                    prePreview.textContent = resp.text || '';
+                    taPreviewSrc.value = resp.text || '';
+                    setStatus('Preview cargado ✅ (' + (resp.modeUsed || 'auto') + ')', true);
                     return;
                 }
+
+                // 2) Si no hay archivo, usamos texto pegado
                 prePreview.textContent = taPreviewSrc.value || '';
                 setStatus('Preview cargado desde texto ✅', true);
+
             } catch (e) {
                 console.warn(e);
-                setStatus('Error cargando preview', false);
+                setStatus('Error cargando preview: ' + e.message, false);
             }
         };
+
 
         btnGuardar.onclick = async () => {
             const codigo = (selDocTipo.value || '').trim();
@@ -398,24 +461,27 @@
             const campoRaw = (inpCampo.value || '').trim();
             if (!campoRaw) { setStatus('Falta Campo', false); return; }
 
-            let campoFinal = campoRaw;
-            const destino = (selDestino && selDestino.value) ? selDestino.value : 'input';
-
-            if (campoRaw.indexOf('.') === -1 && destino === 'biz') {
-                campoFinal = 'biz.' + normalizeKey(campoRaw);
-            }
+            const campoFinal = normalizeCampo(campoRaw);
+            const ejemplo = (inpEjemplo.value || '').trim();
+            const labelDetected = lastPickedLabel || '';
+            const autoRegex = buildAutoRegex(ejemplo, labelDetected);
 
             const payload = {
                 id: editingId,
                 docTipoCodigo: codigo,
-                campo: campoFinal,
+                campo: campoFinal,            // <- relativo SIEMPRE
                 tipoDato: selTipoDato.value,
                 orden: parseInt(inpOrden.value || '0', 10) || 0,
                 grupo: parseInt(inpGrupo.value || '1', 10) || 1,
                 activo: selActivo.value === '1',
                 ejemplo: (inpEjemplo.value || '').trim(),
                 hintContext: (taHint.value || '').trim(),
-                modo: 'LabelValue'
+                modo: 'LabelValue',
+                 // ✅ NUEVO: la página manda regex final (usuario NO ve regex)
+                regex: autoRegex,
+
+                // ✅ NUEVO: útil para debug/auditoría (opcional)
+                labelDetected: labelDetected
             };
 
             try {

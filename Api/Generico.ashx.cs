@@ -751,6 +751,7 @@ SELECT
             public string hintContext { get; set; }
             public string modo { get; set; }         // LabelValue|...
             public string regex { get; set; }        // generado
+            public string labelDetected { get; set; }  // opcional (para HintLabel)
         }
 
         private string ReadRequestBody(HttpContext ctx)
@@ -937,9 +938,22 @@ ORDER BY r.Orden, r.Id;", cn))
                 return;
             }
 
-            // Generar regex acá (NO en SQL)
-            var regex = BuildRegex(dto.tipoDato, dto.ejemplo, dto.hintContext);
+            // ✅ Si el front mandó regex (auto), lo respetamos.
+            // ✅ Si no, usamos el generador actual (compatibilidad).
+            var regex = (dto.regex ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(regex))
+            {
+                regex = BuildRegex(dto.tipoDato, dto.ejemplo, dto.hintContext);
+            }
+
+            // (opcional) si el front manda labelDetected y no vino hintLabel, lo guardamos como HintLabel
+            if (string.IsNullOrWhiteSpace(dto.hintLabel) && !string.IsNullOrWhiteSpace(dto.labelDetected))
+            {
+                dto.hintLabel = dto.labelDetected;
+            }
+
             var grupo = (dto.grupo <= 0 ? 1 : dto.grupo);
+
 
             int docTipoId = 0;
 

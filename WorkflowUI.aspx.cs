@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Security.Policy;
 using System.Web;
 using System.Web.Script.Services;
 using System.Web.Services;
@@ -305,7 +306,14 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     // control.if
                     if (type == "control.if")
                     {
-                        if (string.IsNullOrWhiteSpace((string)par["expression"])) { message = $"Nodo {id}: 'expression' requerido."; return false; }
+                        // Acepta:
+                        //  - legacy: Parameters.expression
+                        //  - simple: Parameters.field + Parameters.op (+Parameters.value opcional)
+                        var hasExpr = !string.IsNullOrWhiteSpace((string)par["expression"]);
+                        var hasField = !string.IsNullOrWhiteSpace((string)par["field"]);
+                        var hasOp = !string.IsNullOrWhiteSpace((string)par["op"]);
+                        if (!hasExpr && !(hasField && hasOp))
+                        { message = $"Nodo {id}: falta 'expression' (legacy) o 'field'+'op' (simple)."; return false; }
                         perNodeAllowed[id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "true", "false" };
                     }
 

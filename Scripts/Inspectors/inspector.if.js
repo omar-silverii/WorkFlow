@@ -3,154 +3,204 @@
     const { el, section, rowButtons, btn } = helpers;
 
     function opt(sel, value, text) {
-        const o = document.createElement('option');
-        o.value = value; o.textContent = text;
+        const o = document.createElement("option");
+        o.value = value;
+        o.textContent = text;
         sel.appendChild(o);
     }
 
-    function setVisible(elm, vis) {
-        if (!elm) return;
-        elm.style.display = vis ? '' : 'none';
+    function setVisible(elem, vis) {
+        if (!elem) return;
+        elem.style.display = vis ? "" : "none";
     }
 
-    register('control.if', (node, ctx, dom) => {
+    register("control.if", (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
-        const { body, title, sub } = dom; body.innerHTML = '';
-        if (title) title.textContent = node.label || 'If';
-        if (sub) sub.textContent = node.key || '';
+        const { body, title, sub } = dom;
+
+        body.innerHTML = "";
+        if (title) title.textContent = node.label || "If";
+        if (sub) sub.textContent = node.key || "";
 
         const p = node.params || {};
 
-        // ===== Label
-        const inpLbl = el('input', 'input'); inpLbl.value = node.label || '';
-        const sLbl = section('Etiqueta (label)', inpLbl);
+        // =========================
+        // Label
+        // =========================
+        const inpLbl = el("input", "input");
+        inpLbl.value = node.label || "";
+        const sLbl = section("Etiqueta (label)", inpLbl);
 
-        // ===== Plantillas (simple + legacy)
-        const selTpl = el('select', 'input');
-        (function () {
-            const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if.templates']) || {};
-            opt(selTpl, '', '— Elegir —');
-            Object.keys(pack).forEach(k => {
-                const t = pack[k] || {};
-                opt(selTpl, k, (t.label || k));
+        // =========================
+        // Campo (path) + picker
+        // =========================
+        const inpField = el("input", "input");
+        inpField.value = p.field || "";
+        inpField.placeholder = "Ej: biz.oc.empresa";
+
+        const btnPick = btn("Elegir…");
+        btnPick.style.marginTop = "6px";
+
+        const fieldWrap = el("div");
+        fieldWrap.appendChild(inpField);
+        fieldWrap.appendChild(btnPick);
+
+        const sField = section("Campo", fieldWrap);
+
+        btnPick.onclick = () => {
+            if (!window.WF_FieldPicker || typeof window.WF_FieldPicker.open !== "function") {
+                alert("WF_FieldPicker no está cargado.");
+                return;
+            }
+            window.WF_FieldPicker.open({
+                ctx,
+                title: "Elegir campo (Estado del Workflow)",
+                onPick: (v) => {
+                    inpField.value = v || "";
+                    refreshSummary();
+                }
             });
-        })();
-        const sTpl = section('Plantilla', selTpl);
+        };
 
-        // ===== Modo SIMPLE (recomendado para administrativos)
-        const inpField = el('input', 'input'); inpField.value = p.field || '';
-        inpField.placeholder = 'Ej: payload.status o biz.doc.search.count';
+        // =========================
+        // Transform
+        // =========================
+        const selTransform = el("select", "input");
+        opt(selTransform, "none", "Sin transformación");
+        opt(selTransform, "trim", "Trim");
+        opt(selTransform, "lower", "Minúsculas");
+        opt(selTransform, "upper", "Mayúsculas");
+        selTransform.value = p.transform || "none";
+        const sTransform = section("Transform", selTransform);
 
-        const selOp = el('select', 'input');
-        opt(selOp, '==', 'Igual (=)');
-        opt(selOp, '!=', 'Distinto (!=)');
-        opt(selOp, '>=', 'Mayor o igual (>=)');
-        opt(selOp, '<=', 'Menor o igual (<=)');
-        opt(selOp, '>', 'Mayor (>)');
-        opt(selOp, '<', 'Menor (<)');
-        opt(selOp, 'contains', 'Contiene');
-        opt(selOp, 'not_contains', 'No contiene');
-        opt(selOp, 'starts_with', 'Empieza con');
-        opt(selOp, 'ends_with', 'Termina con');
-        opt(selOp, 'exists', 'Existe');
-        opt(selOp, 'not_exists', 'No existe');
-        opt(selOp, 'empty', 'Vacío');
-        opt(selOp, 'not_empty', 'No vacío');
+        // =========================
+        // Operador
+        // =========================
+        const selOp = el("select", "input");
+        opt(selOp, "==", "Igual (=)");
+        opt(selOp, "!=", "Distinto (!=)");
+        opt(selOp, ">=", "Mayor o igual (>=)");
+        opt(selOp, "<=", "Menor o igual (<=)");
+        opt(selOp, ">", "Mayor (>)");
+        opt(selOp, "<", "Menor (<)");
+        opt(selOp, "contains", "Contiene");
+        opt(selOp, "not_contains", "No contiene");
+        opt(selOp, "starts_with", "Empieza con");
+        opt(selOp, "ends_with", "Termina con");
+        opt(selOp, "exists", "Existe");
+        opt(selOp, "not_exists", "No existe");
+        opt(selOp, "empty", "Vacío");
+        opt(selOp, "not_empty", "No vacío");
 
-        selOp.value = p.op || '==';
+        selOp.value = p.op || "==";
+        const sOp = section("Operador", selOp);
 
-        const inpVal = el('input', 'input'); inpVal.value = p.value || '';
-        inpVal.placeholder = 'Valor (puede usar ${...})';
+        // =========================
+        // Valor (multilinea)
+        // =========================
+        const inpVal = el("textarea", "input");
+        inpVal.value = p.value || "";
+        inpVal.rows = 3;
+        inpVal.style.resize = "vertical";
+        const sVal = section("Valor", inpVal);
 
-        const sField = section('Campo (path)', inpField);
-        const sOp = section('Operador', selOp);
-        const sVal = section('Valor', inpVal);
+        // =========================
+        // Modo técnico
+        // =========================
+        const chkAdv = el("input", "input");
+        chkAdv.type = "checkbox";
+        chkAdv.checked = !!p.expression;
+        const sAdvToggle = section("Modo técnico (solo admins)", chkAdv);
 
-        function refreshValueVisibility() {
-            const opv = (selOp.value || '').toLowerCase();
-            const needs = !(opv === 'exists' || opv === 'not_exists' || opv === 'empty' || opv === 'not_empty');
-            setVisible(sVal, needs);
-        }
-        selOp.onchange = refreshValueVisibility;
-        refreshValueVisibility();
-
-        // ===== Modo AVANZADO (oculto por defecto)
-        const chkAdv = el('input', 'input');
-        chkAdv.type = 'checkbox';
-        chkAdv.checked = !!p.expression; // si ya venía legacy, lo mostramos al usuario
-        const sAdvToggle = section('Modo avanzado (solo admins)', chkAdv);
-
-        const inpExpr = el('input', 'input'); inpExpr.value = p.expression || '';
-        inpExpr.placeholder = 'Ej: ${payload.status} == 200';
-        const sExpr = section('Expresión (legacy)', inpExpr);
+        const inpExpr = el("textarea", "input");
+        inpExpr.value = p.expression || "";
+        inpExpr.rows = 3;
+        inpExpr.style.resize = "vertical";
+        const sExpr = section("Expresión técnica", inpExpr);
 
         function refreshAdvancedVisibility() {
             setVisible(sExpr, !!chkAdv.checked);
         }
-        chkAdv.onchange = refreshAdvancedVisibility;
-        refreshAdvancedVisibility();
 
-        // ===== Botones
-        const bTpl = btn('Insertar plantilla');
-        const bSave = btn('Guardar');
-        const bDel = btn('Eliminar nodo');
+        function refreshValueVisibility() {
+            const opv = selOp.value;
+            const hide = (opv === "exists" || opv === "not_exists" || opv === "empty" || opv === "not_empty");
+            setVisible(sVal, !hide);
+        }
 
-        bTpl.onclick = () => {
-            const pack = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if.templates']) || {};
-            const tpl = (selTpl.value && pack[selTpl.value]) ? pack[selTpl.value] : ((window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['control.if']) || {});
+        // =========================
+        // Summary
+        // =========================
+        const summaryBox = el("div");
+        summaryBox.style.marginTop = "8px";
+        summaryBox.style.padding = "8px";
+        summaryBox.style.background = "#f5f7fa";
+        summaryBox.style.border = "1px solid #d0d7de";
+        summaryBox.style.borderRadius = "6px";
+        summaryBox.style.fontSize = "13px";
 
-            // Plantillas simples
-            if (tpl.field || tpl.op || tpl.value) {
-                inpField.value = tpl.field || '';
-                selOp.value = tpl.op || '==';
-                inpVal.value = (tpl.value != null ? String(tpl.value) : '');
-                // al usar simple, NO activamos avanzado y limpiamos expression
-                chkAdv.checked = false;
-                inpExpr.value = '';
-                refreshValueVisibility();
-                refreshAdvancedVisibility();
-                return;
+        function buildSummary() {
+            const field = (inpField.value || "").trim() || "campo";
+            const op = selOp.value;
+            const val = (inpVal.value || "").trim();
+            const transform = selTransform.value;
+
+            let txt = "Si " + field;
+
+            if (transform !== "none") txt += " (" + transform + ")";
+
+            const map = {
+                "==": "es igual a",
+                "!=": "es distinto de",
+                ">=": "es mayor o igual a",
+                "<=": "es menor o igual a",
+                ">": "es mayor que",
+                "<": "es menor que",
+                "contains": "contiene",
+                "not_contains": "NO contiene",
+                "starts_with": "empieza con",
+                "ends_with": "termina con",
+                "exists": "existe",
+                "not_exists": "NO existe",
+                "empty": "está vacío",
+                "not_empty": "NO está vacío"
+            };
+
+            txt += " " + (map[op] || op);
+
+            const noVal = (op === "exists" || op === "not_exists" || op === "empty" || op === "not_empty");
+            if (!noVal && val) txt += ' "' + val + '"';
+
+            return txt;
+        }
+
+        function refreshSummary() {
+            const text = buildSummary();
+            summaryBox.textContent = text;
+
+            const elNode = nodeEl(node.id);
+            if (elNode) {
+                const b = elNode.querySelector(".node__body");
+                if (b) b.textContent = text;
             }
+        }
 
-            // Legacy
-            chkAdv.checked = true;
-            inpExpr.value = tpl.expression || '${payload.status} == 200';
-            refreshAdvancedVisibility();
-        };
+        // =========================
+        // Guardar
+        // =========================
+        const bSave = btn("Guardar");
+        const bDel = btn("Eliminar nodo");
 
         bSave.onclick = () => {
-            const next = Object.assign({}, node.params || {});
+            const next = {};
 
-            const field = (inpField.value || '').trim();
-            const op = (selOp.value || '').trim();
-            const val = (inpVal.value || '').trim();
-
-            const adv = !!chkAdv.checked;
-            const expr = (inpExpr.value || '').trim();
-
-            // REGLA EMPRESARIAL:
-            // - Si NO está tildado "avanzado": siempre guardamos SIMPLE y borramos expression
-            // - Si está tildado "avanzado": guardamos expression (si tiene algo) y borramos simple
-            if (!adv) {
-                next.field = field;
-                next.op = op;
-                if (val) next.value = val; else delete next.value;
-                delete next.expression;
-                inpExpr.value = ''; // evita que quede algo “viejo” visualmente
+            if (!chkAdv.checked) {
+                next.field = (inpField.value || "").trim();
+                next.op = selOp.value;
+                if (selTransform.value !== "none") next.transform = selTransform.value;
+                if ((inpVal.value || "").trim()) next.value = (inpVal.value || "").trim();
             } else {
-                if (!expr) {
-                    // si lo activó pero no escribió, lo tratamos como simple igualmente
-                    next.field = field;
-                    next.op = op;
-                    if (val) next.value = val; else delete next.value;
-                    delete next.expression;
-                    chkAdv.checked = false;
-                    inpExpr.value = '';
-                    refreshAdvancedVisibility();
-                } else {
-                    next.expression = expr;
-                    delete next.field; delete next.op; delete next.value;
-                }
+                next.expression = (inpExpr.value || "").trim();
             }
 
             node.label = inpLbl.value || node.label;
@@ -158,20 +208,14 @@
 
             ensurePosition(node);
 
-            const elNode = nodeEl(node.id);
-            if (elNode) {
-                const t = elNode.querySelector('.node__title');
-                if (t) t.textContent = node.label;
-            }
-
-            window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);
-
+            window.WF_Inspector.render({ type: "node", id: node.id }, ctx, dom);
             setTimeout(() => {
-                try { ctx.drawEdges(); } catch (e) { console.warn('drawEdges post-save', e); }
+                try { ctx.drawEdges(); } catch (e) { console.warn("drawEdges post-save", e); }
             }, 0);
         };
 
         bDel.onclick = () => {
+            // MUTAR arrays reales (como el inspector genérico)
             if (Array.isArray(ctx.edges)) {
                 for (let i = ctx.edges.length - 1; i >= 0; i--) {
                     const e = ctx.edges[i];
@@ -185,22 +229,47 @@
                     if (n && n.id === node.id) ctx.nodes.splice(i, 1);
                 }
             }
+
             const elNode = ctx.nodeEl(node.id);
             if (elNode) elNode.remove();
+
             ctx.drawEdges();
             ctx.select(null);
         };
 
-        body.appendChild(sLbl);
-        body.appendChild(sTpl);
+        // =========================
+        // Eventos UI
+        // =========================
+        inpField.oninput = refreshSummary;
+        selTransform.onchange = refreshSummary;
+        inpVal.oninput = refreshSummary;
+        inpExpr.oninput = refreshSummary;
 
+        selOp.onchange = () => {
+            refreshValueVisibility();
+            refreshSummary();
+        };
+
+        chkAdv.onchange = () => {
+            refreshAdvancedVisibility();
+            refreshSummary();
+        };
+
+        // =========================
+        // Render final
+        // =========================
+        body.appendChild(sLbl);
         body.appendChild(sField);
+        body.appendChild(sTransform);
         body.appendChild(sOp);
         body.appendChild(sVal);
-
+        body.appendChild(summaryBox);
         body.appendChild(sAdvToggle);
         body.appendChild(sExpr);
+        body.appendChild(rowButtons(bSave, bDel));
 
-        body.appendChild(rowButtons(bTpl, bSave, bDel));
+        refreshAdvancedVisibility();
+        refreshValueVisibility();
+        refreshSummary();
     });
 })();
