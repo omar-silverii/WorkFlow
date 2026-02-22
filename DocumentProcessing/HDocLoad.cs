@@ -218,50 +218,217 @@ ORDER BY Grupo, Orden, Id";
         // =========================
         private void ApplyRules(ContextoEjecucion ctx, string prefix, string text, List<RuleRow> rules)
         {
+            if (rules == null || rules.Count == 0) return;
+
+            const string ITEM_PREFIX = "items[].";
+            const string ITEM_BLOCK_CAMPO = "items[].__block";
+
+            // 1) Separar reglas
+            RuleRow itemBlock = null;
+            var itemFields = new List<RuleRow>();
+            var headerFields = new List<RuleRow>();
+
             foreach (var r in rules)
             {
-                if (string.IsNullOrWhiteSpace(r.Campo) || string.IsNullOrWhiteSpace(r.Regex))
+                var campo = (r.Campo ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(campo) || string.IsNullOrWhiteSpace(r.Regex))
                     continue;
 
-                string val = null;
-                try
+                if (campo.Equals(ITEM_BLOCK_CAMPO, StringComparison.OrdinalIgnoreCase))
                 {
-                    var m = Regex.Match(text, r.Regex, RegexOptions.Multiline);
-                    if (m.Success)
-                    {
-                        int grp = 1;
-                        if (grp < m.Groups.Count)
-                            val = m.Groups[grp].Value;
-                        else
-                            val = m.Value;
-
-                        if (val != null) val = val.Trim();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    ctx.Log("[doc.load/rule-error] campo=" + r.Campo + " msg=" + ex.Message);
+                    itemBlock = r;
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(val))
+                if (campo.StartsWith(ITEM_PREFIX, StringComparison.OrdinalIgnoreCase))
+                {
+                    itemFields.Add(r);
+                    continue;
+                }
+
+                headerFields.Add(r);
+            }
+
+            // 2) Campos únicos (header) -> biz.{prefix}.{campo}
+            foreach (var r in headerFields)
+            {
+                string val = TryMatchValue(text, r.Regex, r.Grupo);
+
+                if (string.IsNullOrWhiteSpace(val))
                     continue;
 
-                string key = "biz." + prefix + "." + r.Campo;
+                string key = "biz." + prefix + "." + (r.Campo ?? "").Trim();
 
-                // Normalización de importes (para que >= funcione)
+                // Normalización de importes
                 if (IsImporte(r.TipoDato, r.Campo))
                 {
                     var dec = TryParseImporte(val);
                     if (dec.HasValue)
                     {
-                        ctx.Estado[key] = dec.Value; // decimal real
+                        ctx.Estado[key] = dec.Value;
                         continue;
                     }
                 }
 
-                ctx.Estado[key] = val;
+                ctx.Estado[key] = val.Trim();
             }
+
+            // 3) Items[] -> requiere ItemBlock
+            if (itemBlock == null || itemFields.Count == 0)
+                return;
+
+            List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
+
+            Regex rxBlock;
+            try
+            {
+                rxBlock = new Regex(itemBlock.Regex, RegexOptions.Multiline);
+            }
+            catch (Exception ex)
+            {
+                ctx.Log("[doc.load/items-error] ItemBlock regex inválida: " + ex.Message);
+                return;
+            }
+
+            var blocks = rxBlock.Matches(text ?? "");
+            foreach (Match bm in blocks)
+            {
+                if (!bm.Success) continue;
+
+                // Si el block tiene grupo 1, usamos eso como “contenido del bloque”.
+                // Si no, usamos el match completo.
+                string blockText = null;
+                if (bm.Groups != null && bm.Groups.Count > 1 && bm.Groups[1].Success)
+                    blockText = bm.Groups[1].Value;
+                else
+                    blockText = bm.Value;
+
+                if (string.IsNullOrWhiteSpace(blockText))
+                    continue;
+
+                var item = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var r in itemFields)
+                {
+                    // campo real dentro del item: "codigo", "descripcion", etc.
+                    var campoFull = (r.Campo ?? "").Trim();         // items[].codigo
+                    var innerPath = campoFull.Substring(ITEM_PREFIX.Length).Trim(); // codigo
+
+                    if (string.IsNullOrWhiteSpace(innerPath))
+                        continue;
+
+                    string val = TryMatchValue(blockText, r.Regex, r.Grupo);
+                    if (string.IsNullOrWhiteSpace(val))
+                        continue;
+
+                    object finalVal = val.Trim();
+
+                    if (IsImporte(r.TipoDato, innerPath))
+                    {
+                        var dec = TryParseImporte(val);
+                        if (dec.HasValue) finalVal = dec.Value;
+                    }
+
+                    SetDictPath(item, innerPath, finalVal);
+                }
+
+                if (item.Count > 0)
+                    items.Add(item);
+            }
+
+            // guardar en estado
+            string itemsKey = "biz." + prefix + ".items";
+            ctx.Estado[itemsKey] = items;
+            ctx.Estado["biz." + prefix + ".itemsCount"] = items.Count;
+
+            ctx.Log("[doc.load] Items: blocks=" + blocks.Count + " items=" + items.Count);
+        }
+
+        private string TryMatchValue(string text, string regex, int grupo)
+        {
+            if (string.IsNullOrWhiteSpace(regex)) return null;
+
+            int g = grupo; // si viene 0, devuelve match completo (Group 0)
+            if (g < 0) g = 1;
+
+            try
+            {
+                var m = Regex.Match(text ?? "", regex, RegexOptions.Multiline);
+                if (!m.Success) return null;
+
+                if (m.Groups != null && g < m.Groups.Count && m.Groups[g].Success)
+                    return m.Groups[g].Value;
+
+                return m.Value;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void SetDictPath(Dictionary<string, object> root, string path, object value)
+        {
+            // Soporta "a", "a.b", "a.b.c"
+            if (root == null) return;
+            path = (path ?? "").Trim();
+            if (path.Length == 0) return;
+
+            var parts = path.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return;
+
+            Dictionary<string, object> cur = root;
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var key = parts[i].Trim();
+                if (key.Length == 0) continue;
+
+                bool isLast = (i == parts.Length - 1);
+                if (isLast)
+                {
+                    cur[key] = value;
+                    return;
+                }
+
+                if (!cur.TryGetValue(key, out var next) || !(next is Dictionary<string, object>))
+                {
+                    var nd = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                    cur[key] = nd;
+                    cur = nd;
+                }
+                else
+                {
+                    cur = (Dictionary<string, object>)next;
+                }
+            }
+        }
+
+        private bool IsItemCampo(string campo)
+        {
+            if (string.IsNullOrWhiteSpace(campo))
+                return false;
+
+            campo = campo.Trim();
+
+            return campo.StartsWith("items[].", StringComparison.OrdinalIgnoreCase)
+                || campo.StartsWith("items[ ].", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string ItemFieldName(string campo)
+        {
+            if (string.IsNullOrWhiteSpace(campo))
+                return null;
+
+            campo = campo.Trim();
+
+            if (campo.StartsWith("items[].", StringComparison.OrdinalIgnoreCase))
+                return campo.Substring("items[].".Length);
+
+            if (campo.StartsWith("items[ ].", StringComparison.OrdinalIgnoreCase))
+                return campo.Substring("items[ ].".Length);
+
+            return null;
         }
 
         private bool IsImporte(string tipoDato, string campo)

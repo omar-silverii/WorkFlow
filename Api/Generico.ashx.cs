@@ -35,7 +35,9 @@ namespace Api
                 case "doctipo.reglas.save":
                     GuardarReglaExtract(ctx);
                     break;
-
+                case "doctipo.reglas.delete":
+                    EliminarReglaExtract(ctx);
+                    break;
                 // NUEVO (POST JSON)
                 case "doctipo.reglas.test":
                     ProbarReglaExtract(ctx);
@@ -876,7 +878,11 @@ ORDER BY r.Orden, r.Id;", cn))
                         if (label.Length >= 2 && label.Length <= 80)
                         {
                             var labelEsc = EscapeRegex(label);
-                            return labelEsc + "\\s*:\\s*" + cap;
+                            // Permite:
+                            // LABEL: Valor
+                            // LABEL:\nValor
+                            // LABEL:\n\n   Valor
+                            return labelEsc + "\\s*:\\s*(?:\\r?\\n\\s*)*" + cap;
                         }
                     }
 
@@ -1038,6 +1044,64 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
             public string regex { get; set; }
             public int grupo { get; set; }
             public string text { get; set; }
+        }
+
+        private class DeleteReq
+        {
+            public string docTipoCodigo { get; set; }
+            public int id { get; set; }
+        }
+
+        private void EliminarReglaExtract(HttpContext ctx)
+        {
+            var body = ReadRequestBody(ctx);
+            var js = new JavaScriptSerializer();
+            DeleteReq req;
+
+            try { req = js.Deserialize<DeleteReq>(body); }
+            catch
+            {
+                WriteJson(ctx, new { ok = false, error = "JSON inválido" });
+                return;
+            }
+
+            if (req == null || req.id <= 0)
+            {
+                WriteJson(ctx, new { ok = false, error = "Id inválido" });
+                return;
+            }
+
+            var codigo = (req.docTipoCodigo ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(codigo))
+            {
+                WriteJson(ctx, new { ok = false, error = "Falta docTipoCodigo" });
+                return;
+            }
+
+            using (var cn = new SqlConnection(Cs()))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+DELETE r
+FROM dbo.WF_DocTipoReglaExtract r
+INNER JOIN dbo.WF_DocTipo d ON d.DocTipoId = r.DocTipoId
+WHERE r.Id = @Id
+  AND d.Codigo = @Codigo;";
+
+                cmd.Parameters.AddWithValue("@Id", req.id);
+                cmd.Parameters.AddWithValue("@Codigo", codigo);
+
+                cn.Open();
+                var rows = cmd.ExecuteNonQuery();
+
+                if (rows <= 0)
+                {
+                    WriteJson(ctx, new { ok = false, error = "Regla no encontrada para DocTipo indicado" });
+                    return;
+                }
+            }
+
+            WriteJson(ctx, new { ok = true });
         }
 
         private void ProbarReglaExtract(HttpContext ctx)

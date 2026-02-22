@@ -114,31 +114,70 @@ namespace Intranet.WorkflowStudio.WebForms
 
         public static object ResolverPath(object root, string path)
         {
-            if (root == null || string.IsNullOrWhiteSpace(path)) return null;
-
-            var dict = root as IDictionary<string, object>;
-            if (dict != null && dict.TryGetValue(path, out var direct)) return direct;
+            if (root == null || string.IsNullOrWhiteSpace(path))
+                return null;
 
             var parts = path.Split('.');
             object curr = root;
 
-            foreach (var p in parts)
+            foreach (var raw in parts)
             {
-                if (curr == null) return null;
+                if (curr == null)
+                    return null;
 
-                if (curr is IDictionary<string, object> d)
+                // Soporte para índices tipo items[0]
+                string propName = raw;
+                int? index = null;
+
+                int bracketStart = raw.IndexOf('[');
+                if (bracketStart >= 0)
                 {
-                    d.TryGetValue(p, out curr);
+                    int bracketEnd = raw.IndexOf(']', bracketStart + 1);
+                    if (bracketEnd > bracketStart)
+                    {
+                        propName = raw.Substring(0, bracketStart);
+                        var inside = raw.Substring(bracketStart + 1, bracketEnd - bracketStart - 1);
+                        if (int.TryParse(inside, out var ix))
+                            index = ix;
+                    }
+                }
+
+                // Resolver propiedad
+                if (curr is IDictionary<string, object> dict)
+                {
+                    dict.TryGetValue(propName, out curr);
                 }
                 else if (curr is Newtonsoft.Json.Linq.JObject jobj)
                 {
-                    curr = jobj.TryGetValue(p, StringComparison.OrdinalIgnoreCase, out var tok) ? tok : null;
-                    if (curr is Newtonsoft.Json.Linq.JValue jv) curr = jv.Value;
+                    curr = jobj.TryGetValue(propName, StringComparison.OrdinalIgnoreCase, out var tok) ? tok : null;
+                    if (curr is Newtonsoft.Json.Linq.JValue jv)
+                        curr = jv.Value;
                 }
                 else
                 {
-                    var prop = curr.GetType().GetProperty(p);
+                    var prop = curr.GetType().GetProperty(propName);
                     curr = prop != null ? prop.GetValue(curr, null) : null;
+                }
+
+                // Aplicar índice si existe
+                if (index.HasValue)
+                {
+                    int ix = index.Value;
+
+                    if (curr is System.Collections.IList list)
+                    {
+                        curr = (ix >= 0 && ix < list.Count) ? list[ix] : null;
+                    }
+                    else if (curr is Newtonsoft.Json.Linq.JArray jarr)
+                    {
+                        curr = (ix >= 0 && ix < jarr.Count) ? jarr[ix] : null;
+                        if (curr is Newtonsoft.Json.Linq.JValue jv)
+                            curr = jv.Value;
+                    }
+                    else
+                    {
+                        curr = null;
+                    }
                 }
             }
 

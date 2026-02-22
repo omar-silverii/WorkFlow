@@ -6,7 +6,15 @@ namespace Intranet.WorkflowStudio.WebForms
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-            try { Topbar1.ActiveSection = "Documentos"; } catch { }
+            // Topbar activo siempre (postback o no)
+            try
+            {
+                Topbar1.ActiveSection = "Tareas";
+            }
+            catch
+            {
+                // si por alguna razón aún no está el control en el aspx, no rompemos la página
+            }
         }
     }
 }
