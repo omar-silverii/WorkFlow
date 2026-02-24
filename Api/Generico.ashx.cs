@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using Microsoft.Ajax.Utilities;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -792,12 +793,14 @@ SELECT
 SELECT r.Id, d.DocTipoId, d.Codigo,
        r.Campo, ISNULL(r.TipoDato,''), ISNULL(r.Grupo,1), ISNULL(r.Orden,0), ISNULL(r.Activo,1),
        ISNULL(r.Ejemplo,''), ISNULL(r.HintLabel,''), ISNULL(r.HintContext,''), ISNULL(r.Modo,''), ISNULL(r.Regex,'')
-FROM dbo.WF_DocTipo d
-JOIN dbo.WF_DocTipoReglaExtract r ON r.DocTipoId = d.DocTipoId
+FROM dbo.WF_DocTipo d WITH (NOLOCK)
+JOIN dbo.WF_DocTipoReglaExtract r WITH (NOLOCK) ON r.DocTipoId = d.DocTipoId
 WHERE d.Codigo = @Codigo
 ORDER BY r.Orden, r.Id;", cn))
             {
+                cmd.CommandTimeout = 5; // ✅ evita “colgado” por locks
                 cmd.Parameters.AddWithValue("@Codigo", codigo);
+
                 cn.Open();
                 using (var dr = cmd.ExecuteReader())
                 {
@@ -847,7 +850,7 @@ ORDER BY r.Orden, r.Id;", cn))
 
             if (td == "cuit") cap = "(\\d{2}-\\d{8}-\\d)";
             else if (td == "fecha") cap = "(\\d{2}/\\d{2}/\\d{4})";
-            else if (td == "importe") cap = "\\$\\s*([0-9]{1,3}(?:\\.[0-9]{3})*)";
+            else if (td == "importe") cap = "\\$\\s*([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})?)";
             else if (td == "numero") cap = "([0-9]+)";
             else if (td == "email") cap = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})";
             else cap = "([^\\r\\n]+)";
@@ -858,7 +861,7 @@ ORDER BY r.Orden, r.Id;", cn))
             if (!string.IsNullOrWhiteSpace(ctx) && !string.IsNullOrWhiteSpace(ex))
             {
                 // Trabajamos por líneas para evitar “agarrar medio documento”
-                var lines = ctx.Replace("\r\n", "\n").Split('\n');
+                var lines = ctx.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
                 foreach (var raw in lines)
                 {
                     var line = (raw ?? "").Trim();
@@ -873,11 +876,24 @@ ORDER BY r.Orden, r.Id;", cn))
                     {
                         var label = line.Substring(0, cpos).Trim();
 
-                        // Si el ejemplo es el LABEL (ej: "Nota de Pedido..." en vez del valor),
-                        // igual sirve: label = "Nota de Pedido..." y capturamos lo que viene después de ":"
                         if (label.Length >= 2 && label.Length <= 80)
                         {
                             var labelEsc = EscapeRegex(label);
+
+                            // ✅ NUEVO: Si hay ":" pero el valor NO está pegado (p.ej. tablas con "|" u otros separadores),
+                            // usamos un patrón más robusto: LABEL : (cualquier cosa corta) + capturador.
+                            // Esto resuelve casos tipo: "| | TOTAL: | $1.060.000"
+                            // y también: "TOTAL:   $1.060.000"
+                            var afterColon = line.Substring(cpos + 1);
+                            bool hasPipeAfter = afterColon.IndexOf('|') >= 0;
+
+                            if (hasPipeAfter)
+                            {
+                                // LABEL\s*:?\s*.*?\$?\s*(cap)
+                                // (cap ya incluye $ cuando tipoDato=importe, pero toleramos texto intermedio)
+                                return labelEsc + "\\s*:\\s*.*?" + cap;
+                            }
+
                             // Permite:
                             // LABEL: Valor
                             // LABEL:\nValor
@@ -908,8 +924,6 @@ ORDER BY r.Orden, r.Id;", cn))
                     }
 
                     // 3) Caso raro: el ejemplo está al inicio y NO hay ':'
-                    //    Si el ejemplo parece un label (ej: "Solicitante") capturamos lo siguiente.
-                    //    OJO: esto es un “mejor esfuerzo”, pero sigue siendo extracción.
                     if (idx == 0)
                     {
                         var exEsc = EscapeRegex(ex);
@@ -923,6 +937,57 @@ ORDER BY r.Orden, r.Id;", cn))
             return cap;
         }
 
+        private static string BuildTableColumnRegex(string ejemplo, string hintContext)
+        {
+            var ex = (ejemplo ?? "").Trim();
+            if (ex.Length == 0) return null;
+
+            var hc = (hintContext ?? "");
+            if (hc.Length == 0 || hc.IndexOf('|') < 0) return null;
+
+            // Normalizar saltos
+            hc = hc.Replace("\r\n", "\n").Replace("\r", "\n");
+
+            // Tomar una línea candidata: primera que tenga '|' y contenga el ejemplo
+            // (esto evita agarrar encabezados si el ejemplo está en una fila de datos)
+            string line = null;
+            foreach (var raw in hc.Split('\n'))
+            {
+                var ln = (raw ?? "").TrimEnd();
+                if (ln.Length == 0) continue;
+                if (ln.IndexOf('|') < 0) continue;
+                if (ln.IndexOf(ex, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                line = ln;
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(line))
+                return null;
+
+            // Split por columnas
+            var parts = line.Split('|').Select(p => (p ?? "").Trim()).ToList();
+            if (parts.Count < 2) return null;
+
+            // Encontrar en qué columna cae el ejemplo
+            int col = -1;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i].IndexOf(ex, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    col = i;
+                    break;
+                }
+            }
+
+            if (col < 0) return null;
+
+            // Construir regex que capture esa columna (sin asumir número de columnas fijo)
+            // ^\s*(?:[^|]*\|){col}\s*([^|]+?)\s*(?:\||$)
+            // - Captura el contenido de la columna col
+            // - Funciona para primera, intermedia y última columna
+            return @"^\s*(?:[^|]*\|){" + col + @"}\s*([^|]+?)\s*(?:\||$)";
+        }
 
         private void GuardarReglaExtract(HttpContext ctx)
         {
@@ -947,10 +1012,45 @@ ORDER BY r.Orden, r.Id;", cn))
             // ✅ Si el front mandó regex (auto), lo respetamos.
             // ✅ Si no, usamos el generador actual (compatibilidad).
             var regex = (dto.regex ?? "").Trim();
+
+            var campo = (dto.campo ?? "").Trim();
+            bool isItemBlock = campo.Equals("items[].__block", StringComparison.OrdinalIgnoreCase);
+            bool isItemField = campo.StartsWith("items[].", StringComparison.OrdinalIgnoreCase) && !isItemBlock;
+
             if (string.IsNullOrWhiteSpace(regex))
             {
-                regex = BuildRegex(dto.tipoDato, dto.ejemplo, dto.hintContext);
+                // 🟦 Caso profesional: items[] en TABLA (pipes)
+                // Inferimos columna a partir de Ejemplo + HintContext (sin hardcodear nombres)
+                if (isItemField && !string.IsNullOrWhiteSpace(dto.hintContext) && dto.hintContext.Contains("|"))
+                {
+                    regex = BuildTableColumnRegex(dto.ejemplo, dto.hintContext) ?? "";
+                }
+
+                // Fallback al generador existente
+                if (string.IsNullOrWhiteSpace(regex))
+                {
+                    regex = BuildRegex(dto.tipoDato, dto.ejemplo, dto.hintContext);
+                }
             }
+
+            // ✅ Caso especial: ItemBlock (items[].__block)
+            // Si el preview viene en formato tabla con pipes ("|"), generamos un patrón genérico por fila.
+            // Evita que se guarde una "foto" del primer renglón y permite iterar todos los ítems.
+            if (campo.Equals("items[].__block", StringComparison.OrdinalIgnoreCase))
+            {
+                // Si el texto del ejemplo contiene pipes, es tabla. Capturamos filas que empiezan con número y tienen pipes.
+                // Excluye "TOTAL" porque no empieza con número.
+                if (!string.IsNullOrWhiteSpace(dto.ejemplo) && dto.ejemplo.Contains("|"))
+                {
+                    regex = @"^\s*\d+\s*\|.*$";
+                }
+                else
+                {
+                    // Fallback: si no hay pipes, dejamos el regex como está (puede ser bloque vertical)
+                    // (No forzamos nada acá para no romper el caso vertical).
+                }
+            }
+
 
             // (opcional) si el front manda labelDetected y no vino hintLabel, lo guardamos como HintLabel
             if (string.IsNullOrWhiteSpace(dto.hintLabel) && !string.IsNullOrWhiteSpace(dto.labelDetected))
@@ -958,11 +1058,27 @@ ORDER BY r.Orden, r.Id;", cn))
                 dto.hintLabel = dto.labelDetected;
             }
 
-            var grupo = (dto.grupo <= 0 ? 1 : dto.grupo);
+            // ⚠️ Evitar truncation en DB (HintContext/Hints largos)
+            string hintContext = (dto.hintContext ?? "");
+            string ejemplo = (dto.ejemplo ?? "");
+            string hintLabel = (dto.hintLabel ?? "");
 
+            const int MAX_HINT = 200;   // ajustalo si tu columna es otra
+            const int MAX_EJ = 200;
+            const int MAX_LABEL = 100;
+
+            if (hintContext.Length > MAX_HINT) hintContext = hintContext.Substring(0, MAX_HINT);
+            if (ejemplo.Length > MAX_EJ) ejemplo = ejemplo.Substring(0, MAX_EJ);
+            if (hintLabel.Length > MAX_LABEL) hintLabel = hintLabel.Substring(0, MAX_LABEL);
+
+            var grupo = (dto.grupo < 0 ? 1 : dto.grupo);
+
+            if (campo.Equals("items[].__block", StringComparison.OrdinalIgnoreCase))
+                grupo = 0;
 
             int docTipoId = 0;
 
+                     
             using (var cn = new SqlConnection(Cs()))
             {
                 cn.Open();
@@ -970,6 +1086,7 @@ ORDER BY r.Orden, r.Id;", cn))
                 // DocTipoId por código
                 using (var cmd = new SqlCommand(@"SELECT DocTipoId FROM dbo.WF_DocTipo WHERE Codigo=@C AND EsActivo=1;", cn))
                 {
+                    cmd.CommandTimeout = 5; // ✅ evita “colgado” por locks
                     cmd.Parameters.AddWithValue("@C", codigo);
                     var x = cmd.ExecuteScalar();
                     if (x == null)
@@ -989,6 +1106,7 @@ SET Campo=@Campo, TipoDato=@TipoDato, Grupo=@Grupo, Orden=@Orden, Activo=@Activo
     Regex=@Regex, UpdatedAt=SYSUTCDATETIME()
 WHERE Id=@Id;", cn))
                     {
+                        cmd.CommandTimeout = 5; // ✅ evita “colgado” por locks
                         cmd.Parameters.AddWithValue("@Campo", (object)(dto.campo ?? "") ?? "");
                         cmd.Parameters.AddWithValue("@TipoDato", (object)(dto.tipoDato ?? "") ?? "");
                         cmd.Parameters.AddWithValue("@Grupo", grupo);
@@ -1015,6 +1133,7 @@ VALUES (@DocTipoId, @Campo, @Regex, @Grupo, @Orden, @Activo, SYSUTCDATETIME(),
         @TipoDato, @Ejemplo, @HintLabel, @HintContext, @Modo);
 SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     {
+                        cmd.CommandTimeout = 5; // ✅ evita “colgado” por locks
                         cmd.Parameters.AddWithValue("@DocTipoId", docTipoId);
                         cmd.Parameters.AddWithValue("@Campo", (object)(dto.campo ?? "") ?? "");
                         cmd.Parameters.AddWithValue("@Regex", (object)regex ?? "");
@@ -1022,9 +1141,9 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                         cmd.Parameters.AddWithValue("@Orden", dto.orden);
                         cmd.Parameters.AddWithValue("@Activo", dto.activo ? 1 : 0);
                         cmd.Parameters.AddWithValue("@TipoDato", (object)(dto.tipoDato ?? "") ?? "");
-                        cmd.Parameters.AddWithValue("@Ejemplo", (object)(dto.ejemplo ?? "") ?? "");
-                        cmd.Parameters.AddWithValue("@HintLabel", (object)(dto.hintLabel ?? "") ?? "");
-                        cmd.Parameters.AddWithValue("@HintContext", (object)(dto.hintContext ?? "") ?? "");
+                        cmd.Parameters.AddWithValue("@Ejemplo", (object)ejemplo ?? "");
+                        cmd.Parameters.AddWithValue("@HintLabel", (object)hintLabel ?? "");
+                        cmd.Parameters.AddWithValue("@HintContext", (object)hintContext ?? "");
                         cmd.Parameters.AddWithValue("@Modo", (object)(dto.modo ?? "LabelValue") ?? "LabelValue");
 
                         var newId = Convert.ToInt32(cmd.ExecuteScalar());
@@ -1044,6 +1163,8 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
             public string regex { get; set; }
             public int grupo { get; set; }
             public string text { get; set; }
+            public string campo { get; set; }
+            public string itemBlockRegex { get; set; }
         }
 
         private class DeleteReq
@@ -1087,7 +1208,7 @@ FROM dbo.WF_DocTipoReglaExtract r
 INNER JOIN dbo.WF_DocTipo d ON d.DocTipoId = r.DocTipoId
 WHERE r.Id = @Id
   AND d.Codigo = @Codigo;";
-
+                cmd.CommandTimeout = 5; // ✅ evita “colgado” por locksf
                 cmd.Parameters.AddWithValue("@Id", req.id);
                 cmd.Parameters.AddWithValue("@Codigo", codigo);
 
@@ -1119,12 +1240,45 @@ WHERE r.Id = @Id
 
             var rx = (req.regex ?? "").Trim();
             var text = req.text ?? "";
-            var grupo = req.grupo <= 0 ? 1 : req.grupo;
+
+            // ✅ Permitir grupo 0 (ItemBlock). Solo normalizamos negativos.
+            var grupo = (req.grupo < 0 ? 1 : req.grupo);
 
             if (string.IsNullOrWhiteSpace(rx))
             {
                 WriteJson(ctx, new { ok = false, error = "Falta regex" });
                 return;
+            }
+
+            // ============================
+            // ✅ Probar items[].campo contra el primer bloque (si hay itemBlockRegex)
+            // Evita que matchee "NOTA DE PEDIDO" y otras líneas fuera de la tabla.
+            // ============================
+            var campo = (req.campo ?? "").Trim();
+            var itemBlockRx = (req.itemBlockRegex ?? "").Trim();
+
+            if (campo.StartsWith("items[].", StringComparison.OrdinalIgnoreCase)
+                && !campo.Equals("items[].__block", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(itemBlockRx))
+            {
+                try
+                {
+                    var reBlock = new System.Text.RegularExpressions.Regex(itemBlockRx,
+                        System.Text.RegularExpressions.RegexOptions.Multiline);
+
+                    var bm = reBlock.Match(text);
+                    if (bm.Success)
+                    {
+                        // Si el itemBlock usa grupo 1 como contenido, lo respetamos; si no, usamos el match completo.
+                        text = (bm.Groups != null && bm.Groups.Count > 1 && bm.Groups[1].Success)
+                            ? bm.Groups[1].Value
+                            : bm.Value;
+                    }
+                }
+                catch
+                {
+                    // Si itemBlockRegex es inválida, seguimos probando contra todo el texto.
+                }
             }
 
             try
@@ -1139,7 +1293,7 @@ WHERE r.Id = @Id
                     return;
                 }
 
-                string value = (grupo < m.Groups.Count) ? m.Groups[grupo].Value : m.Value;
+                string value = (m.Groups != null && grupo < m.Groups.Count) ? m.Groups[grupo].Value : m.Value;
 
                 WriteJson(ctx, new { ok = true, success = true, value = value, match = m.Value });
             }
@@ -1149,7 +1303,7 @@ WHERE r.Id = @Id
             }
         }
 
-          private void DashboardKpis(HttpContext ctx)
+        private void DashboardKpis(HttpContext ctx)
         {
             int total = 0;
             int draft = 0;

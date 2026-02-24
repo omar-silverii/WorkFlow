@@ -117,6 +117,54 @@ namespace Intranet.WorkflowStudio.WebForms
             if (root == null || string.IsNullOrWhiteSpace(path))
                 return null;
 
+            path = path.Trim();
+
+            // ✅ Caso especial: root es el "Estado" (diccionario plano con keys tipo "wf.docTipoCodigo")
+            // 1) intentar por key exacta
+            // 2) intentar por "prefijo" (key plana más larga) y luego resolver el resto sobre ese objeto
+            if (root is IDictionary<string, object> rootDict)
+            {
+                // 1) exact match
+                if (rootDict.TryGetValue(path, out var exact))
+                    return exact;
+
+                // 2) prefijo más largo: buscar keys que sean prefijo del path
+                // Ej: key="biz.np2.items" path="biz.np2.items[0].cantidad"
+                string bestKey = null;
+                foreach (var k in rootDict.Keys)
+                {
+                    if (string.IsNullOrEmpty(k)) continue;
+
+                    if (path.Length <= k.Length) continue;
+
+                    // Debe comenzar con "k" y el siguiente char debe ser '.', '[' (para items[0]) o fin (no aplica acá)
+                    if (!path.StartsWith(k, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    char next = path[k.Length];
+                    if (next != '.' && next != '[')
+                        continue;
+
+                    if (bestKey == null || k.Length > bestKey.Length)
+                        bestKey = k;
+                }
+
+                if (bestKey != null)
+                {
+                    var baseObj = rootDict[bestKey];
+                    var rest = path.Substring(bestKey.Length); // empieza con '.' o '['
+
+                    // normalizar: si arranca con '.', sacarla para que el split por '.' funcione bien
+                    if (rest.StartsWith(".")) rest = rest.Substring(1);
+
+                    // Resolver el resto, pero ahora el root ya no es el estado completo, es el valor de la key plana
+                    return ResolverPath(baseObj, rest);
+                }
+
+                // si no hay match, seguimos como antes (intentará tratar "biz" como propiedad si existiera)
+                // (pero en tu Estado plano, no suele existir)
+            }
+
             var parts = path.Split('.');
             object curr = root;
 
@@ -145,18 +193,28 @@ namespace Intranet.WorkflowStudio.WebForms
                 // Resolver propiedad
                 if (curr is IDictionary<string, object> dict)
                 {
-                    dict.TryGetValue(propName, out curr);
+                    // ✅ si propName es vacío (caso cuando venimos de "[0]" directo), no buscamos propiedad
+                    if (!string.IsNullOrEmpty(propName))
+                        dict.TryGetValue(propName, out curr);
+                    else
+                        curr = dict;
                 }
                 else if (curr is Newtonsoft.Json.Linq.JObject jobj)
                 {
-                    curr = jobj.TryGetValue(propName, StringComparison.OrdinalIgnoreCase, out var tok) ? tok : null;
-                    if (curr is Newtonsoft.Json.Linq.JValue jv)
-                        curr = jv.Value;
+                    if (!string.IsNullOrEmpty(propName))
+                    {
+                        curr = jobj.TryGetValue(propName, StringComparison.OrdinalIgnoreCase, out var tok) ? tok : null;
+                        if (curr is Newtonsoft.Json.Linq.JValue jv)
+                            curr = jv.Value;
+                    }
                 }
                 else
                 {
-                    var prop = curr.GetType().GetProperty(propName);
-                    curr = prop != null ? prop.GetValue(curr, null) : null;
+                    if (!string.IsNullOrEmpty(propName))
+                    {
+                        var prop = curr.GetType().GetProperty(propName);
+                        curr = prop != null ? prop.GetValue(curr, null) : null;
+                    }
                 }
 
                 // Aplicar índice si existe

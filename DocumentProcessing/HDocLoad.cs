@@ -223,6 +223,31 @@ ORDER BY Grupo, Orden, Id";
             const string ITEM_PREFIX = "items[].";
             const string ITEM_BLOCK_CAMPO = "items[].__block";
 
+            string OneLine(string s, int maxLen)
+            {
+                if (string.IsNullOrEmpty(s)) return "";
+                s = s.Replace("\r", "\\r").Replace("\n", "\\n");
+                if (s.Length > maxLen) s = s.Substring(0, maxLen) + "...";
+                return s;
+            }
+
+            string DictToKvp(Dictionary<string, object> d, int maxPairs)
+            {
+                if (d == null || d.Count == 0) return "";
+                var sb = new StringBuilder();
+                int n = 0;
+                foreach (var kv in d)
+                {
+                    if (n > 0) sb.Append(" | ");
+                    sb.Append(kv.Key);
+                    sb.Append("=");
+                    sb.Append(kv.Value == null ? "" : kv.Value.ToString());
+                    n++;
+                    if (n >= maxPairs) break;
+                }
+                return sb.ToString();
+            }
+
             // 1) Separar reglas
             RuleRow itemBlock = null;
             var itemFields = new List<RuleRow>();
@@ -290,16 +315,42 @@ ORDER BY Grupo, Orden, Id";
                 return;
             }
 
+            // ✅ DEBUG: mostrar regex y un preview del texto para ver por qué blocks=1
+            ctx.Log("[doc.load/items-debug] prefix=" + prefix
+                + " itemBlock.grupo=" + itemBlock.Grupo
+                + " itemBlock.regex=" + OneLine(itemBlock.Regex, 160));
+
+            ctx.Log("[doc.load/items-debug] text.head=" + OneLine(text ?? "", 220));
+
             var blocks = rxBlock.Matches(text ?? "");
+
+            // ✅ DEBUG: mostrar primeros blocks encontrados
+            if (blocks != null && blocks.Count > 0)
+            {
+                ctx.Log("[doc.load/items-debug] blocks.count=" + blocks.Count
+                    + " block0=" + OneLine(blocks[0].Value, 220));
+
+                if (blocks.Count > 1)
+                    ctx.Log("[doc.load/items-debug] block1=" + OneLine(blocks[1].Value, 220));
+            }
+            else
+            {
+                ctx.Log("[doc.load/items-debug] blocks.count=0 (NO MATCH itemBlock)");
+            }
+
             foreach (Match bm in blocks)
             {
                 if (!bm.Success) continue;
 
-                // Si el block tiene grupo 1, usamos eso como “contenido del bloque”.
-                // Si no, usamos el match completo.
+                // Contenido del bloque: respetar Grupo configurado en la regla items[].__block
+                // Grupo=0 => match completo; Grupo>0 => grupo indicado (si existe); fallback => match completo.
                 string blockText = null;
-                if (bm.Groups != null && bm.Groups.Count > 1 && bm.Groups[1].Success)
-                    blockText = bm.Groups[1].Value;
+
+                int bg = itemBlock.Grupo;
+                if (bg < 0) bg = 0;
+
+                if (bm.Groups != null && bg < bm.Groups.Count && bm.Groups[bg].Success)
+                    blockText = bm.Groups[bg].Value;
                 else
                     blockText = bm.Value;
 
@@ -310,8 +361,7 @@ ORDER BY Grupo, Orden, Id";
 
                 foreach (var r in itemFields)
                 {
-                    // campo real dentro del item: "codigo", "descripcion", etc.
-                    var campoFull = (r.Campo ?? "").Trim();         // items[].codigo
+                    var campoFull = (r.Campo ?? "").Trim();                     // items[].codigo
                     var innerPath = campoFull.Substring(ITEM_PREFIX.Length).Trim(); // codigo
 
                     if (string.IsNullOrWhiteSpace(innerPath))
@@ -341,7 +391,14 @@ ORDER BY Grupo, Orden, Id";
             ctx.Estado[itemsKey] = items;
             ctx.Estado["biz." + prefix + ".itemsCount"] = items.Count;
 
-            ctx.Log("[doc.load] Items: blocks=" + blocks.Count + " items=" + items.Count);
+            ctx.Log("[doc.load] Items: blocks=" + (blocks == null ? 0 : blocks.Count) + " items=" + items.Count);
+
+            // ✅ DEBUG: mostrar items armados (sin depender de TemplateUtil)
+            if (items.Count > 0)
+                ctx.Log("[doc.load/items-debug] item0=" + DictToKvp(items[0], 8));
+
+            if (items.Count > 1)
+                ctx.Log("[doc.load/items-debug] item1=" + DictToKvp(items[1], 8));
         }
 
         private string TryMatchValue(string text, string regex, int grupo)
@@ -353,7 +410,7 @@ ORDER BY Grupo, Orden, Id";
 
             try
             {
-                var m = Regex.Match(text ?? "", regex, RegexOptions.Multiline);
+                var m = Regex.Match(text ?? "", regex, RegexOptions.Multiline | RegexOptions.Singleline);
                 if (!m.Success) return null;
 
                 if (m.Groups != null && g < m.Groups.Count && m.Groups[g].Success)
@@ -598,14 +655,47 @@ ORDER BY Grupo, Orden, Id";
                     if (body == null)
                         return "";
 
-                    foreach (var paragraph in body.Elements<Paragraph>())
+                    // Recorremos elementos del Body en orden (párrafos y tablas)
+                    foreach (var el in body.Elements())
                     {
-                        var text = paragraph.InnerText?.Trim();
-
-                        if (!string.IsNullOrWhiteSpace(text))
+                        // Párrafos normales
+                        if (el is Paragraph p)
                         {
-                            sb.Append(text);
-                            sb.Append("\r\n");
+                            var t = (p.InnerText ?? "").Trim();
+                            if (!string.IsNullOrWhiteSpace(t))
+                            {
+                                sb.Append(t);
+                                sb.Append("\r\n");
+                            }
+                            continue;
+                        }
+
+                        // Tablas (donde suelen venir los ítems)
+                        if (el is Table tbl)
+                        {
+                            foreach (var row in tbl.Elements<TableRow>())
+                            {
+                                var cells = row.Elements<TableCell>()
+                                    .Select(c => (c.InnerText ?? "").Trim())
+                                    .ToList();
+
+                                // Si la fila está vacía, la salteamos
+                                if (cells.Count == 0 || cells.All(string.IsNullOrWhiteSpace))
+                                    continue;
+
+                                // Normalizar celdas (colapsar espacios)
+                                for (int i = 0; i < cells.Count; i++)
+                                {
+                                    cells[i] = Regex.Replace(cells[i], @"\s+", " ").Trim();
+                                }
+
+                                // Unimos celdas en una sola línea
+                                sb.Append(string.Join(" | ", cells));
+                                sb.Append("\r\n");
+                            }
+
+                            sb.Append("\r\n"); // separación entre tablas y resto del documento
+                            continue;
                         }
                     }
 

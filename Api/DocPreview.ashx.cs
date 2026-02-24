@@ -203,14 +203,46 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                     if (body == null)
                         return "";
 
-                    foreach (var paragraph in body.Elements<Paragraph>())
+                    // Recorremos elementos del Body en orden (párrafos y tablas)
+                    foreach (var el in body.Elements())
                     {
-                        var text = paragraph.InnerText?.Trim();
-
-                        if (!string.IsNullOrWhiteSpace(text))
+                        // Párrafos normales
+                        if (el is Paragraph p)
                         {
-                            sb.Append(text);
+                            var t = (p.InnerText ?? "").Trim();
+                            if (!string.IsNullOrWhiteSpace(t))
+                            {
+                                sb.Append(t);
+                                sb.Append("\r\n");
+                            }
+                            continue;
+                        }
+
+                        // Tablas (ítems suelen venir acá)
+                        if (el is Table tbl)
+                        {
+                            foreach (var row in tbl.Elements<TableRow>())
+                            {
+                                var cells = row.Elements<TableCell>()
+                                    .Select(c => (c.InnerText ?? "").Trim())
+                                    .ToList();
+
+                                if (cells.Count == 0 || cells.All(string.IsNullOrWhiteSpace))
+                                    continue;
+
+                                for (int i = 0; i < cells.Count; i++)
+                                {
+                                    cells[i] = System.Text.RegularExpressions.Regex
+                                        .Replace(cells[i], @"\s+", " ")
+                                        .Trim();
+                                }
+
+                                sb.Append(string.Join(" | ", cells));
+                                sb.Append("\r\n");
+                            }
+
                             sb.Append("\r\n");
+                            continue;
                         }
                     }
 

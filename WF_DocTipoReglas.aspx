@@ -291,6 +291,8 @@
             let reglas = [];
             let editingId = 0;
 
+            
+
             function normalizeCampo(s) {
                 s = (s || '').trim();
                 if (!s) return 'campo';
@@ -468,27 +470,43 @@
                 const sel = window.getSelection();
                 if (!sel || sel.rangeCount === 0) return;
 
-                const anchor = sel.anchorNode;
-                if (!anchor) return;
                 const root = document.getElementById('prePreview');
-                if (!root.contains(anchor)) return;
+                if (!root) return;
+
+                const range = sel.getRangeAt(0);
+                if (!root.contains(range.commonAncestorContainer)) return;
 
                 const selected = (sel.toString() || '').trim();
                 if (!selected) return;
 
-                const full = getPreviewText();
-                const idx = full.indexOf(selected);
+                // ✅ Usar el MISMO texto que se ve en el preview
+                // innerText respeta saltos de línea visibles en el <pre>
+                let full = (root.innerText || "");
+
+                // Normalizar saltos para que índices y substrings no se corran
+                full = full.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
                 inpEjemplo.value = selected;
 
-                if (idx < 0) {
+                // ✅ Offset real dentro del preview (en caracteres)
+                const preRange = document.createRange();
+                preRange.selectNodeContents(root);
+                preRange.setEnd(range.startContainer, range.startOffset);
+
+                let beforeText = (preRange.toString() || "");
+                beforeText = beforeText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+                const startIdx = beforeText.length;
+
+                if (startIdx < 0 || startIdx > full.length) {
                     taHint.value = selected;
                     setStatus('Ejemplo capturado ✅', true);
                     return;
                 }
 
-                const beforeStart = Math.max(0, idx - 120);
-                const afterEnd = Math.min(full.length, idx + selected.length + 120);
+                const beforeStart = Math.max(0, startIdx - 250);
+                const afterEnd = Math.min(full.length, startIdx + selected.length + 250);
+
                 taHint.value = full.substring(beforeStart, afterEnd);
 
                 setStatus('Ejemplo capturado ✅', true);
@@ -582,8 +600,30 @@
                 const text = getPreviewText();
                 if (!text.trim()) { setStatus('Cargá preview primero', false); return; }
 
+                // ✅ Para items[].campo, probamos contra el primer bloque usando items[].__block
+                const campo = (r.campo || '').trim();
+
+                const isItemField = campo.toLowerCase().startsWith('items[].') && campo.toLowerCase() !== 'items[].__block';
+                const itemBlock = reglas.find(x => ((x.campo || '').trim().toLowerCase() === 'items[].__block'));
+                const itemBlockRegex = (itemBlock && itemBlock.regex) ? String(itemBlock.regex) : '';
+
                 try {
-                    const resp = await apiTestRegex({ regex: r.regex, grupo: (r.grupo != null ? r.grupo : 1), text: text });
+                    const payload = {
+                        regex: r.regex,
+                        grupo: (r.grupo != null ? r.grupo : 1),
+                        text: text
+                    };
+
+                    // ✅ Solo mandamos estos campos si aplica (no rompe compatibilidad)
+                    if (isItemField && itemBlockRegex) {
+                        payload.campo = campo;
+                        payload.itemBlockRegex = itemBlockRegex;
+                    } else {
+                        // Aun si no es item, mandamos campo para debug/compatibilidad (opcional)
+                        payload.campo = campo;
+                    }
+
+                    const resp = await apiTestRegex(payload);
                     if (!resp.ok) { setStatus(resp.error || 'Error', false); return; }
                     if (!resp.success) { setStatus('No match ❌', false); return; }
 

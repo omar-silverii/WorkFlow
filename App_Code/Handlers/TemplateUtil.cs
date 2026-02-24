@@ -15,11 +15,26 @@ namespace Intranet.WorkflowStudio.WebForms.App_Code.Handlers
         public static string Expand(ContextoEjecucion ctx, string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
+
             return _rx.Replace(s, m =>
             {
-                var path = m.Groups[1].Value.Trim();
-                var val = ContextoEjecucion.ResolverPath(ctx.Estado, path);
-                return val == null ? "" : System.Convert.ToString(val);
+                var path = (m.Groups[1].Value ?? "").Trim();
+                if (path.Length == 0) return "";
+
+                object val = null;
+
+                // ✅ 1) Primero: búsqueda directa por KEY EXACTA en el Estado.
+                // Esto soporta claves planas como: "wf.docTipoCodigo" o "biz.np2.itemsCount"
+                // (que es exactamente como doc.load las guarda).
+                if (ctx != null && ctx.Estado != null)
+                {
+                    if (ctx.Estado.TryGetValue(path, out val))
+                        return val == null ? "" : Convert.ToString(val);
+                }
+
+                // ✅ 2) Fallback: resolver por path (para payload.*, input.*, etc.)
+                val = ContextoEjecucion.ResolverPath(ctx.Estado, path);
+                return val == null ? "" : Convert.ToString(val);
             });
         }
 
