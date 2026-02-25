@@ -108,6 +108,7 @@
                             <a class="list-group-item list-group-item-action px-0" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Gerente_Tareas.aspx">🧑‍💼 Tareas (Gerencia)</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Instancias.aspx">▶ Ejecuciones (Instancias)</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Entidades.aspx">🧾 Entidades (Casos)</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipo.aspx">📁 Tipos de Documento</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipoReglas.aspx">🧠 Reglas Extract</a>
                         </div>
@@ -164,7 +165,58 @@
                             </div>
                         </div>
 
-                        <!-- Card 3: Mis tareas -->
+                        <!-- Card 3: Entidades -->
+                        <div class="col-12 col-md-6">
+                            <div class="card ws-card h-100">
+                                <div class="card-body">
+                                    <div class="ws-icon">🧾</div>
+                                    <h5 class="mt-2 mb-1">Entidades (Casos)</h5>
+                                    <div class="ws-muted mb-3">
+                                        Seguimiento global de casos orientados a proceso.
+                                    </div>
+
+                                    <div class="row text-center mb-3">
+
+                                        <div class="col-3">
+                                            <div class="fw-bold fs-5">
+                                                <asp:Label ID="lblEntTotal" runat="server" Text="0" />
+                                            </div>
+                                            <div class="ws-muted small">Total</div>
+                                        </div>
+
+                                        <div class="col-3">
+                                            <div class="fw-bold text-primary">
+                                                <asp:Label ID="lblEntIniciado" runat="server" Text="0" />
+                                            </div>
+                                            <div class="ws-muted small">Iniciado</div>
+                                        </div>
+
+                                        <div class="col-3">
+                                            <div class="fw-bold text-success">
+                                                <asp:Label ID="lblEntFinalizado" runat="server" Text="0" />
+                                            </div>
+                                            <div class="ws-muted small">Finalizado</div>
+                                        </div>
+
+                                        <div class="col-3">
+                                            <div class="fw-bold text-danger">
+                                                <asp:Label ID="lblEntError" runat="server" Text="0" />
+                                            </div>
+                                            <div class="ws-muted small">Error</div>
+                                        </div>
+
+                                    </div>
+
+                                    <div class="d-flex gap-2 mt-3">
+                                        <a class="btn btn-primary" href="WF_Entidades.aspx">
+                                            Abrir entidades
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 4: Mis tareas -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -180,7 +232,7 @@
                             </div>
                         </div>
 
-                        <!-- Card 4: Gerencia de tareas -->
+                        <!-- Card 5: Gerencia de tareas -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -196,7 +248,7 @@
                             </div>
                         </div>
 
-                        <!-- Card 5 -->
+                        <!-- Card 6 -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -213,7 +265,7 @@
                             </div>
                         </div>
 
-                        <!-- Card 6: Actividad documental -->
+                        <!-- Card 7: Actividad documental -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
@@ -283,7 +335,7 @@
                             </div>
                         </div>
 
-                        <!-- Card 7 (placeholder futuro): Configuración / Catálogos -->
+                        <!-- Card 8 (placeholder futuro): Configuración / Catálogos -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">

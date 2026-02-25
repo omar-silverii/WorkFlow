@@ -23,6 +23,44 @@ namespace Intranet.WorkflowStudio.WebForms
             if (!IsPostBack)
             {
                 BindActividadDocumental48h();
+                CargarKpiEntidades();
+            }
+        }
+
+        private void CargarKpiEntidades()
+        {
+            try
+            {
+                string cnn = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+
+                using (var cn = new SqlConnection(cnn))
+                using (var cmd = new SqlCommand(@"
+SELECT
+    COUNT(*) AS Total,
+    SUM(CASE WHEN EstadoActual = 'Iniciado' THEN 1 ELSE 0 END) AS Iniciado,
+    SUM(CASE WHEN EstadoActual = 'Finalizado' THEN 1 ELSE 0 END) AS Finalizado,
+    SUM(CASE WHEN EstadoActual = 'Error' THEN 1 ELSE 0 END) AS Error
+FROM dbo.WF_Entidad;", cn))
+                {
+                    cn.Open();
+                    using (var rd = cmd.ExecuteReader())
+                    {
+                        if (rd.Read())
+                        {
+                            lblEntTotal.Text = Convert.ToString(rd["Total"] ?? 0);
+                            lblEntIniciado.Text = Convert.ToString(rd["Iniciado"] ?? 0);
+                            lblEntFinalizado.Text = Convert.ToString(rd["Finalizado"] ?? 0);
+                            lblEntError.Text = Convert.ToString(rd["Error"] ?? 0);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                lblEntTotal.Text = "-";
+                lblEntIniciado.Text = "-";
+                lblEntFinalizado.Text = "-";
+                lblEntError.Text = "-";
             }
         }
 

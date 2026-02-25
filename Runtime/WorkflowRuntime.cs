@@ -1,5 +1,6 @@
 ﻿using Intranet.WorkflowStudio.WebForms;
 using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
+using Intranet.WorkflowStudio.Runtime;
 using Newtonsoft.Json;
 using System;
 using System.Collections;
@@ -147,6 +148,7 @@ WHERE Id = @Id;", cn))
             seed["wf.instanceId"] = instId;
             seed["wf.definicionId"] = defId;
             seed["wf.creadoPor"] = usuario ?? "app";
+            seed["wf.estado"] = "Iniciado";
 
             // subflows
             seed["wf.depth"] = 0;
@@ -285,6 +287,21 @@ WHERE Id = @Id;", cn))
             seed["wf.definicionId"] = defId;
             seed["wf.creadoPor"] = usuario ?? "app";
 
+            // ✅ Estado inicial estándar de plataforma (para Entidad.EstadoActual desde el arranque)
+            seed["wf.estado"] = "Iniciado";
+
+            // ✅ ENTIDAD: crear/asegurar entidad vinculada a la instancia
+            try
+            {
+                long entidadId = EntidadService.EnsureEntidadForInstance(instId, defId, usuario);
+                seed["entidad.id"] = entidadId;
+                seed["entity.id"] = entidadId; // alias opcional (si preferís, luego lo sacamos)
+            }
+            catch
+            {
+                // no romper la ejecución del workflow
+            }
+
             var items = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
             if (items != null)
             {
@@ -320,43 +337,95 @@ WHERE Id = @Id;", cn))
 
             var handlersExtra = new IManejadorNodo[]
             {
-                new ManejadorSql(),
-                new HParallel(),
-                new HJoin(),
-                new HUtilError(),
-                new HUtilNotify(),
-                new HFileRead(),
-                new HFileWrite(),
-                new HDocExtract(),
-                new HControlDelay(),
-                new ManejadorLoop(),
-                new HFtpGet(),
-                new HFtpPut(),
-                new HStateVars(),
-                new HCodeFunction(),
-                new HCodeScript(),
-                new HTransformMap(),
-                new HConfigSecrets(),
-                new HEmailSend(),
-                new HChatNotify(),
-                new HQueuePublishSql(),
-                new HQueueConsumeSql(),
-                new HDocLoad(),
-                new HDocSearch(),
-                new HDocAttach(),
-                new HDocTipoResolve(),
-                new HControlRetry(),
-                new HControlRateLimit(),
-                new HSubflow(),
-                new HAiCall()
+        new ManejadorSql(),
+        new HParallel(),
+        new HJoin(),
+        new HUtilError(),
+        new HUtilNotify(),
+        new HFileRead(),
+        new HFileWrite(),
+        new HDocExtract(),
+        new HControlDelay(),
+        new ManejadorLoop(),
+        new HFtpGet(),
+        new HFtpPut(),
+        new HStateVars(),
+        new HCodeFunction(),
+        new HCodeScript(),
+        new HTransformMap(),
+        new HConfigSecrets(),
+        new HEmailSend(),
+        new HChatNotify(),
+        new HQueuePublishSql(),
+        new HQueueConsumeSql(),
+        new HDocLoad(),
+        new HDocSearch(),
+        new HDocAttach(),
+        new HDocTipoResolve(),
+        new HControlRetry(),
+        new HControlRateLimit(),
+        new HSubflow(),
+        new HAiCall()
             };
 
-            await WorkflowRunner.EjecutarAsync(
-                wf,
-                logAction,
-                handlers: handlersExtra,
-                ct: CancellationToken.None
-            );
+            try
+            {
+                // ✅ Estado al arrancar (para que Entidades "solo activas" lo vea como iniciado)
+                seed["wf.estado"] = "Iniciado";
+
+                try
+                {
+                    var startItems = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                    if (startItems != null && startItems["WF_CTX_ESTADO"] is IDictionary<string, object> startState)
+                    {
+                        startState["wf.estado"] = "Iniciado";
+                        // Si SnapshotFromState setea EstadoActual según wf.estado, con esto ya queda "Iniciado"
+                        EntidadService.SnapshotFromState(startState, usuario ?? "app");
+                    }
+                }
+                catch { }
+
+                await WorkflowRunner.EjecutarAsync(
+                    wf,
+                    logAction,
+                    handlers: handlersExtra,
+                    ct: CancellationToken.None
+                );
+
+                // ✅ Estado final OK
+                seed["wf.estado"] = "Finalizado";
+
+                // ✅ ENTIDAD: snapshot final + EstadoActual (best-effort)
+                try
+                {
+                    var finalItems = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                    if (finalItems != null && finalItems["WF_CTX_ESTADO"] is IDictionary<string, object> finalState)
+                    {
+                        finalState["wf.estado"] = "Finalizado";
+                        EntidadService.SnapshotFromState(finalState, usuario ?? "app");
+                    }
+                }
+                catch { }
+            }
+            catch
+            {
+                // ✅ Estado final Error
+                seed["wf.estado"] = "Error";
+
+                // ✅ ENTIDAD: snapshot aun en error (best-effort)
+                try
+                {
+                    var finalItems = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                    if (finalItems != null && finalItems["WF_CTX_ESTADO"] is IDictionary<string, object> finalState)
+                    {
+                        finalState["wf.estado"] = "Error";
+                        EntidadService.SnapshotFromState(finalState, usuario ?? "app");
+                    }
+                }
+                catch { }
+
+                throw;
+            }
 
             PersistirFinal(instId, logs);
             return instId;

@@ -397,6 +397,7 @@
     <Content Include="WF_Definiciones.aspx" />
     <Content Include="WF_DocTipo.aspx" />
     <Content Include="WF_DocTipoReglas.aspx" />
+    <Content Include="WF_Entidades.aspx" />
     <Content Include="WF_Gerente_Tareas.aspx" />
     <Content Include="WF_Instancias.aspx" />
     <Content Include="WF_Tareas.aspx" />
@@ -546,9 +547,11 @@
     <Compile Include="Poliza_Bandeja.aspx.designer.cs">
       <DependentUpon>Poliza_Bandeja.aspx</DependentUpon>
     </Compile>
+    <Compile Include="Runtime\EntidadService.cs" />
     <Compile Include="Runtime\EstadoPublisher.cs" />
     <Compile Include="Runtime\EstadoPublisherWebForms.cs" />
     <Compile Include="Runtime\ManejadorSql.cs" />
+    <Compile Include="Runtime\SchemaMigrator.cs" />
     <Compile Include="Runtime\WfNumbers.cs" />
     <Compile Include="Runtime\WorkflowAmbient.cs" />
     <Compile Include="Runtime\WorkflowFieldRegistryBuilder.cs" />
@@ -648,6 +651,13 @@
     </Compile>
     <Compile Include="WF_DocTipoReglas.aspx.designer.cs">
       <DependentUpon>WF_DocTipoReglas.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_Entidades.aspx.cs">
+      <DependentUpon>WF_Entidades.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Entidades.aspx.designer.cs">
+      <DependentUpon>WF_Entidades.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_Gerente_Tareas.aspx.cs">
       <DependentUpon>WF_Gerente_Tareas.aspx</DependentUpon>

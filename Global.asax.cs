@@ -16,6 +16,10 @@ namespace Intranet.WorkflowStudio.WebForms
             // Código que se ejecuta al iniciar la aplicación
             RouteConfig.RegisterRoutes(RouteTable.Routes);
             BundleConfig.RegisterBundles(BundleTable.Bundles);
+
+
+            // ✅ Migraciones mínimas (sin DBA)
+            Intranet.WorkflowStudio.Runtime.SchemaMigrator.Initialize();
         }
     }
 }
