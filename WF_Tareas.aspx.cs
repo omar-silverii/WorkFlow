@@ -6,8 +6,10 @@ using System.Web.UI.WebControls;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Tareas : System.Web.UI.Page
+    public partial class WF_Tareas : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "TAREAS_MIS" };
+
         private string Cnn
         {
             get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }
@@ -25,6 +27,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 // si por alguna razón aún no está el control en el aspx, no rompemos la página
             }
 
+
             if (!IsPostBack)
             {
                 CargarGrid();
@@ -33,6 +36,11 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private void CargarGrid()
         {
+            var userKey = (User.Identity.Name ?? "").Trim();
+
+            // Si es admin / verTodo => sin restricción adicional
+            bool verTodo = EsAdminOVerTodo(userKey);
+
             string sql = @"
 SELECT
     T.Id,
@@ -50,7 +58,8 @@ SELECT
     T.FechaVencimiento
 FROM dbo.WF_Tarea T
 JOIN dbo.WF_Instancia i ON i.Id = T.WF_InstanciaId
-WHERE 1 = 1";
+WHERE 1 = 1
+";
 
             bool soloPend = chkSoloPendientes.Checked;
             string filtro = (txtFiltro.Text ?? "").Trim();
@@ -71,6 +80,37 @@ WHERE 1 = 1";
     )";
             }
 
+            // ===== FILTRO POR USUARIO/ROL (si no es verTodo) =====
+            if (!verTodo)
+            {
+                // - Ver tareas asignadas al usuario
+                // - y/o tareas cuyo RolDestino esté permitido por WF_UserPermiso (Permiso='ROL')
+                // - y/o tasks asignadas explícitas por WF_UserPermiso (Permiso='USER' con ScopeKey=userKey)
+                sql += @"
+ AND (
+        T.UsuarioAsignado = @UserKey
+     OR EXISTS (
+            SELECT 1
+            FROM dbo.WF_UserPermiso P
+            WHERE P.Activo = 1
+              AND P.UserKey = @UserKey
+              AND P.PermisoKey = 'ROL'
+              AND ISNULL(NULLIF(P.ScopeKey,''), '') <> ''
+              AND P.ScopeKey = T.RolDestino
+        )
+     OR EXISTS (
+            SELECT 1
+            FROM dbo.WF_UserPermiso P2
+            WHERE P2.Activo = 1
+              AND P2.UserKey = @UserKey
+              AND P2.PermisoKey = 'USER'
+              AND ISNULL(NULLIF(P2.ScopeKey,''), '') <> ''
+              AND P2.ScopeKey = T.UsuarioAsignado
+        )
+    )
+";
+            }
+
             sql += " ORDER BY T.FechaCreacion DESC";
 
             var dt = new DataTable();
@@ -78,6 +118,8 @@ WHERE 1 = 1";
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand(sql, cn))
             {
+                cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey;
+
                 if (!string.IsNullOrEmpty(filtro))
                     cmd.Parameters.AddWithValue("@Filtro", "%" + filtro + "%");
 
@@ -89,6 +131,62 @@ WHERE 1 = 1";
 
             gvTareas.DataSource = dt;
             gvTareas.DataBind();
+        }
+
+        private bool UsuarioActivo(string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT COUNT(1) FROM dbo.WF_User WHERE UserKey=@U AND Activo=1;";
+                cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = userKey;
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
+
+        private bool TienePermisoBaseTareas(string userKey)
+        {
+            // Admin siempre puede
+            if (EsAdminOVerTodo(userKey)) return true;
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT COUNT(1)
+FROM dbo.WF_UserPermiso P
+WHERE P.Activo=1
+  AND P.UserKey=@U
+  AND (P.PermisoKey='WF_TAREAS' OR P.PermisoKey='WF_ADMIN' OR P.VerTodo=1);";
+                cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = userKey;
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
+
+        private bool EsAdminOVerTodo(string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT COUNT(1)
+FROM dbo.WF_UserPermiso P
+WHERE P.Activo=1
+  AND P.UserKey=@U
+  AND (P.PermisoKey='WF_ADMIN' OR P.VerTodo=1 OR P.PermisoKey='WF_TAREAS_VER_TODO');";
+                cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = userKey;
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
+
+        private void Denegado()
+        {
+            Response.StatusCode = 403;
+            Response.Write("No autorizado.");
+            Response.End();
         }
 
         protected void btnBuscar_Click(object sender, EventArgs e)
@@ -137,16 +235,12 @@ WHERE 1 = 1";
                     int.TryParse(parts[1], out defId);
                 }
 
-                // IMPORTANTE:
-                // WF_Instancias hoy entiende "defId" (según tu URL /WF_Instancias?defId=6117)
-                // y para abrir una instancia específica vamos con "inst"
                 if (defId > 0 && instId > 0)
                 {
                     Response.Redirect("WF_Instancias.aspx?defId=" + defId + "&inst=" + instId);
                     return;
                 }
 
-                // Fallbacks seguros
                 if (instId > 0)
                 {
                     Response.Redirect("WF_Instancias.aspx?inst=" + instId);

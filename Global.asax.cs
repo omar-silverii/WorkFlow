@@ -1,25 +1,58 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Web;
-using System.Web.Optimization;
-using System.Web.Routing;
 using System.Web.Security;
-using System.Web.SessionState;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
     public class Global : HttpApplication
     {
-        void Application_Start(object sender, EventArgs e)
+        public static string AuthNonce
         {
-            // Código que se ejecuta al iniciar la aplicación
-            RouteConfig.RegisterRoutes(RouteTable.Routes);
-            BundleConfig.RegisterBundles(BundleTable.Bundles);
+            get { return (string)(HttpContext.Current?.Application["WF_AUTH_NONCE"]); }
+        }
 
+        protected void Application_Start(object sender, EventArgs e)
+        {
+            // Cambia en cada arranque real de la app -> invalida cookies viejas
+            Application["WF_AUTH_NONCE"] = Guid.NewGuid().ToString("N");
+        }
 
-            // ✅ Migraciones mínimas (sin DBA)
-            Intranet.WorkflowStudio.Runtime.SchemaMigrator.Initialize();
+        protected void Application_AuthenticateRequest(object sender, EventArgs e)
+        {
+            try
+            {
+                var ctx = HttpContext.Current;
+                if (ctx == null) return;
+
+                var user = ctx.User;
+                if (user == null || user.Identity == null || !user.Identity.IsAuthenticated) return;
+
+                var id = user.Identity as FormsIdentity;
+                if (id == null) return;
+
+                var t = id.Ticket;
+                if (t == null) return;
+
+                var nonce = (string)(ctx.Application["WF_AUTH_NONCE"]);
+                if (string.IsNullOrEmpty(nonce))
+                {
+                    // Si por alguna razón falta, forzamos nuevo
+                    ctx.Application["WF_AUTH_NONCE"] = Guid.NewGuid().ToString("N");
+                    nonce = (string)(ctx.Application["WF_AUTH_NONCE"]);
+                }
+
+                // Si el ticket no pertenece a este arranque, lo invalidamos
+                if (!string.Equals(t.UserData ?? "", nonce, StringComparison.Ordinal))
+                {
+                    FormsAuthentication.SignOut();
+                    ctx.Response.Redirect(FormsAuthentication.LoginUrl, false);
+                    ctx.ApplicationInstance.CompleteRequest();
+                }
+            }
+            catch
+            {
+                // no romper el sitio por auth
+            }
         }
     }
 }

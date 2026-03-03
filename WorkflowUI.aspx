@@ -158,8 +158,9 @@
       </div>
     </div>
     </main>
+       <script src="Scripts/bootstrap.bundle.min.js"></script>
    </form>
-
+   
     <!-- JS de la IU -->
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    

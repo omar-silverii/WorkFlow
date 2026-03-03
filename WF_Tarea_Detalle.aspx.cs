@@ -7,8 +7,10 @@ using System.Data.SqlClient;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Tarea_Detalle : System.Web.UI.Page
+    public partial class WF_Tarea_Detalle : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "TAREAS_MIS" };
+
         private string Cnn
         {
             get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }

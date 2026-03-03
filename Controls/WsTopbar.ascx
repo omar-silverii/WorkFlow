@@ -17,6 +17,18 @@
         <div class="collapse navbar-collapse" id="wsNav">
             <ul class="navbar-nav ms-auto gap-lg-2">
 
+                <!-- Usuario (dropdown) + Logout -->
+                <li class="nav-item dropdown" runat="server" id="liUserMenu">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <%= (Context?.User?.Identity?.IsAuthenticated == true)
+                            ? Context.User.Identity.Name
+                            : "Usuario" %>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="<%= ResolveUrl("~/Logout.aspx") %>">Salir</a></li>
+                    </ul>
+                </li>
+
                 <li class="nav-item">
                     <asp:HyperLink ID="lnkInicio" runat="server" CssClass="nav-link" NavigateUrl="~/Default.aspx">Inicio</asp:HyperLink>
                 </li>
@@ -56,7 +68,7 @@
                     </ul>
                 </li>
 
-                <li class="nav-item">
+                <li class="nav-item" runat="server" id="liAdmin">
                     <asp:HyperLink ID="lnkAdmin" runat="server" CssClass="nav-link" NavigateUrl="~/WF_Definiciones.aspx">Administración</asp:HyperLink>
                 </li>
 

@@ -7,8 +7,10 @@ using System.Web.UI;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class _Default : Page
+    public partial class _Default : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "DASH" };
+
         private class DocLastRow
         {
             public long WF_InstanciaId { get; set; }
@@ -20,6 +22,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
+           
+
             if (!IsPostBack)
             {
                 BindActividadDocumental48h();

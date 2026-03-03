@@ -10,7 +10,6 @@
 
     <!-- Bootstrap 5 (local) -->
     <link href="Content/bootstrap.min.css" rel="stylesheet" />
-    <script src="Scripts/bootstrap.bundle.min.js"></script>
      
     <style>
         body { padding: 12px; background: #f6f7fb; }
@@ -193,6 +192,8 @@
             </div>
         </div>
     </main>
+     <script src="Scripts/bootstrap.bundle.min.js"></script>
+
     <script>
         function wfDocTipoShowModal() {
             var el = document.getElementById('mdlDocTipo');

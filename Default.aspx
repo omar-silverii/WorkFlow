@@ -1,4 +1,6 @@
 ﻿<%@ Page Language="C#" AutoEventWireup="true" CodeBehind="Default.aspx.cs" Inherits="Intranet.WorkflowStudio.WebForms._Default" %>
+<%@ Register Src="~/Controls/WsTopbar.ascx" TagPrefix="ws" TagName="Topbar" %>
+
 <!DOCTYPE html>
 <html lang="es">
 <head runat="server">
@@ -27,55 +29,8 @@
 <body>
     <form id="form1" runat="server">
       
-        <!-- Topbar -->
-        <nav class="navbar navbar-expand-lg ws-topbar sticky-top">
-            <div class="container-fluid px-3 px-md-4">
-                <a class="navbar-brand fw-bold" href="Default.aspx">
-                    Workflow Studio <span class="ws-pill ms-2">Intranet</span>                    
-                </a>
-
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#wsNav"
-                    aria-controls="wsNav" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-
-                <div class="collapse navbar-collapse" id="wsNav">
-                    <ul class="navbar-nav ms-auto gap-lg-2">
-                        <li class="nav-item"><a class="nav-link active" href="Default.aspx">Inicio</a></li>
-
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Workflows</a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="WorkflowUI.aspx">➕ Nuevo / Editor</a></li>
-                                <li><a class="dropdown-item" href="WF_Definiciones.aspx">📋 Definiciones</a></li>
-                            </ul>
-                        </li>
-
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Documentos</a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="WF_DocTipo.aspx">📁 Tipos de documento</a></li>
-                                <li><a class="dropdown-item" href="WF_DocTipoReglas.aspx">🧠 Reglas de extracción</a></li>
-                            </ul>
-                        </li>
-
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Tareas</a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a></li>
-                                <li><a class="dropdown-item" href="WF_Gerente_Tareas.aspx">🧑‍💼 Tareas (Gerencia)</a></li>
-                                <li><hr class="dropdown-divider" /></li>
-                                <li><a class="dropdown-item" href="WF_Instancias.aspx">▶ Ejecuciones (Instancias)</a></li>
-                            </ul>
-                        </li>
-
-                        <li class="nav-item">
-                            <a class="nav-link" href="WF_Definiciones.aspx">Administración</a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </nav>
+     <!-- Topbar coherente -->
+     <ws:Topbar runat="server" ID="Topbar1" />
 
         <!-- Main -->
         <main class="container-fluid px-3 px-md-4 py-4">
@@ -345,7 +300,7 @@
                                         Espacio para crecer (conexiones, parámetros globales, plantillas, colas, etc.).
                                     </div>
                                     <div class="d-flex gap-2 mt-3">
-                                        <a class="btn btn-outline-secondary disabled" href="#" tabindex="-1" aria-disabled="true">Próximamente</a>
+                                        <a class="btn btn-primary" href="WF_Seguridad.aspx" tabindex="-1" aria-disabled="true">Seguridad</a>
                                     </div>
                                 </div>
                             </div>

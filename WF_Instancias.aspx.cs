@@ -12,8 +12,10 @@ using System.Web.UI.WebControls;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Instancias : System.Web.UI.Page
+    public partial class WF_Instancias : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "INSTANCIAS" };
+
         private static long _instanciaActualId = 0;
 
         // Modo deep-link (?inst=xxxx)

@@ -98,6 +98,7 @@
         </asp:Panel>
     </div>
     </main>
+     <script src="Scripts/bootstrap.bundle.min.js"></script>
 </form>
 </body>
 </html>

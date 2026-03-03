@@ -24,6 +24,15 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.HtmlControls.HtmlForm form1;
 
         /// <summary>
+        /// Control Topbar1.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::Intranet.WorkflowStudio.WebForms.Controls.WsTopbar Topbar1;
+
+        /// <summary>
         /// Control lblUser.
         /// </summary>
         /// <remarks>

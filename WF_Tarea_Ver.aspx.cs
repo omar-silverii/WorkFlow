@@ -8,8 +8,10 @@ using Newtonsoft.Json;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Tarea_Ver : System.Web.UI.Page
+    public partial class WF_Tarea_Ver : BasePage
     {
+
+        protected override string[] RequiredPermissions => new[] { "TAREAS_MIS" };
 
         private long _instanciaActualId
         {

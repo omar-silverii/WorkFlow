@@ -10,8 +10,10 @@ using Newtonsoft.Json.Linq;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Definiciones : System.Web.UI.Page
+    public partial class WF_Definiciones : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "WF_ADMIN" };
+
         private string Cnn
         {
             get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }

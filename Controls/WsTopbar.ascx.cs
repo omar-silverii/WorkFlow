@@ -11,6 +11,23 @@ namespace Intranet.WorkflowStudio.WebForms.Controls
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            //var userKey = (Context?.User?.Identity?.IsAuthenticated == true) ? Context.User.Identity.Name : "";
+
+            //// Ejemplo: mostrar Admin solo si tiene alguno de estos
+            //bool canAdmin = !string.IsNullOrEmpty(userKey) &&
+            //                RbacService.HasAnyPermiso(userKey, "WF_ADMIN", "SEGURIDAD_ABM");
+
+            //lnkAdmin.Visible = canAdmin;
+
+            bool auth = (Context?.User?.Identity?.IsAuthenticated == true);
+
+            // Menú usuario + logout SOLO si está autenticado
+            liUserMenu.Visible = auth;
+
+            // (Opcional) esconder Admin si no está autenticado.
+            // Si querés hacerlo por permiso RBAC, lo vemos después.
+            liAdmin.Visible = auth;
+
             ApplyActive();
         }
 

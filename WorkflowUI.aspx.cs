@@ -18,8 +18,11 @@ using System.Web.UI.WebControls;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WorkflowUI : System.Web.UI.Page
+    public partial class WorkflowUI : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "WF_ADMIN" }; // el permiso que definamos
+
+
         protected void Page_Load(object sender, EventArgs e)
         {
             try { Topbar1.ActiveSection = "Workflows"; } catch { }

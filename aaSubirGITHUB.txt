@@ -8,6 +8,10 @@ git add .              # agrega todos los cambios
 git commit -m "Lo que hiciste hoy" 
 git push origin main   # lo sube a GitHub
 
+
+http://localhost:55556/Api/Ping.ashx
+http://localhost:55556/Login.aspx
+
 https://www.musicca.com/intervals
 De verdad: se nota el nivel y el cariño que le estás poniendo al proyecto, y eso hace que valga la pena afinarlo bien.
 

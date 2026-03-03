@@ -7,8 +7,10 @@ using System.Web.UI;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_DocTipo : Page
+    public partial class WF_DocTipo : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "DOC_ABM" };
+
         private string Cs() => ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
 
         protected void Page_Load(object sender, EventArgs e)

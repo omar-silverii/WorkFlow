@@ -7,8 +7,10 @@ using System.Web.UI;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Entidades : Page
+    public partial class WF_Entidades : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "ENTIDADES_ABM" };
+
         private string Cnn => ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
 
         private long? SelectedEntidadId

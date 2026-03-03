@@ -2,22 +2,25 @@
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
-using System.Threading.Tasks;
 using System.Web;
-using System.Web.UI.WebControls; // si falta
-using Newtonsoft.Json.Linq; // arriba
+using System.Web.UI.WebControls;
+using Newtonsoft.Json.Linq;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
-    public partial class WF_Gerente_Tareas : System.Web.UI.Page
+    public partial class WF_Gerente_Tareas : BasePage
     {
+        protected override string[] RequiredPermissions => new[] { "TAREAS_GERENCIA" };
+
         private string Cnn => ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
 
         protected void Page_Load(object sender, EventArgs e)
         {
+   
+
             if (!IsPostBack)
             {
-                lblUser.Text = (HttpContext.Current?.User?.Identity?.Name) ?? "";
+                
                 CargarTodo();
             }
         }
@@ -31,8 +34,9 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             lblError.Visible = false;
             lblError.Text = "";
+            lblError.CssClass = "alert alert-danger";
 
-            var userKey = (HttpContext.Current?.User?.Identity?.Name) ?? "";
+            var userKey = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
 
             try
             {
@@ -68,16 +72,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 gvCerradas.DataSource = dtCer;
                 gvCerradas.DataBind();
                 lblCountCerradas.Text = dtCer.Rows.Count.ToString();
-
-                // Si querés diagnóstico visible sin debugger:
-                //lblError.Visible = true;
-                //lblError.CssClass = "alert alert-info";
-                //lblError.Text = $"DEBUG: Mis={dtMis.Rows.Count}, Rol={dtRol.Rows.Count}, Alcance={dtAlc.Rows.Count}";
             }
             catch (Exception ex)
             {
                 lblError.Visible = true;
-                lblError.Text = "Error al cargar bandejas: " + Server.HtmlEncode(ex.ToString());
+                lblError.CssClass = "alert alert-danger";
+                lblError.Text = "Error al cargar bandejas: " + Server.HtmlEncode(ex.Message);
             }
         }
 
@@ -99,13 +99,14 @@ namespace Intranet.WorkflowStudio.WebForms
 
             return dt;
         }
+
         protected void gvMis_RowCommand(object sender, GridViewCommandEventArgs e)
         {
             if (!string.Equals(e.CommandName, "Liberar", StringComparison.OrdinalIgnoreCase))
                 return;
 
             int tareaId = Convert.ToInt32(e.CommandArgument);
-            string userKey = HttpContext.Current.User.Identity.Name;
+            string userKey = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
 
             try
             {
@@ -125,10 +126,10 @@ namespace Intranet.WorkflowStudio.WebForms
             catch (Exception ex)
             {
                 lblError.Visible = true;
+                lblError.CssClass = "alert alert-danger";
                 lblError.Text = Server.HtmlEncode(ex.Message);
             }
         }
-
 
         protected void gvAlcance_RowCommand(object sender, GridViewCommandEventArgs e)
         {
@@ -136,13 +137,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
 
             int tareaId = Convert.ToInt32(e.CommandArgument);
-            string userKey = (HttpContext.Current?.User?.Identity?.Name) ?? "";
+            string userKey = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
 
             try
             {
                 TomarTarea(tareaId, userKey);
 
-                // Mensaje OK (opcional, pero útil)
                 lblError.Visible = true;
                 lblError.CssClass = "alert alert-success";
                 lblError.Text = "Tarea tomada correctamente.";
@@ -163,17 +163,13 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
-
-
-
-
         protected void gvRol_RowCommand(object sender, GridViewCommandEventArgs e)
         {
             if (!string.Equals(e.CommandName, "TomarRol", StringComparison.OrdinalIgnoreCase))
                 return;
 
             int tareaId = Convert.ToInt32(e.CommandArgument);
-            string userKey = (HttpContext.Current?.User?.Identity?.Name) ?? "";
+            string userKey = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
 
             try
             {
@@ -260,9 +256,9 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
-        protected void gv_RowDataBound(object sender, System.Web.UI.WebControls.GridViewRowEventArgs e)
+        protected void gv_RowDataBound(object sender, GridViewRowEventArgs e)
         {
-            if (e.Row.RowType != System.Web.UI.WebControls.DataControlRowType.DataRow)
+            if (e.Row.RowType != DataControlRowType.DataRow)
                 return;
 
             var drv = e.Row.DataItem as DataRowView;
@@ -311,7 +307,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
                 catch
                 {
-                    // si el JSON está roto, no rompemos UI
                     escalada = false;
                     texto = "";
                 }
@@ -321,9 +316,45 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private bool UsuarioActivo(string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT COUNT(1) FROM dbo.WF_User WHERE UserKey=@U AND Activo=1;";
+                cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = userKey;
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
 
+        private bool TienePermisoBaseGerente(string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT COUNT(1)
+FROM dbo.WF_UserPermiso P
+WHERE P.Activo=1
+  AND P.UserKey=@U
+  AND (
+        P.VerTodo=1
+     OR P.PermisoKey='GERENTE_DASH'
+     OR P.PermisoKey='WF_GERENTE'
+     OR P.PermisoKey='WF_ADMIN'
+  );";
+                cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = userKey;
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
 
-
-
+        private void Denegado()
+        {
+            Response.StatusCode = 403;
+            Response.Write("No autorizado.");
+            Response.End();
+        }
     }
 }
