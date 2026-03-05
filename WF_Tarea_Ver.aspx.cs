@@ -11,7 +11,7 @@ namespace Intranet.WorkflowStudio.WebForms
     public partial class WF_Tarea_Ver : BasePage
     {
 
-        protected override string[] RequiredPermissions => new[] { "TAREAS_MIS" };
+        protected override string[] RequiredPermissions => null; // solo autenticación, autorización por tarea (SP)
 
         private long _instanciaActualId
         {
@@ -36,8 +36,6 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            lblUser.InnerText = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
-
             if (!IsPostBack)
             {
                 long tareaId = GetTareaId();
@@ -48,8 +46,32 @@ namespace Intranet.WorkflowStudio.WebForms
                     return;
                 }
 
+                var userKey = (HttpContext.Current?.User?.Identity?.Name ?? "").Trim();
+                if (!PuedeAbrirTarea(tareaId, userKey))
+                {
+                    ShowError("No tenés permisos para abrir esta tarea.");
+                    DisableActions();
+                    return;
+                }
+
                 CargarTarea(tareaId);
                 chkDocAuditDedup.Checked = true;
+            }
+        }
+
+        private bool PuedeAbrirTarea(long tareaId, string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("dbo.WF_Tarea_PuedeAbrir", cn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@TareaId", SqlDbType.BigInt).Value = tareaId;
+                cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey ?? "";
+
+                cn.Open();
+                var v = cmd.ExecuteScalar();
+                if (v == null || v == DBNull.Value) return false;
+                return Convert.ToBoolean(v);
             }
         }
 

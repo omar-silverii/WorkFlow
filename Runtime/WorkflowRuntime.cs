@@ -1,4 +1,4 @@
-﻿using Intranet.WorkflowStudio.WebForms;
+using Intranet.WorkflowStudio.WebForms;
 using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
 using Intranet.WorkflowStudio.Runtime;
 using Newtonsoft.Json;
@@ -90,6 +90,118 @@ WHERE   t.Id = @Id;", cn))
                 }
             }
         }
+
+
+        // ======================================================================
+        //                      Backtrack helpers (retroceso controlado)
+        // ======================================================================
+        private sealed class BackMeta
+        {
+            public string FrameId;
+            public string TaskNodeId;
+            public string ReturnToNodeId;
+            public int Cycle;
+        }
+
+        private static BackMeta LeerBackMetaDesdeTarea(long tareaId)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"SELECT Datos, NodoId FROM dbo.WF_Tarea WHERE Id=@Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
+                cn.Open();
+
+                using (var dr = cmd.ExecuteReader())
+                {
+                    if (!dr.Read()) return null;
+
+                    var datos = dr.IsDBNull(0) ? null : dr.GetString(0);
+                    var nodoId = dr.IsDBNull(1) ? null : dr.GetString(1);
+
+                    if (string.IsNullOrWhiteSpace(datos)) return new BackMeta { TaskNodeId = nodoId };
+
+                    try
+                    {
+                        var tok = Newtonsoft.Json.Linq.JToken.Parse(datos);
+
+                        // si viene merged (meta/data), usar meta
+                        var meta = (tok is Newtonsoft.Json.Linq.JObject o && o["meta"] != null) ? o["meta"] : tok;
+                        var wb = meta["wfBack"];
+
+                        var frameId = wb?["frameId"]?.ToString();
+                        var taskNodeId = wb?["taskNodeId"]?.ToString() ?? nodoId;
+                        var returnTo = wb?["returnToNodeId"]?.ToString();
+                        var cycleStr = wb?["cycle"]?.ToString();
+
+                        int cycle = 0;
+                        int.TryParse(cycleStr, out cycle);
+
+                        return new BackMeta
+                        {
+                            FrameId = string.IsNullOrWhiteSpace(frameId) ? null : frameId,
+                            TaskNodeId = string.IsNullOrWhiteSpace(taskNodeId) ? null : taskNodeId,
+                            ReturnToNodeId = string.IsNullOrWhiteSpace(returnTo) ? null : returnTo,
+                            Cycle = cycle
+                        };
+                    }
+                    catch
+                    {
+                        return new BackMeta { TaskNodeId = nodoId };
+                    }
+                }
+            }
+        }
+
+        private static List<Dictionary<string, object>> GetOrCreateBackStack(IDictionary<string, object> seed)
+        {
+            if (seed == null) return new List<Dictionary<string, object>>();
+
+            if (!seed.TryGetValue("wf.back.stack", out var v) || v == null)
+            {
+                var stackNew = new List<Dictionary<string, object>>();
+                seed["wf.back.stack"] = stackNew;
+                return stackNew;
+            }
+
+            if (v is List<Dictionary<string, object>> list)
+                return list;
+
+            if (v is Newtonsoft.Json.Linq.JArray ja)
+            {
+                var stack = new List<Dictionary<string, object>>();
+                foreach (var it in ja)
+                {
+                    try
+                    {
+                        var d = it.ToObject<Dictionary<string, object>>();
+                        if (d != null) stack.Add(new Dictionary<string, object>(d, StringComparer.OrdinalIgnoreCase));
+                    }
+                    catch { }
+                }
+                seed["wf.back.stack"] = stack;
+                return stack;
+            }
+
+            // fallback
+            var fb = new List<Dictionary<string, object>>();
+            seed["wf.back.stack"] = fb;
+            return fb;
+        }
+
+        private static Dictionary<string, object> FindFrame(List<Dictionary<string, object>> stack, string frameId)
+        {
+            if (stack == null || string.IsNullOrWhiteSpace(frameId)) return null;
+
+            foreach (var d in stack)
+            {
+                if (d == null) continue;
+                if (d.TryGetValue("frameId", out var v) && string.Equals(Convert.ToString(v), frameId, StringComparison.OrdinalIgnoreCase))
+                    return d;
+            }
+
+            return null;
+        }
+
 
         /// <summary>
         /// Marca la WF_Tarea como Completada, guarda resultado y JSON de datos.
@@ -723,14 +835,156 @@ WHERE Id = @Id;", cn))
                 }
             }
 
-            // start override
-            var resumeFrom = CalcularSiguienteNodo(wf, info.NodoId);
-            if (!string.IsNullOrWhiteSpace(resumeFrom))
+            // ===================== start override (forward o backtrack) =====================
+            var resNorm = (resultado ?? "").Trim().ToLowerInvariant();
+
+            // normalizar contrato (compatibilidad)
+            seed["wf.tarea.resultado"] = resNorm;
+            seed["humanTask.result"] = resNorm;
+            seed["tarea.resultado"] = resNorm;
+            seed["biz.task.result"] = resNorm;
+
+            var backMeta = LeerBackMetaDesdeTarea(tareaId);
+
+            if (backMeta != null && string.Equals(resNorm, "rechazado", StringComparison.OrdinalIgnoreCase))
             {
-                seed["wf.startNodeIdOverride"] = resumeFrom;
-                seed["wf.resume.taskNodeId"] = info.NodoId;
-                seed["wf.resume.fromNodeId"] = resumeFrom;
+                var stack = GetOrCreateBackStack(seed);
+
+                var frameId = !string.IsNullOrWhiteSpace(backMeta.FrameId) ? backMeta.FrameId : Guid.NewGuid().ToString("N");
+                var fr = FindFrame(stack, frameId);
+                if (fr == null)
+                {
+                    fr = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                    stack.Add(fr);
+                }
+
+                fr["frameId"] = frameId;
+                fr["taskNodeId"] = backMeta.TaskNodeId ?? info.NodoId;
+                fr["returnToNodeId"] = backMeta.ReturnToNodeId;
+                if (backMeta.Cycle > 0) fr["cycle"] = backMeta.Cycle;
+                fr["status"] = "rejected";
+
+                // asegurar cycle numérico (default 1)
+                int c = 1;
+                if (fr.TryGetValue("cycle", out var cv) && cv != null)
+                    int.TryParse(Convert.ToString(cv), out c);
+                if (c <= 0) c = 1;
+                fr["cycle"] = c;
+
+                // rejectCount++
+                int rc = 0;
+                if (fr.TryGetValue("rejectCount", out var rcv) && rcv != null)
+                    int.TryParse(Convert.ToString(rcv), out rc);
+                fr["rejectCount"] = rc + 1;
+
+                // lastReject (auditoría)
+                object pedidoObj = null;
+                string pedidoRaw = null;
+
+                if (!string.IsNullOrWhiteSpace(datosJson))
+                {
+                    try { pedidoObj = JsonConvert.DeserializeObject<object>(datosJson); }
+                    catch { pedidoRaw = datosJson; }
+                }
+
+                fr["lastReject"] = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "at", DateTime.Now.ToString("s") },
+                    { "by", usuario ?? "app" },
+                    { "tareaId", tareaId },
+                    { "pedido", pedidoObj },
+                    { "pedidoRaw", pedidoRaw }
+                };
+
+                seed["wf.back.activeFrameId"] = frameId;
+                seed["wf.back.mode"] = "back";
+
+                // salto determinístico al llamador real
+                var returnTo = backMeta.ReturnToNodeId;
+                if (string.IsNullOrWhiteSpace(returnTo))
+                {
+                    // 1) ✅ mejor fallback: resolver por grafo (nodo anterior al human.task)
+                    returnTo = CalcularNodoAnterior(wf, info.NodoId);
+                    if (!string.IsNullOrWhiteSpace(returnTo))
+                        logs.Add("[Backtrack] WARNING: returnToNodeId vacío; se resolvió por grafo (edge entrante al human.task).");
+                }
+
+                if (string.IsNullOrWhiteSpace(returnTo))
+                {
+                    // 2) fallback secundario: prevNodeId guardado por el motor (si existiera)
+                    if (seed.TryGetValue("wf.exec.prevNodeId", out var pv) && pv != null)
+                        returnTo = Convert.ToString(pv);
+                }
+                string CalcularNodoAnterior(WorkflowDef w, string toNodeId)
+                {
+                    if (w == null || string.IsNullOrWhiteSpace(toNodeId) || w.Edges == null) return null;
+
+                    var entrantes = w.Edges
+                        .Where(e => string.Equals(e.To, toNodeId, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (entrantes.Count == 0) return null;
+
+                    // Preferimos un edge "always" como camino “normal”
+                    var e1 = entrantes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase))
+                             ?? entrantes[0];
+
+                    return e1.From;
+                }
+                if (string.IsNullOrWhiteSpace(returnTo))
+                {
+                    // 3) si no hay, NO avanzar (por seguridad)
+                    logs.Add("[Backtrack] ERROR: returnToNodeId vacío y no se pudo resolver ni por grafo ni por wf.exec.prevNodeId; se detiene por seguridad.");
+                    seed["wf.detener"] = true;
+                    seed["wf.error"] = true;
+                    seed["wf.error.message"] = "Backtrack sin returnToNodeId.";
+                    PersistirFinal(info.InstanciaId, logs);
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(returnTo))
+                {
+                    seed["wf.startNodeIdOverride"] = returnTo;
+                    seed["wf.resume.taskNodeId"] = info.NodoId;
+                    seed["wf.resume.fromNodeId"] = returnTo;
+                    seed["wf.resume.kind"] = "back";
+                }
             }
+            else
+            {
+                // forward normal
+                var resumeFrom = CalcularSiguienteNodo(wf, info.NodoId);
+                if (!string.IsNullOrWhiteSpace(resumeFrom))
+                {
+                    seed["wf.startNodeIdOverride"] = resumeFrom;
+                    seed["wf.resume.taskNodeId"] = info.NodoId;
+                    seed["wf.resume.fromNodeId"] = resumeFrom;
+                }
+
+               
+
+                // si corresponde, cerrar frame (approved / otros)
+                if (backMeta != null && !string.IsNullOrWhiteSpace(backMeta.FrameId))
+                {
+                    var stack = GetOrCreateBackStack(seed);
+                    var fr = FindFrame(stack, backMeta.FrameId);
+                    if (fr != null)
+                    {
+                        if (string.Equals(resNorm, "apto", StringComparison.OrdinalIgnoreCase))
+                            fr["status"] = "approved";
+                        else
+                            fr["status"] = "closed";
+                    }
+
+                    if (seed.TryGetValue("wf.back.activeFrameId", out var af) && af != null &&
+                        string.Equals(Convert.ToString(af), backMeta.FrameId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        seed.Remove("wf.back.activeFrameId");
+                        seed.Remove("wf.back.mode");
+                    }
+                }
+            }
+            // =================================================================
 
             // limpieza flags
             seed["wf.detener"] = false;
@@ -855,6 +1109,9 @@ WHERE Id = @Id;", cn))
 
         private static void MarcarTareaCompletada(long tareaId, string resultado, string usuario, string datosJson)
         {
+            // Preservar metadata de la tarea (WF_Tarea.Datos) y adjuntar datos del usuario como 'data'
+            string datosMerged = CombinarDatosTarea(tareaId, datosJson);
+
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = cn.CreateCommand())
             {
@@ -870,7 +1127,7 @@ WHERE Id = @Id
 
                 cmd.Parameters.Add("@Resultado", SqlDbType.NVarChar, 50).Value = (object)resultado ?? DBNull.Value;
                 cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value = (object)usuario ?? DBNull.Value;
-                cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datosJson ?? DBNull.Value;
+                cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)datosMerged ?? DBNull.Value;
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
 
                 cn.Open();
@@ -879,6 +1136,72 @@ WHERE Id = @Id
                     throw new InvalidOperationException("WF_Tarea ya fue completada o cancelada por otro usuario.");
             }
         }
+
+
+        private static string CombinarDatosTarea(long tareaId, string datosJson)
+        {
+            if (string.IsNullOrWhiteSpace(datosJson))
+                return null; // no se sobreescribe Datos
+
+            string datosPrev = null;
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"SELECT Datos FROM dbo.WF_Tarea WHERE Id=@Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = tareaId;
+                cn.Open();
+                var o = cmd.ExecuteScalar();
+                datosPrev = (o == null || o == DBNull.Value) ? null : Convert.ToString(o);
+            }
+
+            try
+            {
+                Newtonsoft.Json.Linq.JToken metaTok = null;
+
+                if (!string.IsNullOrWhiteSpace(datosPrev))
+                {
+                    try
+                    {
+                        var prevTok = Newtonsoft.Json.Linq.JToken.Parse(datosPrev);
+
+                        // si ya estaba merged, quedarse con meta (para evitar anidar)
+                        metaTok = (prevTok is Newtonsoft.Json.Linq.JObject o && o["meta"] != null) ? o["meta"] : prevTok;
+                    }
+                    catch
+                    {
+                        metaTok = new Newtonsoft.Json.Linq.JObject { ["raw"] = datosPrev };
+                    }
+                }
+                else
+                {
+                    metaTok = new Newtonsoft.Json.Linq.JObject();
+                }
+
+                Newtonsoft.Json.Linq.JToken dataTok = null;
+                try
+                {
+                    dataTok = Newtonsoft.Json.Linq.JToken.Parse(datosJson);
+                }
+                catch
+                {
+                    dataTok = new Newtonsoft.Json.Linq.JObject { ["raw"] = datosJson };
+                }
+
+                var merged = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["meta"] = metaTok,
+                    ["data"] = dataTok
+                };
+
+                return merged.ToString(Newtonsoft.Json.Formatting.None);
+            }
+            catch
+            {
+                // fallback: guardar raw (no rompe)
+                return JsonConvert.SerializeObject(new { metaRaw = datosPrev, dataRaw = datosJson });
+            }
+        }
+
 
         private static string CargarDatosContextoInstancia(long instId)
         {

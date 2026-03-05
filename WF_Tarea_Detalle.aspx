@@ -12,6 +12,7 @@
         .form-control-plaintext { padding-left: 0; }
         .ws-title { font-weight: 700; letter-spacing: .2px; }
         .ws-muted { color: rgba(0,0,0,.65); }
+        .ws-card { border-radius: 12px; box-shadow: 0 8px 22px rgba(0,0,0,.06); }
         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
     </style>
@@ -38,6 +39,11 @@
                 CssClass="text-danger" />
 
             <asp:Panel ID="pnlDatos" runat="server">
+                <asp:Panel ID="pnlPedidosPendientes" runat="server" Visible="false" CssClass="alert alert-warning">
+                    <div class="fw-bold mb-1">Pedidos pendientes</div>
+                    <asp:Literal ID="litPedidosPendientes" runat="server" />
+                </asp:Panel>
+
                 <div class="row mb-2">
                     <div class="col-md-2">
                         <label>Id tarea</label>
@@ -125,7 +131,7 @@
                                 OnClick="btnCompletar_Click" />
                     <asp:Button ID="btnVolver" runat="server"
                                 Text="Volver"
-                                CssClass="btn btn-secondary ml-2"
+                                CssClass="btn btn-secondary ms-2"
                                 CausesValidation="false"
                                 OnClick="btnVolver_Click" />
                 </div>
@@ -141,6 +147,7 @@
             </asp:Panel>
        
     </main>
+    <script src="Scripts/bootstrap.bundle.min.js"></script>
 </form>
 </body>
 </html>

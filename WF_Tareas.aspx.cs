@@ -52,6 +52,8 @@ SELECT
     T.Descripcion,
     T.RolDestino,
     T.UsuarioAsignado,
+    T.AsignadoA,
+    T.ScopeKey,
     T.Estado,
     T.Resultado,
     T.FechaCreacion,
@@ -88,25 +90,20 @@ WHERE 1 = 1
                 // - y/o tasks asignadas explícitas por WF_UserPermiso (Permiso='USER' con ScopeKey=userKey)
                 sql += @"
  AND (
-        T.UsuarioAsignado = @UserKey
+        -- 1) Asignadas explícitamente al usuario (usuario puntual)
+        T.AsignadoA = @UserKey
+
+        -- 2) O por rol destino (roles activos del usuario)
      OR EXISTS (
             SELECT 1
-            FROM dbo.WF_UserPermiso P
-            WHERE P.Activo = 1
-              AND P.UserKey = @UserKey
-              AND P.PermisoKey = 'ROL'
-              AND ISNULL(NULLIF(P.ScopeKey,''), '') <> ''
-              AND P.ScopeKey = T.RolDestino
+            FROM dbo.WF_UsuarioRol UR
+            WHERE UR.Activo = 1
+              AND UR.Usuario = @UserKey
+              AND UR.RolKey = T.RolDestino
         )
-     OR EXISTS (
-            SELECT 1
-            FROM dbo.WF_UserPermiso P2
-            WHERE P2.Activo = 1
-              AND P2.UserKey = @UserKey
-              AND P2.PermisoKey = 'USER'
-              AND ISNULL(NULLIF(P2.ScopeKey,''), '') <> ''
-              AND P2.ScopeKey = T.UsuarioAsignado
-        )
+
+        -- 3) Compatibilidad legacy: si todavía usan UsuarioAsignado como asignación puntual
+     OR T.UsuarioAsignado = @UserKey
     )
 ";
             }

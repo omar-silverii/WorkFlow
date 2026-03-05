@@ -103,6 +103,8 @@
                                 <asp:BoundField DataField="Titulo" HeaderText="Título" />
                                 <asp:BoundField DataField="RolDestino" HeaderText="Rol destino" />
                                 <asp:BoundField DataField="UsuarioAsignado" HeaderText="Usuario" />
+                                <asp:BoundField DataField="AsignadoA" HeaderText="AsignadoA" ItemStyle-Width="160px" />
+                                <asp:BoundField DataField="ScopeKey" HeaderText="Scope" ItemStyle-Width="120px" />
                                 <asp:BoundField DataField="Estado" HeaderText="Estado" ItemStyle-Width="90px" />
                                 <asp:BoundField DataField="FechaCreacion" HeaderText="Creación" DataFormatString="{0:dd/MM/yyyy HH:mm}" ItemStyle-Width="150px" />
                                 <asp:BoundField DataField="FechaVencimiento" HeaderText="Vence" DataFormatString="{0:dd/MM/yyyy HH:mm}" ItemStyle-Width="150px" />

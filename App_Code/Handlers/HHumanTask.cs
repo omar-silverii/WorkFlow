@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -39,10 +39,17 @@ namespace Intranet.WorkflowStudio.WebForms
             //    - si está Completada/Cerrada => continuar
             if (!string.IsNullOrWhiteSpace(nodo.Id))
             {
-               
+
                 var tarea = await GetTareaParaNodoAsync(instanciaId, nodo.Id, nodo.Type, ct);
+
+                // ===== Retroceso controlado (backtrack) =====
+                var back = GetOrCreateBackState(ctx);
+                var activeFrame = back.ActiveFrameForTaskNode(nodo.Id);
+                int expectedCycle = (activeFrame != null && activeFrame.StatusEquals("rejected")) ? (activeFrame.Cycle + 1) : 0;
+
                 if (tarea != null)
                 {
+                    // 1) Si está pendiente => detenerse acá
                     if (EstaPendiente(tarea.Estado))
                     {
                         ctx.Log($"[human.task] ya existe WF_Tarea PENDIENTE para instancia {instanciaId}, nodo {nodo.Id}; se detiene aquí. tareaId={tarea.Id}");
@@ -52,37 +59,90 @@ namespace Intranet.WorkflowStudio.WebForms
                         ctx.Estado["wf.currentNodeType"] = nodo.Type;
                         ctx.Estado["wf.tarea.id"] = tarea.Id;
 
+                        var f0 = ExtraerFrameId(tarea.Datos);
+                        if (!string.IsNullOrWhiteSpace(f0))
+                            ctx.Estado["wf.back.activeFrameId"] = f0;
+
                         return new ResultadoEjecucion { Etiqueta = "always" };
                     }
 
+                    // 2) Si está cerrada:
+                    //    - si venimos por rechazo y corresponde nuevo ciclo => NO retornar (deja que cree una nueva)
+                    //    - si no => continuar normalmente
                     if (EstaCerrada(tarea.Estado))
                     {
-                        ctx.Log($"[human.task] tarea ya CERRADA para instancia {instanciaId}, nodo {nodo.Id}; se continúa. tareaId={tarea.Id}, estado={tarea.Estado}, resultado={tarea.Resultado}");
+                        tarea.Cycle = ExtraerCycle(tarea.Datos);
+                        tarea.FrameId = ExtraerFrameId(tarea.Datos);
 
-                        // Exponer resultado al contexto (global + por nodo)
-                        ctx.Estado["wf.tarea.id"] = tarea.Id;
-                        ctx.Estado["wf.tarea.estado"] = tarea.Estado;
-                        var res = (tarea.Resultado ?? "").Trim().ToLowerInvariant();
+                        if (expectedCycle > 0 && tarea.Cycle > 0 && tarea.Cycle < expectedCycle)
+                        {
+                            ctx.Log($"[human.task] backtrack: ciclo anterior detectado (lastCycle={tarea.Cycle}, expectedCycle={expectedCycle}) -> se crea nueva tarea.");
+                            // NO retornar => cae al bloque de creación abajo
+                        }
+                        else
+                        {
+                            ctx.Log($"[human.task] tarea ya CERRADA para instancia {instanciaId}, nodo {nodo.Id}; se continúa. tareaId={tarea.Id}, estado={tarea.Estado}, resultado={tarea.Resultado}");
 
-                        ctx.Estado["wf.tarea.resultado"] = res;                 // "apto" / "no_apto" / "rechazado"
-                        ctx.Estado[$"wf.tarea.{nodo.Id}.resultado"] = res;      // por nodo
+                            ctx.Estado["wf.tarea.id"] = tarea.Id;
+                            ctx.Estado["wf.tarea.estado"] = tarea.Estado;
 
+                            var res = (tarea.Resultado ?? "").Trim().ToLowerInvariant();
+                            ctx.Estado["wf.tarea.resultado"] = res;
+                            ctx.Estado[$"wf.tarea.{nodo.Id}.resultado"] = res;
+
+                            ctx.Estado["wf.currentNodeId"] = nodo.Id;
+                            ctx.Estado["wf.currentNodeType"] = nodo.Type;
+
+                            return new ResultadoEjecucion { Etiqueta = "always" };
+                        }
+                    }
+                    else
+                    {
+                        // Estado raro (ni pendiente ni cerrada) => por seguridad detener
+                        ctx.Log($"[human.task] tarea existe con estado desconocido '{tarea.Estado}' para instancia {instanciaId}, nodo {nodo.Id}; por seguridad se detiene. tareaId={tarea.Id}");
+
+                        ctx.Estado["wf.detener"] = true;
                         ctx.Estado["wf.currentNodeId"] = nodo.Id;
                         ctx.Estado["wf.currentNodeType"] = nodo.Type;
-                        ctx.Log($"[human.task] resultado normalizado='{res}' (raw='{tarea.Resultado}')");
+                        ctx.Estado["wf.tarea.id"] = tarea.Id;
+
                         return new ResultadoEjecucion { Etiqueta = "always" };
                     }
-
-                    // Estado desconocido: por seguridad, detener
-                    ctx.Log($"[human.task] tarea existe con estado desconocido '{tarea.Estado}' para instancia {instanciaId}, nodo {nodo.Id}; por seguridad se detiene. tareaId={tarea.Id}");
-                    ctx.Estado["wf.detener"] = true;
-                    ctx.Estado["wf.currentNodeId"] = nodo.Id;
-                    ctx.Estado["wf.currentNodeType"] = nodo.Type;
-                    ctx.Estado["wf.tarea.id"] = tarea.Id;
-                    return new ResultadoEjecucion { Etiqueta = "always" };
                 }
+
+                // Si tarea == null, o si estaba cerrada pero corresponde crear nuevo ciclo,
+                // cae al flujo de creación que ya tenés más abajo.
+
             }
 
+
+            // ===== Retroceso controlado (backtrack): definir frame/cycle/returnTo =====
+            var back2 = GetOrCreateBackState(ctx);
+            var prevNodeId = GetStringFromState(ctx, "wf.exec.prevNodeId");
+            string frameId = null;
+            int cycle = 1;
+
+            // Si venimos de un rechazo y este nodo es el de la tarea original, reabrimos el frame y subimos ciclo
+            var af = back2.ActiveFrameForTaskNode(nodo.Id);
+            if (af != null && af.StatusEquals("rejected"))
+            {
+                frameId = af.FrameId;
+                cycle = af.Cycle + 1;
+                af.Cycle = cycle;
+                af.Status = "open";
+            }
+            else
+            {
+                frameId = Guid.NewGuid().ToString("N");
+                cycle = 1;
+
+                // Nuevo frame en stack
+                back2.EnsureFrame(frameId, nodo.Id, prevNodeId, cycle);
+            }
+
+            // Dejar activo el frame (el flujo queda detenido en este human.task)
+            ctx.Estado["wf.back.activeFrameId"] = frameId;
+            ctx.Estado["wf.back.mode"] = "task";
 
             // 3) Título / descripción con soporte de ${...}
             string tituloTpl = GetString(p, "titulo") ?? $"Tarea para {instanciaId}";
@@ -99,9 +159,11 @@ namespace Intranet.WorkflowStudio.WebForms
             // prioridad: input.sector (como lo venís usando en tu extracción)
             if (ctx.Estado != null)
             {
-                object v = null;
+                object v;
 
-                if (ctx.Estado.TryGetValue("input.sector", out v) && v != null)
+                if (ctx.Estado.TryGetValue("input.scopeKey", out v) && v != null)
+                    scopeKey = Convert.ToString(v);
+                else if (ctx.Estado.TryGetValue("input.sector", out v) && v != null)
                     scopeKey = Convert.ToString(v);
                 else if (ctx.Estado.TryGetValue("input.Sector", out v) && v != null)
                     scopeKey = Convert.ToString(v);
@@ -118,7 +180,15 @@ namespace Intranet.WorkflowStudio.WebForms
                 fechaVenc = DateTime.Now.AddMinutes(deadlineMinutes);
 
             // 4) Metadata → JSON
-            string metadataJson = BuildMetadataJson(p, instanciaId);
+            var wfBack = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "frameId", frameId },
+                { "taskNodeId", nodo.Id },
+                { "returnToNodeId", prevNodeId },
+                { "cycle", cycle }
+            };
+
+            string metadataJson = BuildMetadataJson(p, instanciaId, wfBack);
 
             long tareaId;
             try
@@ -161,7 +231,253 @@ namespace Intranet.WorkflowStudio.WebForms
             public long Id { get; set; }
             public string Estado { get; set; }      // "Pendiente", "Completada", etc.
             public string Resultado { get; set; }   // opcional
+            public string Datos { get; set; }        // JSON (metadata / data)
+            public int Cycle { get; set; }           // wfBack.cycle
+            public string FrameId { get; set; }      // wfBack.frameId
         }
+
+                // ===== Backtrack helpers (retroceso controlado) =====
+        private sealed class BackFrame
+        {
+            private readonly Dictionary<string, object> _d;
+
+            public BackFrame(Dictionary<string, object> d)
+            {
+                _d = d ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            private string GetStr(string k)
+            {
+                if (_d.TryGetValue(k, out var v) && v != null) return Convert.ToString(v);
+                return null;
+            }
+
+            private void SetStr(string k, string v)
+            {
+                _d[k] = v;
+            }
+
+            private int GetInt(string k, int defVal)
+            {
+                if (_d.TryGetValue(k, out var v) && v != null)
+                {
+                    if (v is int i) return i;
+                    if (int.TryParse(Convert.ToString(v), out var x)) return x;
+                }
+                return defVal;
+            }
+
+            private void SetInt(string k, int v)
+            {
+                _d[k] = v;
+            }
+
+            public string FrameId => GetStr("frameId");
+            public string TaskNodeId { get => GetStr("taskNodeId"); set => SetStr("taskNodeId", value); }
+            public string ReturnToNodeId { get => GetStr("returnToNodeId"); set => SetStr("returnToNodeId", value); }
+            public int Cycle { get => GetInt("cycle", 1); set => SetInt("cycle", value); }
+            public string Status { get => GetStr("status"); set => SetStr("status", value); } // open/rejected/approved
+
+            public bool StatusEquals(string s) => string.Equals(Status ?? "", s ?? "", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class BackState
+        {
+            private readonly ContextoEjecucion _ctx;
+            private readonly List<Dictionary<string, object>> _stack;
+
+            public BackState(ContextoEjecucion ctx, List<Dictionary<string, object>> stack)
+            {
+                _ctx = ctx;
+                _stack = stack;
+            }
+
+            public BackFrame ActiveFrameForTaskNode(string taskNodeId)
+            {
+                if (_ctx?.Estado == null) return null;
+
+                if (!_ctx.Estado.TryGetValue("wf.back.activeFrameId", out var v) || v == null) return null;
+                var fid = Convert.ToString(v);
+                if (string.IsNullOrWhiteSpace(fid)) return null;
+
+                var fr = FindFrame(fid);
+                if (fr == null) return null;
+
+                if (!string.IsNullOrWhiteSpace(taskNodeId) && !string.Equals(fr.TaskNodeId, taskNodeId, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                return fr;
+            }
+
+            public void EnsureFrame(string frameId, string taskNodeId, string returnToNodeId, int cycle)
+            {
+                if (string.IsNullOrWhiteSpace(frameId)) return;
+
+                // ya existe?
+                for (int i = 0; i < _stack.Count; i++)
+                {
+                    var d = _stack[i];
+                    if (d == null) continue;
+                    if (d.TryGetValue("frameId", out var v) && string.Equals(Convert.ToString(v), frameId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        d["taskNodeId"] = taskNodeId;
+                        d["returnToNodeId"] = returnToNodeId;
+                        d["cycle"] = cycle;
+                        if (!d.ContainsKey("status")) d["status"] = "open";
+                        return;
+                    }
+                }
+
+                _stack.Add(new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "frameId", frameId },
+                    { "taskNodeId", taskNodeId },
+                    { "returnToNodeId", returnToNodeId },
+                    { "cycle", cycle },
+                    { "status", "open" },
+                    { "rejectCount", 0 }
+                });
+            }
+
+            private BackFrame FindFrame(string frameId)
+            {
+                if (string.IsNullOrWhiteSpace(frameId)) return null;
+
+                for (int i = 0; i < _stack.Count; i++)
+                {
+                    var d = _stack[i];
+                    if (d == null) continue;
+
+                    if (d.TryGetValue("frameId", out var v) && string.Equals(Convert.ToString(v), frameId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new BackFrame(d);
+                    }
+                }
+
+                return null;
+            }
+
+            private static int TryToInt(object v, int defVal)
+            {
+                if (v == null) return defVal;
+                if (v is int i) return i;
+                if (int.TryParse(Convert.ToString(v), out var x)) return x;
+                return defVal;
+            }
+        }
+
+        private static BackState GetOrCreateBackState(ContextoEjecucion ctx)
+        {
+            if (ctx?.Estado == null) return new BackState(ctx, new List<Dictionary<string, object>>());
+
+            if (!ctx.Estado.TryGetValue("wf.back.stack", out var v) || v == null)
+            {
+                var stackNew = new List<Dictionary<string, object>>();
+                ctx.Estado["wf.back.stack"] = stackNew;
+                return new BackState(ctx, stackNew);
+            }
+
+            // v puede venir como JArray (por snapshot)
+            if (v is Newtonsoft.Json.Linq.JArray ja)
+            {
+                var stack = new List<Dictionary<string, object>>();
+                foreach (var it in ja)
+                {
+                    try
+                    {
+                        var d = it.ToObject<Dictionary<string, object>>();
+                        if (d != null) stack.Add(new Dictionary<string, object>(d, StringComparer.OrdinalIgnoreCase));
+                    }
+                    catch { }
+                }
+                ctx.Estado["wf.back.stack"] = stack;
+                return new BackState(ctx, stack);
+            }
+
+            if (v is List<Dictionary<string, object>> list)
+                return new BackState(ctx, list);
+
+            if (v is System.Collections.IEnumerable en)
+            {
+                var stack = new List<Dictionary<string, object>>();
+                foreach (var it in en)
+                {
+                    if (it is Dictionary<string, object> d)
+                        stack.Add(d);
+                    else if (it is Newtonsoft.Json.Linq.JObject jo)
+                    {
+                        try
+                        {
+                            var d2 = jo.ToObject<Dictionary<string, object>>();
+                            if (d2 != null) stack.Add(new Dictionary<string, object>(d2, StringComparer.OrdinalIgnoreCase));
+                        }
+                        catch { }
+                    }
+                }
+                ctx.Estado["wf.back.stack"] = stack;
+                return new BackState(ctx, stack);
+            }
+
+            var fallback = new List<Dictionary<string, object>>();
+            ctx.Estado["wf.back.stack"] = fallback;
+            return new BackState(ctx, fallback);
+        }
+
+        private static string GetStringFromState(ContextoEjecucion ctx, string key)
+        {
+            if (ctx?.Estado == null || string.IsNullOrWhiteSpace(key)) return null;
+            if (!ctx.Estado.TryGetValue(key, out var v) || v == null) return null;
+            return Convert.ToString(v);
+        }
+
+        private static int ExtraerCycle(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return 0;
+                var tok = Newtonsoft.Json.Linq.JToken.Parse(datosJson);
+
+                // si viene merged (meta/data), usar meta
+                var meta = (tok is Newtonsoft.Json.Linq.JObject o && o["meta"] != null) ? o["meta"] : tok;
+                var wb = meta["wfBack"];
+                if (wb != null && wb["cycle"] != null && int.TryParse(wb["cycle"].ToString(), out var c))
+                    return c;
+
+                return 0;
+            }
+            catch { return 0; }
+        }
+
+        private static string ExtraerFrameId(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
+                var tok = Newtonsoft.Json.Linq.JToken.Parse(datosJson);
+                var meta = (tok is Newtonsoft.Json.Linq.JObject o && o["meta"] != null) ? o["meta"] : tok;
+                var wb = meta["wfBack"];
+                var fid = wb?["frameId"]?.ToString();
+                return string.IsNullOrWhiteSpace(fid) ? null : fid;
+            }
+            catch { return null; }
+        }
+
+        private static string ExtraerReturnTo(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
+                var tok = Newtonsoft.Json.Linq.JToken.Parse(datosJson);
+                var meta = (tok is Newtonsoft.Json.Linq.JObject o && o["meta"] != null) ? o["meta"] : tok;
+                var wb = meta["wfBack"];
+                var rt = wb?["returnToNodeId"]?.ToString();
+                return string.IsNullOrWhiteSpace(rt) ? null : rt;
+            }
+            catch { return null; }
+        }
+
+
+        
 
         private static async Task<TareaInfo> GetTareaParaNodoAsync(
                                                                     long instanciaId,
@@ -173,12 +489,14 @@ namespace Intranet.WorkflowStudio.WebForms
 
             using (var cn = new SqlConnection(cs))
             using (var cmd = new SqlCommand(@"
-                                            SELECT TOP 1 Id, Estado, Resultado
+                                            SELECT TOP 1 Id, Estado, Resultado, Datos
                                             FROM dbo.WF_Tarea
                                             WHERE WF_InstanciaId = @InstId
                                               AND NodoId         = @NodoId
                                               AND NodoTipo       = @NodoTipo
-                                            ORDER BY Id DESC;", cn))
+                                            ORDER BY
+                                              CASE WHEN Estado IS NULL OR Estado='Pendiente' OR Estado='Abierta' THEN 0 ELSE 1 END,
+                                              Id DESC;", cn))
             {
                 cmd.Parameters.Add("@InstId", SqlDbType.BigInt).Value = instanciaId;
                 cmd.Parameters.Add("@NodoId", SqlDbType.NVarChar, 50).Value = nodoId;
@@ -193,7 +511,8 @@ namespace Intranet.WorkflowStudio.WebForms
                     {
                         Id = rd.GetInt64(0),
                         Estado = rd.IsDBNull(1) ? null : rd.GetString(1),
-                        Resultado = rd.IsDBNull(2) ? null : rd.GetString(2)
+                        Resultado = rd.IsDBNull(2) ? null : rd.GetString(2),
+                        Datos = rd.IsDBNull(3) ? null : rd.GetString(3)
                     };
                 }
             }
@@ -244,7 +563,7 @@ namespace Intranet.WorkflowStudio.WebForms
             return 0;
         }
 
-        private static string BuildMetadataJson(Dictionary<string, object> p, long instanciaId)
+        private static string BuildMetadataJson(Dictionary<string, object> p, long instanciaId, IDictionary<string, object> wfBack)
         {
             object metaObj;
             var metaDict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
@@ -266,6 +585,9 @@ namespace Intranet.WorkflowStudio.WebForms
                         metaDict[kv.Key] = kv.Value;
                 }
             }
+
+            if (wfBack != null)
+                metaDict["wfBack"] = wfBack;
 
             return JsonConvert.SerializeObject(metaDict);
         }
@@ -312,7 +634,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 // 1) ScopeKey desde el documento (mejor forma: mismo criterio que Instancia)
                 //    Priorizo input.sector, y dejo fallback a input.Sector (por si alguna vez cambia).
                 // ---------------------------
-                scopeKey = null;
+                //scopeKey = null;
 
                 // OJO: esta función no recibe ctx, entonces el scope lo tenés que calcular ANTES
                 // y pasarlo como parámetro, o mover este bloque afuera.
@@ -341,7 +663,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 // ✅ “AsignadoA” = usuario puntual (si existe). Si no, NULL.
                 //    (en tareas por rol puede estar vacío)
-                cmd.Parameters.Add("@AsignadoA", SqlDbType.NVarChar, 100).Value = DBNull.Value;
+                cmd.Parameters.Add("@AsignadoA", SqlDbType.NVarChar, 100).Value = (object)asignadoA ?? DBNull.Value;
 
                 await cn.OpenAsync(ct);
                 var scalar = await cmd.ExecuteScalarAsync(ct);

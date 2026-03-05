@@ -51,6 +51,24 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.Panel pnlDatos;
 
         /// <summary>
+        /// Control pnlPedidosPendientes.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlPedidosPendientes;
+
+        /// <summary>
+        /// Control litPedidosPendientes.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Literal litPedidosPendientes;
+
+        /// <summary>
         /// Control lblId.
         /// </summary>
         /// <remarks>

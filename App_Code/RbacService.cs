@@ -63,7 +63,7 @@ ELSE
 
                 cn.Open();
                 var o = cmd.ExecuteScalar();
-                return Convert.ToInt32(o) == 1;
+                return o != null && o != DBNull.Value && Convert.ToInt32(o) == 1;
             }
         }
     }

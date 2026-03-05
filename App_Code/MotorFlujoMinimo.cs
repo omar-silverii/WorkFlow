@@ -1,4 +1,4 @@
-﻿// App_Code/MotorFlujoMinimo.cs
+// App_Code/MotorFlujoMinimo.cs
 // Motor mínimo para ejecutar el workflow desde JSON.
 
 using Intranet.WorkflowStudio.Runtime;
@@ -419,6 +419,7 @@ namespace Intranet.WorkflowStudio.WebForms
             // ================================================================
 
             int guard = 0;
+            string prevNodeId = null;
 
             // Publico estado inicial (por si algún nodo consulta WF_CTX_ESTADO)
             _estadoPublisher?.Publish(ctx.Estado, null, null);
@@ -493,6 +494,12 @@ namespace Intranet.WorkflowStudio.WebForms
 
                         try
                         {
+                            if (ctx.Estado != null)
+                            {
+                                ctx.Estado["wf.exec.prevNodeId"] = nodo.Id;
+                                ctx.Estado["wf.exec.currentNodeId"] = nodoTarget.Id;
+                            }
+
                             _estadoPublisher?.Publish(ctx.Estado, nodoTarget.Id, nodoTarget.Type);
                             ctx.Log($"[Retry] intento {intento}/{maxIntentos} -> {nodoTarget.Id} ({nodoTarget.Type})");
                             resTarget = await handlerTarget.EjecutarAsync(ctx, nodoTarget, ct);
@@ -567,6 +574,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 // ================================================================
 
                 // ejecución normal
+                if (ctx.Estado != null)
+                {
+                    ctx.Estado["wf.exec.prevNodeId"] = prevNodeId;
+                    ctx.Estado["wf.exec.currentNodeId"] = nodo.Id;
+                }
+
                 _estadoPublisher?.Publish(ctx.Estado, nodo.Id, nodo.Type);
                 res = await manejador.EjecutarAsync(ctx, nodo, ct);
 
@@ -597,9 +610,8 @@ namespace Intranet.WorkflowStudio.WebForms
                     salientes.FirstOrDefault(e => string.Equals(e.Condition, etiqueta, StringComparison.OrdinalIgnoreCase)) ??
                     salientes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase)) ??
                     salientes[0];
-
+                prevNodeId = nodo.Id;
                 actual = siguiente.To;
-
                 if (string.Equals(nodo.Type, "util.end", StringComparison.OrdinalIgnoreCase))
                     break;
             }

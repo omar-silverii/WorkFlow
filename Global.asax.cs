@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Web;
 using System.Web.Security;
+using System.Web.UI;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -15,6 +16,17 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             // Cambia en cada arranque real de la app -> invalida cookies viejas
             Application["WF_AUTH_NONCE"] = Guid.NewGuid().ToString("N");
+
+            // Mapping requerido por UnobtrusiveValidationMode
+            ScriptManager.ScriptResourceMapping.AddDefinition(
+                "jquery",
+                new ScriptResourceDefinition
+                {
+                    Path = "~/Scripts/jquery-3.7.0.min.js",
+                    DebugPath = "~/Scripts/jquery-3.7.0.js",
+                    LoadSuccessExpression = "window.jQuery"
+                }
+            );
         }
 
         protected void Application_AuthenticateRequest(object sender, EventArgs e)
