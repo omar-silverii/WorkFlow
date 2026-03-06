@@ -1,0 +1,17 @@
+EMPRESA ACME S.A. ORDEN DE COMPRA
+
+ORDEN DE COMPRA Nº OC-2025-00077
+Fecha: 17/12/2025
+Proveedor:
+COD: PROV-7788
+Razón Social: ACME PROVEEDOR S.A.
+CUIT: 30-12345678-9
+
+Detalle de la compra:
+Item: Tornillos acero inoxidable 10mm
+Cantidad: 120 unidades
+Precio Unitario: 1.283,33
+Total: 154.000,00
+Entrega en 15 días.
+Pago 30 días.
+Autorizado por: Gerencia Compras

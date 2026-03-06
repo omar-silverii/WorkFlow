@@ -2,7 +2,27 @@
     const { register, helpers } = window.WF_Inspector;
     const { el, section, rowButtons, btn } = helpers;
 
-    register('human.task', (node, ctx, dom) => {
+    async function loadRoles() {
+        const url = (window.WF_BASE_URL || '') + 'API/WF_Roles_List.ashx';
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('No se pudo cargar la lista de roles.');
+        return await res.json();
+    }
+
+    function buildRolSelect(currentValue) {
+        const sel = el('select', 'input');
+        sel.innerHTML = '';
+
+        const optEmpty = document.createElement('option');
+        optEmpty.value = '';
+        optEmpty.textContent = '-- seleccionar rol --';
+        sel.appendChild(optEmpty);
+
+        sel.value = currentValue || '';
+        return sel;
+    }
+
+    register('human.task', async (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
         const { body, title, sub } = dom;
         body.innerHTML = '';
@@ -10,7 +30,6 @@
         if (title) title.textContent = node.label || 'Tarea humana';
         if (sub) sub.textContent = node.key || '';
 
-        // ✅ ÚNICO estándar: params
         const p = node.params || {};
 
         // Label visual
@@ -28,10 +47,17 @@
         inpDesc.value = p.descripcion || '';
         const sDesc = section('Descripción', inpDesc);
 
-        // Rol
-        const inpRol = el('input', 'input');
-        inpRol.value = p.rol || '';
-        const sRol = section('Rol destino (ej: RRHH, Recepción)', inpRol);
+        // Rol destino (combo)
+        const selRol = buildRolSelect(p.rol || '');
+        const sRol = section('Rol destino', selRol);
+
+        // Mensaje de carga/error roles
+        const rolMsg = el('div', 'help');
+        rolMsg.style.fontSize = '12px';
+        rolMsg.style.marginTop = '6px';
+        rolMsg.style.opacity = '0.8';
+        rolMsg.textContent = 'Cargando roles...';
+        sRol.appendChild(rolMsg);
 
         // Usuario asignado
         const inpUser = el('input', 'input');
@@ -52,28 +78,62 @@
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
 
+        // Cargar roles desde BD
+        try {
+            const roles = await loadRoles();
+
+            roles.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.RolKey || '';
+                opt.textContent = r.Nombre
+                    ? `${r.Nombre} (${r.RolKey})`
+                    : (r.RolKey || '');
+                selRol.appendChild(opt);
+            });
+
+            selRol.value = p.rol || '';
+            rolMsg.textContent = 'Seleccione el rol destino desde la base.';
+        } catch (err) {
+            rolMsg.textContent = 'No se pudieron cargar los roles.';
+            rolMsg.style.color = '#b02a37';
+        }
+
         bTpl.onclick = () => {
             const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['human.task']) || {};
             if (def.titulo) inpTitulo.value = def.titulo;
             if (def.descripcion) inpDesc.value = def.descripcion;
-            if (def.rol) inpRol.value = def.rol;
+            if (def.rol) selRol.value = def.rol;
             if (def.usuarioAsignado) inpUser.value = def.usuarioAsignado;
             if (typeof def.deadlineMinutes !== 'undefined') inpDead.value = def.deadlineMinutes;
         };
 
         bSave.onclick = () => {
+            const rol = (selRol.value || '').trim();
+            const usuarioAsignado = (inpUser.value || '').trim();
+
+            // Regla profesional:
+            // si no hay usuario puntual, el rol es obligatorio
+            if (!rol && !usuarioAsignado) {
+                alert('Debe seleccionar un Rol destino o completar Usuario asignado.');
+                try { selRol.focus(); } catch (e) { }
+                return;
+            }
+
             node.label = inpLbl.value || node.label || 'Tarea humana';
 
             const deadlineVal = inpDead.value ? parseInt(inpDead.value, 10) : null;
 
-            // ✅ Guardar en params (lo que exporta buildWorkflow)
             node.params = node.params || {};
             node.params.titulo = inpTitulo.value || '';
             node.params.descripcion = inpDesc.value || '';
-            node.params.rol = inpRol.value || '';
-            node.params.usuarioAsignado = inpUser.value || '';
-            if (deadlineVal !== null) node.params.deadlineMinutes = deadlineVal;
-            else delete node.params.deadlineMinutes;
+            node.params.rol = rol;
+            node.params.usuarioAsignado = usuarioAsignado;
+
+            if (deadlineVal !== null && !isNaN(deadlineVal)) {
+                node.params.deadlineMinutes = deadlineVal;
+            } else {
+                delete node.params.deadlineMinutes;
+            }
 
             ensurePosition(node);
 

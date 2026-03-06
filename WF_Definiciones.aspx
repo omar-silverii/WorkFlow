@@ -81,10 +81,7 @@
                     CommandArgument='<%# Eval("Id") %>'
                     CssClass="btn btn-sm btn-secondary mr-1">Instancias</asp:LinkButton>
 
-                <asp:LinkButton ID="lnkEjecutar" runat="server"
-                    CommandName="Ejecutar"
-                    CommandArgument='<%# Eval("Id") %>'
-                    CssClass="btn btn-sm btn-success">Ejecutar</asp:LinkButton>
+                
             </ItemTemplate>
         </asp:TemplateField>
     </Columns>

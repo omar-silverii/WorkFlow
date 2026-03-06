@@ -1,9 +1,13 @@
 ﻿using Intranet.WorkflowStudio.Runtime;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.IO;
+using System.Web;
+using System.Web.UI.WebControls;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -16,6 +20,21 @@ namespace Intranet.WorkflowStudio.WebForms
             get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }
         }
 
+        private long TareaIdActual => (ViewState["TareaId"] is long v) ? v : 0;
+
+        private long InstanciaIdActual
+        {
+            get { return (ViewState["InstanciaId"] is long v) ? v : 0; }
+            set { ViewState["InstanciaId"] = value; }
+        }
+
+        private class AdjRow
+        {
+            public string Tipo { get; set; }
+            public string FileName { get; set; }
+            public string Fecha { get; set; }
+            public string Url { get; set; }
+        }
         protected void Page_Load(object sender, EventArgs e)
         {
             try { Topbar1.ActiveSection = "Documentos"; } catch { }
@@ -91,6 +110,8 @@ WHERE   t.Id = @Id;", cn))
                     long instanciaId = Convert.ToInt64(dr["WF_InstanciaId"]);
                     string nodoId = Convert.ToString(dr["NodoId"]);
 
+                    InstanciaIdActual = instanciaId;
+
                     lblId.Text = dr["Id"].ToString();
                     lblInstancia.Text = dr["WF_InstanciaId"].ToString();
                     lblEstado.Text = Convert.ToString(dr["Estado"]);
@@ -142,9 +163,62 @@ WHERE   t.Id = @Id;", cn))
                     }
 
                     CargarPedidosPendientes(id, instanciaId);
+                    BindAdjuntos();
                 }
             }
         }
+
+        protected void btnAdjuntar_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!fuAdjunto.HasFile)
+                {
+                    ShowAdjMsg("Seleccione un archivo para adjuntar.", isError: true);
+                    return;
+                }
+
+                var tareaId = TareaIdActual;
+                var instanciaId = InstanciaIdActual;
+
+                if (tareaId <= 0 || instanciaId <= 0)
+                {
+                    ShowAdjMsg("No se pudo resolver Instancia/Tarea.", isError: true);
+                    return;
+                }
+
+                // Guardar en App_Data/WFUploads/<inst>/<tarea>/
+                var baseDir = Server.MapPath("~/App_Data/WFUploads");
+                var dir = Path.Combine(baseDir, instanciaId.ToString(), tareaId.ToString());
+                Directory.CreateDirectory(dir);
+
+                var originalName = Path.GetFileName(fuAdjunto.FileName);
+                var safeName = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "__" + originalName;
+                var fullPath = Path.Combine(dir, safeName);
+
+                fuAdjunto.SaveAs(fullPath);
+
+                var tipo = (txtAdjTipo.Text ?? "").Trim();
+                var user = (Context.User?.Identity?.Name ?? "").Trim();
+
+                // URL servida por handler (lo creás en el punto B)
+                var url = ResolveUrl("~/API/WF_Upload_Get.ashx") +
+                      "?inst=" + instanciaId +
+                      "&tarea=" + tareaId +
+                      "&f=" + HttpUtility.UrlEncode(safeName);
+
+                AppendAttachmentToDatosContexto(instanciaId, tareaId, originalName, safeName, tipo, url, user);
+
+                ShowAdjMsg("Adjunto cargado OK.", isError: false);
+                txtAdjTipo.Text = "";
+                BindAdjuntos();
+            }
+            catch (Exception ex)
+            {
+                ShowAdjMsg("Error al adjuntar: " + ex.Message, isError: true);
+            }
+        }
+
         private void CargarPedidosPendientes(long tareaIdActual, long instanciaId)
         {
             try
@@ -337,7 +411,7 @@ ORDER BY
                 if (!string.IsNullOrWhiteSpace(obs))
                     html += "<div class='mt-1'><b>Observaciones:</b> " + Server.HtmlEncode(obs) + "</div>";
 
-                html += "<div class='mt-2'><a href='WF_Tarea_Detalle.aspx?id=" + tareaRechazadaId + "'>Ver tarea rechazada</a></div>";
+                html += "<div class='mt-2'><a href='#adjuntos'>Adjuntar documentación solicitada</a></div>";
                 return html;
             }
             catch
@@ -433,6 +507,149 @@ ORDER BY
             pnlDatos.Visible = false;
             pnlError.Visible = true;
             litError.Text = Server.HtmlEncode(mensaje);
+        }
+
+        private void ShowAdjMsg(string msg, bool isError)
+        {
+            pnlAdjuntosMsg.Visible = true;
+            pnlAdjuntosMsg.Controls.Clear();
+            pnlAdjuntosMsg.Controls.Add(new Literal
+            {
+                Text = "<div class='alert " + (isError ? "alert-danger" : "alert-success") + " mb-2'>" +
+                       Server.HtmlEncode(msg) + "</div>"
+            });
+        }
+
+        private void BindAdjuntos()
+        {
+            var tareaId = TareaIdActual;
+            var instanciaId = InstanciaIdActual;
+
+            var list = new System.Collections.Generic.List<AdjRow>();
+
+            if (instanciaId > 0)
+            {
+                var json = GetDatosContexto(instanciaId);
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    JObject root = null;
+                    try { root = JObject.Parse(json); } catch { root = null; }
+
+                    var atts =
+                        (root?["biz"]?["case"]?["attachments"] as JArray) ??
+                        (root?["estado"]?["biz"]?["case"]?["attachments"] as JArray);
+
+                    if (atts != null)
+                    {
+                        foreach (var it in atts)
+                        {
+                            var jo = it as JObject;
+                            if (jo == null) continue;
+
+                            var tareaIdDoc = Convert.ToString(jo["tareaId"] ?? "");
+                            var fileName = Convert.ToString(jo["fileName"] ?? "");
+                            var fecha = Convert.ToString(jo["fecha"] ?? "");
+                            var usuario = Convert.ToString(jo["usuario"] ?? "");
+                            var tipo = Convert.ToString(jo["tipo"] ?? "");
+
+                            var url = Convert.ToString(jo["viewerUrl"] ?? "");
+                           
+                            var storedFileName = Convert.ToString(jo["storedFileName"] ?? "");
+                            
+                            if (!string.IsNullOrWhiteSpace(tareaIdDoc) && !string.IsNullOrWhiteSpace(storedFileName))
+                            {
+                                url = ResolveUrl("~/API/WF_Upload_Get.ashx")
+                                    + "?inst=" + instanciaId
+                                    + "&tarea=" + tareaIdDoc
+                                    + "&authTarea=" + tareaId
+                                    + "&f=" + HttpUtility.UrlEncode(storedFileName);
+                            }
+
+                            var subido = fecha;
+                            if (!string.IsNullOrWhiteSpace(usuario))
+                                subido = string.IsNullOrWhiteSpace(subido) ? usuario : (fecha + " - " + usuario);
+
+                            list.Add(new AdjRow
+                            {
+                                Tipo = tipo,
+                                FileName = fileName,
+                                Fecha = subido,
+                                Url = url
+                            });
+                        }
+                    }
+                }
+            }
+
+            pnlAdjuntosEmpty.Visible = (list.Count == 0);
+            rptAdjuntos.DataSource = list;
+            rptAdjuntos.DataBind();
+        }
+
+        private string GetDatosContexto(long instanciaId)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("SELECT DatosContexto FROM WF_Instancia WHERE Id=@Id", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instanciaId;
+                cn.Open();
+                var val = cmd.ExecuteScalar();
+                return (val == null || val == DBNull.Value) ? "" : Convert.ToString(val);
+            }
+        }
+
+        private void SetDatosContexto(long instanciaId, string json)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("UPDATE WF_Instancia SET DatosContexto=@J WHERE Id=@Id", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@J", SqlDbType.NVarChar).Value = (object)(json ?? "") ?? "";
+                cn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private void AppendAttachmentToDatosContexto(long instanciaId, long tareaId, string fileName, string storedFileName, string tipo, string viewerUrl, string user)
+        {
+            var json = GetDatosContexto(instanciaId);
+            JObject root;
+
+            if (string.IsNullOrWhiteSpace(json))
+                root = new JObject();
+            else
+            {
+                try { root = JObject.Parse(json); }
+                catch { root = new JObject(); }
+            }
+
+            // ✅ escribir en estado.biz.case.attachments (porque tu DatosContexto real vive ahí)
+            var estado = root["estado"] as JObject;
+            if (estado == null) { estado = new JObject(); root["estado"] = estado; }
+
+            var biz = estado["biz"] as JObject;
+            if (biz == null) { biz = new JObject(); estado["biz"] = biz; }
+
+            var bcase = biz["case"] as JObject;
+            if (bcase == null) { bcase = new JObject(); biz["case"] = bcase; }
+
+            var atts = bcase["attachments"] as JArray;
+            if (atts == null) { atts = new JArray(); bcase["attachments"] = atts; }
+
+            var jo = new JObject
+            {
+                ["tareaId"] = tareaId.ToString(),
+                ["fileName"] = fileName ?? "",
+                ["storedFileName"] = storedFileName ?? "",
+                ["tipo"] = tipo ?? "",
+                ["viewerUrl"] = viewerUrl ?? "",
+                ["fecha"] = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
+                ["usuario"] = user ?? ""
+            };
+
+            atts.Add(jo);
+
+            SetDatosContexto(instanciaId, root.ToString(Formatting.None));
         }
     }
 }

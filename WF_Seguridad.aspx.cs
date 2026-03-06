@@ -34,10 +34,103 @@ namespace Intranet.WorkflowStudio.WebForms
 
             BindDropdownsAsignaciones();
 
-            // precargar checks
+            // precargar todo sincronizado
+            SyncAsignacionesDesdeUsuario(ddlUserRoles.SelectedValue);
+        }
+
+        private void SyncAsignacionesDesdeUsuario(string userKey, string preferredRolKey = null)
+        {
+            userKey = (userKey ?? "").Trim();
+            if (userKey.Length == 0) return;
+
+            // Sincronizar ambos combos de usuario
+            TrySelectDropDown(ddlUserRoles, userKey);
+            TrySelectDropDown(ddlUserPerms, userKey);
+
+            // Recargar checks de usuario
             LoadUserRoles();
-            LoadRolPerms();
             LoadUserPermsOverride();
+
+            // Resolver rol a mostrar en "Rol -> Permisos"
+            string rolKey = (preferredRolKey ?? "").Trim();
+
+            if (rolKey.Length == 0)
+            {
+                var dtRol = Q(@"
+SELECT TOP 1 ur.RolKey
+FROM dbo.WF_UsuarioRol ur
+INNER JOIN dbo.WF_Rol r ON r.RolKey = ur.RolKey AND r.Activo = 1
+WHERE ur.Usuario = @U
+  AND ur.Activo = 1
+ORDER BY r.Nombre, ur.RolKey;",
+                    p("@U", SqlDbType.NVarChar, 200, userKey));
+
+                if (dtRol.Rows.Count > 0)
+                    rolKey = Convert.ToString(dtRol.Rows[0]["RolKey"]);
+            }
+
+            if (rolKey.Length > 0 && TrySelectDropDown(ddlRolPerms, rolKey))
+            {
+                LoadRolPerms();
+            }
+            else
+            {
+                ddlRolPerms.ClearSelection();
+                ClearChecks(cblPermsPorRol);
+            }
+        }
+        private void SyncRolPermsDesdeRolesSeleccionadosDelUsuario()
+        {
+            string rolKey = cblRoles.Items.Cast<System.Web.UI.WebControls.ListItem>()
+                .Where(x => x.Selected)
+                .Select(x => x.Value)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(rolKey))
+            {
+                var u = ddlUserRoles.SelectedValue ?? "";
+                if (u.Length > 0)
+                {
+                    var dtRol = Q(@"
+SELECT TOP 1 ur.RolKey
+FROM dbo.WF_UsuarioRol ur
+INNER JOIN dbo.WF_Rol r ON r.RolKey = ur.RolKey AND r.Activo = 1
+WHERE ur.Usuario = @U
+  AND ur.Activo = 1
+ORDER BY r.Nombre, ur.RolKey;",
+                        p("@U", SqlDbType.NVarChar, 200, u));
+
+                    if (dtRol.Rows.Count > 0)
+                        rolKey = Convert.ToString(dtRol.Rows[0]["RolKey"]);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(rolKey))
+            {
+                ddlRolPerms.ClearSelection();
+                var it = ddlRolPerms.Items.FindByValue(rolKey);
+                if (it != null)
+                {
+                    it.Selected = true;
+                    LoadRolPerms();
+                    return;
+                }
+            }
+
+            ddlRolPerms.ClearSelection();
+            ClearChecks(cblPermsPorRol);
+        }
+
+        private bool TrySelectDropDown(System.Web.UI.WebControls.DropDownList ddl, string value)
+        {
+            if (ddl == null) return false;
+            ddl.ClearSelection();
+
+            var it = ddl.Items.FindByValue(value ?? "");
+            if (it == null) return false;
+
+            it.Selected = true;
+            return true;
         }
 
         private void ShowMsg(string text, string css = "alert alert-success")
@@ -76,6 +169,15 @@ ELSE
 BEGIN
     INSERT INTO dbo.WF_User(UserKey, DisplayName, Activo, FechaAlta)
     VALUES(@U, @D, 1, getdate());
+
+    IF EXISTS (SELECT 1 FROM dbo.WF_Permiso WHERE PermisoKey='DASH')
+    BEGIN
+        IF EXISTS (SELECT 1 FROM dbo.WF_UserPermiso WHERE UserKey=@U AND PermisoKey='DASH')
+            UPDATE dbo.WF_UserPermiso SET Activo=1 WHERE UserKey=@U AND PermisoKey='DASH';
+        ELSE
+            INSERT INTO dbo.WF_UserPermiso(UserKey, PermisoKey, VerTodo, Activo)
+            VALUES(@U, 'DASH', 0, 1);
+    END
 END";
                 cmd.Parameters.Add("@U", SqlDbType.NVarChar, 200).Value = uk;
                 cmd.Parameters.Add("@D", SqlDbType.NVarChar, 200).Value = (object)dn ?? DBNull.Value;
@@ -297,9 +399,20 @@ ELSE
             cblPermsPorUser.DataBind();
         }
 
-        protected void ddlUserRoles_SelectedIndexChanged(object sender, EventArgs e) => LoadUserRoles();
-        protected void ddlRolPerms_SelectedIndexChanged(object sender, EventArgs e) => LoadRolPerms();
-        protected void ddlUserPerms_SelectedIndexChanged(object sender, EventArgs e) => LoadUserPermsOverride();
+        protected void ddlUserRoles_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            SyncAsignacionesDesdeUsuario(ddlUserRoles.SelectedValue);
+        }
+
+        protected void ddlRolPerms_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            LoadRolPerms();
+        }
+
+        protected void ddlUserPerms_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            SyncAsignacionesDesdeUsuario(ddlUserPerms.SelectedValue);
+        }
 
         protected void btnReloadUserRoles_Click(object sender, EventArgs e) => LoadUserRoles();
         protected void btnReloadRolPerms_Click(object sender, EventArgs e) => LoadRolPerms();
@@ -310,7 +423,12 @@ ELSE
             ClearChecks(cblRoles);
 
             var u = ddlUserRoles.SelectedValue ?? "";
-            if (u.Length == 0) return;
+            if (u.Length == 0)
+            {
+                ddlRolPerms.ClearSelection();
+                ClearChecks(cblPermsPorRol);
+                return;
+            }
 
             var dt = Q("SELECT RolKey FROM dbo.WF_UsuarioRol WHERE Usuario=@U AND Activo=1;",
                 p("@U", SqlDbType.NVarChar, 200, u));
@@ -321,6 +439,9 @@ ELSE
                 var it = cblRoles.Items.FindByValue(rk);
                 if (it != null) it.Selected = true;
             }
+
+            // ✅ además de cargar roles del usuario, sincroniza y recarga permisos del rol visible
+            SyncRolPermsDesdeRolesSeleccionadosDelUsuario();
         }
 
         protected void btnSaveUserRoles_Click(object sender, EventArgs e)
@@ -344,7 +465,13 @@ ELSE
             }
 
             ShowMsg("Roles del usuario guardados.");
-            LoadUserRoles();
+
+            string rolPreferido = cblRoles.Items.Cast<System.Web.UI.WebControls.ListItem>()
+                .Where(x => x.Selected)
+                .Select(x => x.Value)
+                .FirstOrDefault();
+
+            SyncAsignacionesDesdeUsuario(u, rolPreferido);
         }
 
         private void LoadRolPerms()

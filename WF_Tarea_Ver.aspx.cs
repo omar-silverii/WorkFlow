@@ -352,8 +352,16 @@ ORDER BY FechaAlta DESC;";
                     return;
                 }
 
-                var biz = root["biz"] as Newtonsoft.Json.Linq.JObject;
-                var bcase = biz?["case"] as Newtonsoft.Json.Linq.JObject;
+                // ✅ soportar ambos formatos:
+                // A) root.biz.case
+                // B) root.estado.biz.case
+                Newtonsoft.Json.Linq.JObject biz = root["biz"] as Newtonsoft.Json.Linq.JObject;
+                Newtonsoft.Json.Linq.JObject estado = root["estado"] as Newtonsoft.Json.Linq.JObject;
+                Newtonsoft.Json.Linq.JObject biz2 = estado?["biz"] as Newtonsoft.Json.Linq.JObject;
+
+                Newtonsoft.Json.Linq.JObject bcase =
+                    (biz?["case"] as Newtonsoft.Json.Linq.JObject) ??
+                    (biz2?["case"] as Newtonsoft.Json.Linq.JObject);
 
                 // RootDoc (instancia)
                 var rootDoc = bcase?["rootDoc"] as Newtonsoft.Json.Linq.JObject;
@@ -370,9 +378,28 @@ ORDER BY FechaAlta DESC;";
                         if (jo == null) continue;
 
                         var tareaIdDoc = Convert.ToString(jo["tareaId"] ?? "");
-                        var isForThisTask = (!string.IsNullOrWhiteSpace(tareaIdDoc) && tareaIdDoc == Convert.ToString(tareaId));
+                        var fileName = Convert.ToString(jo["fileName"] ?? "");
+                        string scope;
 
-                        rows.Add(ToRow(jo, isForThisTask ? "Tarea actual" : "Instancia"));
+                        if (!string.IsNullOrWhiteSpace(tareaIdDoc) && tareaIdDoc == Convert.ToString(tareaId))
+                            scope = "Tarea actual";
+                        else if (!string.IsNullOrWhiteSpace(tareaIdDoc))
+                            scope = "Instancia / Tarea " + tareaIdDoc;
+                        else
+                            scope = "Instancia";
+
+                        var storedFileName = Convert.ToString(jo["storedFileName"] ?? "");
+                        if (!string.IsNullOrWhiteSpace(tareaIdDoc) && !string.IsNullOrWhiteSpace(storedFileName))
+                        {
+                            jo["viewerUrl"] =
+                                ResolveUrl("~/API/WF_Upload_Get.ashx")
+                                + "?inst=" + instanciaId
+                                + "&tarea=" + tareaIdDoc
+                                + "&authTarea=" + tareaId
+                                + "&f=" + HttpUtility.UrlEncode(storedFileName);
+                        }
+
+                        rows.Add(ToRow(jo, scope));
                     }
                 }
 
@@ -406,13 +433,26 @@ ORDER BY FechaAlta DESC;";
 
         private static DocUiRow ToRow(Newtonsoft.Json.Linq.JObject doc, string scope)
         {
+            var documentoId = Convert.ToString(doc["documentoId"] ?? "");
+            var carpetaId = Convert.ToString(doc["carpetaId"] ?? "");
+            var ficheroId = Convert.ToString(doc["ficheroId"] ?? "");
+            var fileName = Convert.ToString(doc["fileName"] ?? "");
+            var tipo = Convert.ToString(doc["tipo"] ?? "");
+            var viewerUrl = Convert.ToString(doc["viewerUrl"] ?? "");
+
+            if (string.IsNullOrWhiteSpace(documentoId) && !string.IsNullOrWhiteSpace(fileName))
+                documentoId = fileName;
+
+            if (string.IsNullOrWhiteSpace(ficheroId) && !string.IsNullOrWhiteSpace(fileName))
+                ficheroId = fileName;
+
             return new DocUiRow
             {
-                DocumentoId = Convert.ToString(doc["documentoId"] ?? ""),
-                CarpetaId = Convert.ToString(doc["carpetaId"] ?? ""),
-                FicheroId = Convert.ToString(doc["ficheroId"] ?? ""),
-                Tipo = Convert.ToString(doc["tipo"] ?? ""),
-                ViewerUrl = Convert.ToString(doc["viewerUrl"] ?? ""),
+                DocumentoId = documentoId,
+                CarpetaId = carpetaId,
+                FicheroId = ficheroId,
+                Tipo = tipo,
+                ViewerUrl = viewerUrl,
                 Scope = scope
             };
         }

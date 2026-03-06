@@ -44,6 +44,83 @@
                     <asp:Literal ID="litPedidosPendientes" runat="server" />
                 </asp:Panel>
 
+                <a id="adjuntos"></a>
+
+                <!-- Adjuntos solicitados por backtrack (Instancia + Tarea) -->
+            <asp:Panel ID="pnlAdjuntos" runat="server" CssClass="card ws-card mb-3">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div class="fw-bold">Documentación solicitada</div>
+                        <span class="ws-pill">Adjuntos</span>
+                    </div>
+
+                    <div class="text-muted small mb-3">
+                        Adjuntá archivos para responder a lo pedido en el rechazo (se asocian a esta instancia y tarea).
+                    </div>
+
+                    <asp:Panel ID="pnlAdjuntosMsg" runat="server" Visible="false" />
+
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label">Archivo</label>
+                            <asp:FileUpload ID="fuAdjunto" runat="server" CssClass="form-control" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Tipo (opcional)</label>
+                            <asp:TextBox ID="txtAdjTipo" runat="server" CssClass="form-control" placeholder="DNI / Respaldo / ..." />
+                        </div>
+
+                        <div class="col-md-3">
+                            <asp:Button ID="btnAdjuntar" runat="server"
+                                Text="Adjuntar"
+                                CssClass="btn btn-outline-primary w-100"
+                                CausesValidation="false"
+                                OnClick="btnAdjuntar_Click" />
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
+
+                    <asp:Panel ID="pnlAdjuntosEmpty" runat="server" CssClass="text-muted small" Visible="true">
+                        (Sin adjuntos cargados para esta tarea)
+                    </asp:Panel>
+
+                    <asp:Repeater ID="rptAdjuntos" runat="server">
+                        <HeaderTemplate>
+                            <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Tipo</th>
+                                        <th>Archivo</th>
+                                        <th>Subido</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        </HeaderTemplate>
+                        <ItemTemplate>
+                            <tr>
+                                <td><%# Eval("Tipo") %></td>
+                                <td><%# Eval("FileName") %></td>
+                                <td><%# Eval("Fecha") %></td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                       href="<%# Eval("Url") %>" target="_blank">Ver</a>
+                                </td>
+                            </tr>
+                        </ItemTemplate>
+                        <FooterTemplate>
+                                </tbody>
+                            </table>
+                            </div>
+                        </FooterTemplate>
+                    </asp:Repeater>
+                </div>
+            </asp:Panel>
+
+
                 <div class="row mb-2">
                     <div class="col-md-2">
                         <label>Id tarea</label>

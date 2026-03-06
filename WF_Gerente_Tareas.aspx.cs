@@ -62,9 +62,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 var dtAlc = EjecutarSP("dbo.WF_Gerente_Tareas_Pendientes_MiAlcance", userKey);
                 EnriquecerSla(dtAlc);
                 EnriquecerEscalamiento(dtAlc);
-                dtAlc.DefaultView.Sort = "SlaVencida DESC, FechaVencimiento ASC, FechaCreacion DESC";
-                gvAlcance.DataSource = dtAlc.DefaultView;
+
+                // 🔹 FIX: bindear directo sin DefaultView.Sort
+                gvAlcance.DataSource = dtAlc;
                 gvAlcance.DataBind();
+
                 lblCountAlcance.Text = dtAlc.Rows.Count.ToString();
 
                 // CERRADAS (sin SLA)

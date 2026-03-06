@@ -75,49 +75,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 Response.Redirect(url, false);
                 Context.ApplicationInstance.CompleteRequest();
             }
-            else if (e.CommandName == "Ejecutar")
-            {
-                int defId = Convert.ToInt32(e.CommandArgument);
-
-                // Seguridad/UX: si es subflow (usado por otro workflow), no permitir ejecución manual.
-                if (EsDefinicionSubflow(defId))
-                {
-                    pnlJson.Visible = true;
-                    preJson.InnerText =
-                        "Este workflow está marcado como SUBFLOW (es invocado por otro workflow) y no se puede ejecutar manualmente desde esta grilla.";
-                    return;
-                }
-
-                string usuario =
-                    (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-                        ? User.Identity.Name
-                        : (Environment.UserName ?? "web");
-
-                string datosEntradaJson = null;
-
-                try
-                {
-                    long instId = await WorkflowRuntime.CrearInstanciaYEjecutarAsync(
-                        defId,
-                        datosEntradaJson,
-                        usuario
-                    );
-
-                    pnlJson.Visible = true;
-                    preJson.InnerText =
-                        "Instancia creada y ejecutada.\r\n" +
-                        "WF_DefinicionId = " + defId + "\r\n" +
-                        "WF_InstanciaId  = " + instId + "\r\n\r\n" +
-                        "Revisá WF_Tarea / WF_Instancia para ver el estado.";
-                }
-                catch (Exception ex)
-                {
-                    pnlJson.Visible = true;
-                    preJson.InnerText =
-                        "Error al ejecutar la definición " + defId + ":\r\n" +
-                        ex.Message;
-                }
-            }
         }
 
         protected void gvDef_RowDataBound(object sender, GridViewRowEventArgs e)
@@ -137,7 +94,6 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var lblTipo = e.Row.FindControl("lblTipo") as Label;
             var lblUsadoPor = e.Row.FindControl("lblUsadoPor") as Label;
-            var lnkEjecutar = e.Row.FindControl("lnkEjecutar") as LinkButton;
 
             if (lblTipo != null)
             {
@@ -157,17 +113,6 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 lblUsadoPor.Text = usadoPor ?? "";
                 lblUsadoPor.ToolTip = usadoPor ?? "";
-            }
-
-            if (lnkEjecutar != null && isSubflow)
-            {
-                // Regla: los subflows NO se ejecutan manualmente desde esta grilla.
-                lnkEjecutar.Text = "Bloqueado";
-                lnkEjecutar.Enabled = false;
-                lnkEjecutar.CssClass = "btn btn-sm btn-outline-secondary disabled";
-                string msg = "Este flujo es un SUBFLOW (invocado por: " + (string.IsNullOrWhiteSpace(usadoPor) ? "otro workflow" : usadoPor) + ").";
-                lnkEjecutar.ToolTip = msg;
-                lnkEjecutar.OnClientClick = "return false;";
             }
         }
 

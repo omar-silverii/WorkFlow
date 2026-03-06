@@ -860,7 +860,6 @@ WHERE Id = @Id;", cn))
 
                 fr["frameId"] = frameId;
                 fr["taskNodeId"] = backMeta.TaskNodeId ?? info.NodoId;
-                fr["returnToNodeId"] = backMeta.ReturnToNodeId;
                 if (backMeta.Cycle > 0) fr["cycle"] = backMeta.Cycle;
                 fr["status"] = "rejected";
 
@@ -903,10 +902,11 @@ WHERE Id = @Id;", cn))
                 var returnTo = backMeta.ReturnToNodeId;
                 if (string.IsNullOrWhiteSpace(returnTo))
                 {
-                    // 1) ✅ mejor fallback: resolver por grafo (nodo anterior al human.task)
-                    returnTo = CalcularNodoAnterior(wf, info.NodoId);
+                    // 1) ✅ fallback profesional: volver al human.task anterior (nodo llamador)
+                    returnTo = CalcularHumanTaskAnterior(wf, info.NodoId);
+
                     if (!string.IsNullOrWhiteSpace(returnTo))
-                        logs.Add("[Backtrack] WARNING: returnToNodeId vacío; se resolvió por grafo (edge entrante al human.task).");
+                        logs.Add("[Backtrack] WARNING: returnToNodeId vacío; se resolvió al human.task anterior por grafo.");
                 }
 
                 if (string.IsNullOrWhiteSpace(returnTo))
@@ -915,22 +915,16 @@ WHERE Id = @Id;", cn))
                     if (seed.TryGetValue("wf.exec.prevNodeId", out var pv) && pv != null)
                         returnTo = Convert.ToString(pv);
                 }
-                string CalcularNodoAnterior(WorkflowDef w, string toNodeId)
+
+                if (!string.IsNullOrWhiteSpace(returnTo))
                 {
-                    if (w == null || string.IsNullOrWhiteSpace(toNodeId) || w.Edges == null) return null;
-
-                    var entrantes = w.Edges
-                        .Where(e => string.Equals(e.To, toNodeId, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-
-                    if (entrantes.Count == 0) return null;
-
-                    // Preferimos un edge "always" como camino “normal”
-                    var e1 = entrantes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase))
-                             ?? entrantes[0];
-
-                    return e1.From;
+                    fr["returnToNodeId"] = returnTo;   // ✅ persistir el retorno real ya resuelto
                 }
+                else
+                {
+                    fr["returnToNodeId"] = null;
+                }
+
                 if (string.IsNullOrWhiteSpace(returnTo))
                 {
                     // 3) si no hay, NO avanzar (por seguridad)
@@ -1069,6 +1063,47 @@ WHERE Id = @Id;", cn))
             );
 
             PersistirFinal(info.InstanciaId, logs);
+        }
+
+        private static string CalcularNodoAnterior(WorkflowDef w, string toNodeId)
+        {
+            if (w == null || string.IsNullOrWhiteSpace(toNodeId) || w.Edges == null) return null;
+
+            var entrantes = w.Edges
+                .Where(e => string.Equals(e.To, toNodeId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (entrantes.Count == 0) return null;
+
+            // Preferimos un edge "always" como camino “normal”
+            var e1 = entrantes.FirstOrDefault(e => string.Equals(e.Condition, "always", StringComparison.OrdinalIgnoreCase))
+                     ?? entrantes[0];
+
+            return e1.From;
+        }
+
+        private static string CalcularHumanTaskAnterior(WorkflowDef w, string fromTaskNodeId)
+        {
+            if (w == null || string.IsNullOrWhiteSpace(fromTaskNodeId)) return null;
+
+            // Arrancamos desde el anterior inmediato
+            var prev = CalcularNodoAnterior(w, fromTaskNodeId);
+            if (string.IsNullOrWhiteSpace(prev)) return null;
+
+            // Caminamos hacia atrás hasta encontrar un human.task
+            // (máx de pasos para evitar loops por grafo mal armado)
+            for (int i = 0; i < 50 && !string.IsNullOrWhiteSpace(prev); i++)
+            {
+                if (w.Nodes != null && w.Nodes.TryGetValue(prev, out var n) && n != null)
+                {
+                    if (string.Equals(n.Type, "human.task", StringComparison.OrdinalIgnoreCase))
+                        return prev;
+                }
+
+                prev = CalcularNodoAnterior(w, prev);
+            }
+
+            return null;
         }
 
         private static Dictionary<string, object> CargarSeedDesdeDatosContexto(long instId)

@@ -45,7 +45,13 @@ namespace Intranet.WorkflowStudio.WebForms
                 // ===== Retroceso controlado (backtrack) =====
                 var back = GetOrCreateBackState(ctx);
                 var activeFrame = back.ActiveFrameForTaskNode(nodo.Id);
-                int expectedCycle = (activeFrame != null && activeFrame.StatusEquals("rejected")) ? (activeFrame.Cycle + 1) : 0;
+                var returnFrame = back.ActiveRejectedFrameReturningTo(nodo.Id);
+
+                int expectedCycle = 0;
+                if (activeFrame != null && activeFrame.StatusEquals("rejected"))
+                    expectedCycle = activeFrame.Cycle + 1;
+                else if (returnFrame != null)
+                    expectedCycle = returnFrame.Cycle + 1;
 
                 if (tarea != null)
                 {
@@ -118,12 +124,22 @@ namespace Intranet.WorkflowStudio.WebForms
 
             // ===== Retroceso controlado (backtrack): definir frame/cycle/returnTo =====
             var back2 = GetOrCreateBackState(ctx);
+
             var prevNodeId = GetStringFromState(ctx, "wf.exec.prevNodeId");
+
+            var rf0 = back2.ActiveRejectedFrameReturningTo(nodo.Id);
+            if (rf0 != null)
+                prevNodeId = rf0.ReturnToNodeId;
+
             string frameId = null;
             int cycle = 1;
 
-            // Si venimos de un rechazo y este nodo es el de la tarea original, reabrimos el frame y subimos ciclo
+            // Si venimos de un rechazo:
+            // - si el nodo actual es el rechazado, reabrimos ESE frame y subimos ciclo
+            // - si el nodo actual es el returnTo del frame rechazado, creamos NUEVA tarea para el anterior
             var af = back2.ActiveFrameForTaskNode(nodo.Id);
+            var rf = back2.ActiveRejectedFrameReturningTo(nodo.Id);
+
             if (af != null && af.StatusEquals("rejected"))
             {
                 frameId = af.FrameId;
@@ -131,12 +147,20 @@ namespace Intranet.WorkflowStudio.WebForms
                 af.Cycle = cycle;
                 af.Status = "open";
             }
+            else if (rf != null)
+            {
+                frameId = Guid.NewGuid().ToString("N");
+                cycle = rf.Cycle + 1;
+
+                // Nuevo frame para el nodo al que vuelve el rechazo
+                back2.EnsureFrame(frameId, nodo.Id, prevNodeId, cycle);
+            }
             else
             {
                 frameId = Guid.NewGuid().ToString("N");
                 cycle = 1;
 
-                // Nuevo frame en stack
+                // Nuevo frame normal
                 back2.EnsureFrame(frameId, nodo.Id, prevNodeId, cycle);
             }
 
@@ -304,6 +328,26 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (fr == null) return null;
 
                 if (!string.IsNullOrWhiteSpace(taskNodeId) && !string.Equals(fr.TaskNodeId, taskNodeId, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                return fr;
+            }
+
+            public BackFrame ActiveRejectedFrameReturningTo(string nodeId)
+            {
+                if (_ctx?.Estado == null) return null;
+
+                if (!_ctx.Estado.TryGetValue("wf.back.activeFrameId", out var v) || v == null) return null;
+                var fid = Convert.ToString(v);
+                if (string.IsNullOrWhiteSpace(fid)) return null;
+
+                var fr = FindFrame(fid);
+                if (fr == null) return null;
+
+                if (!fr.StatusEquals("rejected")) return null;
+                if (string.IsNullOrWhiteSpace(nodeId)) return null;
+
+                if (!string.Equals(fr.ReturnToNodeId, nodeId, StringComparison.OrdinalIgnoreCase))
                     return null;
 
                 return fr;

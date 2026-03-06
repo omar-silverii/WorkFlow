@@ -268,6 +268,9 @@
                             <div class="card-body">
                                 <label class="form-label">Rol</label>
                                 <asp:DropDownList runat="server" ID="ddlRolPerms" CssClass="form-select" AutoPostBack="true" OnSelectedIndexChanged="ddlRolPerms_SelectedIndexChanged" />
+                                <div class="form-text mb-2">
+                                    Mostrando permisos del rol actualmente seleccionado en este bloque.
+                                </div>
                                 <div class="mt-2">
                                     <asp:CheckBoxList runat="server" ID="cblPermsPorRol" CssClass="form-check" RepeatLayout="Flow" />
                                 </div>
@@ -395,10 +398,34 @@
       setTimeout(function () { window.scrollTo(0, y); }, 50);
     }
 
-    // EXTRA: cuando cambian los combos de Asignaciones, fijar tab y bloque ANTES del postback
-    var ddlUserRoles = document.getElementById("<%= ddlUserRoles.ClientID %>");
-    var ddlRolPerms  = document.getElementById("<%= ddlRolPerms.ClientID %>");
-    var ddlUserPerms = document.getElementById("<%= ddlUserPerms.ClientID %>");
+                // Sincronía visual: si tildo un rol del usuario, mover combo Rol -> Permisos
+                var cblRolesWrap = document.getElementById("<%= cblRoles.ClientID %>");
+                if (cblRolesWrap && ddlRolPerms) {
+                    cblRolesWrap.addEventListener("change", function (ev) {
+                        var el = ev.target;
+                        if (!el || el.type !== "checkbox") return;
+                        if (!el.checked) return;
+
+                        var rolKey = el.value || "";
+                        if (!rolKey) return;
+
+                        for (var i = 0; i < ddlRolPerms.options.length; i++) {
+                            if (ddlRolPerms.options[i].value === rolKey) {
+                                ddlRolPerms.selectedIndex = i;
+                                break;
+                            }
+                        }
+
+                        setVal(hfTab, "#panel-asig");
+                        setVal(hfBlock, "user-roles");
+                        setVal(hfScroll, String(window.scrollY || 0));
+
+                        // ✅ fuerza el postback del combo Rol para recargar sus checks
+                        if (typeof (__doPostBack) === "function") {
+                            __doPostBack("<%= ddlRolPerms.UniqueID %>", "");
+                        }
+                    });
+                }
 
       if (ddlUserRoles) ddlUserRoles.addEventListener("change", function () {
           setVal(hfTab, "#panel-asig");

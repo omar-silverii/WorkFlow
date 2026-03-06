@@ -422,6 +422,8 @@
     <Content Include="Api\AiMock.ashx" />
     <Content Include="Api\WorkflowFieldRegistry.ashx" />
     <Content Include="Api\DocPreview.ashx" />
+    <Content Include="Api\WF_Upload_Get.ashx" />
+    <Content Include="Api\WF_Roles_List.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -489,6 +491,12 @@
     </Compile>
     <Compile Include="Api\WfDefiniciones.ashx.cs">
       <DependentUpon>WfDefiniciones.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_Roles_List.ashx.cs">
+      <DependentUpon>WF_Roles_List.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_Upload_Get.ashx.cs">
+      <DependentUpon>WF_Upload_Get.ashx</DependentUpon>
     </Compile>
     <Compile Include="Api\WorkflowFieldRegistry.ashx.cs">
       <DependentUpon>WorkflowFieldRegistry.ashx</DependentUpon>
@@ -775,7 +783,7 @@
           <AutoAssignPort>True</AutoAssignPort>
           <DevelopmentServerPort>14762</DevelopmentServerPort>
           <DevelopmentServerVPath>/</DevelopmentServerVPath>
-          <IISUrl>http://localhost:55556/</IISUrl>
+          <IISUrl>http://localhost:55557/</IISUrl>
           <NTLMAuthentication>False</NTLMAuthentication>
           <UseCustomServer>False</UseCustomServer>
           <CustomServerUrl>
