@@ -142,6 +142,7 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
 UPDATE dbo.WF_Entidad
 SET DataJson = @Json,
     EstadoActual = COALESCE(@EstadoActual, EstadoActual),
+    EstadoNegocio = COALESCE(@EstadoNegocio, EstadoNegocio),
     Total = COALESCE(@Total, Total),
     ActualizadoUtc = SYSUTCDATETIME(),
     ActualizadoPor = @User
@@ -152,6 +153,9 @@ WHERE EntidadId = @Id;", cn))
                     // ✅ si no se pudo resolver, NO pisa el estado existente
                     cmdUp.Parameters.Add("@EstadoActual", SqlDbType.NVarChar, 50).Value =
                         string.IsNullOrWhiteSpace(estadoActual) ? (object)DBNull.Value : (object)estadoActual;
+                    var estadoNegocio = ResolveEstadoNegocio(estado);
+                    cmdUp.Parameters.Add("@EstadoNegocio", SqlDbType.NVarChar, 80).Value =
+                                    string.IsNullOrWhiteSpace(estadoNegocio) ? (object)DBNull.Value : (object)estadoNegocio;
 
                     var pTot = cmdUp.Parameters.Add("@Total", SqlDbType.Decimal);
                     pTot.Precision = 18;
@@ -160,6 +164,7 @@ WHERE EntidadId = @Id;", cn))
 
                     cmdUp.Parameters.Add("@User", SqlDbType.NVarChar, 100).Value = (object)(usuario ?? "app") ?? DBNull.Value;
                     cmdUp.Parameters.Add("@Id", SqlDbType.BigInt).Value = entidadId;
+                    
                     cmdUp.ExecuteNonQuery();
                 }
 
@@ -274,6 +279,21 @@ VALUES (@E, @Idx, @Path, @Json, @Desc, @Cant, @Imp);", cn))
 
             // Si viene otra cosa rara, no pisamos EstadoActual
             return null;
+        }
+
+        private static string ResolveEstadoNegocio(System.Collections.Generic.IDictionary<string, object> estado)
+        {
+            // 1️⃣ prioridad: si el workflow define explícitamente wf.estadoNegocio
+            if (estado.TryGetValue("wf.estadoNegocio", out var a) && a != null)
+            {
+                var s = Convert.ToString(a)?.Trim();
+                if (!string.IsNullOrWhiteSpace(s))
+                    return s;
+            }
+
+            // 2️⃣ fallback: usar wf.estado normalizado (lo actual)
+            var est = ResolveEstadoActual(estado);
+            return est;
         }
 
         private static void InsertIndice(SqlConnection cn, long entidadId, string key, string value, string valueNorm, string tipoDato, string sourcePath)

@@ -1,17 +1,63 @@
 select * from WF_Instancia where id = 	110422
-select * from WF_Instancia where id = 	110424
-select * from WF_InstanciaLog where WF_Instanciaid = 	110424
-select * from WF_Tarea  where WF_Instanciaid = 	110424
+select * from WF_Instancia where id = 	110431
+select * from WF_InstanciaLog where WF_Instanciaid = 	110431
+select * from WF_Tarea  where WF_Instanciaid = 	110431 order by id asc
 
 select * from WF_UsuarioRol
 select * from WF_UserPermiso where UserKey = 'OMARD\USUARIO1' And Activo = 1
 select * from WF_UserPermiso where UserKey = 'OMARD\OMARD' And Activo = 1
 /*
 delete WF_Instancia where id = 110422
-delete WF_Instancia where id = 110423
-delete WF_InstanciaLog where WF_Instanciaid = 110423
-delete WF_Tarea  where WF_Instanciaid = 	110423
+delete WF_Instancia where id = 110429
+delete WF_InstanciaLog where WF_Instanciaid = 110429
+delete WF_Tarea  where WF_Instanciaid = 	110429
 */
+
+tarea creada para instancia 110430 (nodo n2), tareaId=70169
+tarea creada para instancia 110430 (nodo n3), tareaId=70170
+
+tarea creada para instancia 110430 (nodo n3), tareaId=70174
+tarea creada para instancia 110430 (nodo n4), tareaId=70175
+
+
+SELECT TOP 1
+    t.Estado,
+    t.Resultado
+FROM dbo.WF_Tarea t
+WHERE
+    t.WF_InstanciaId = 110426
+    AND t.Id < 70152
+ORDER BY t.Id DESC
+
+SELECT
+    Id,
+    WF_InstanciaId,
+    NodoId,
+    Estado,
+    Resultado,
+    FechaCreacion,
+    FechaCierre,
+    Datos
+FROM WF_Tarea
+WHERE WF_InstanciaId = 110426
+  AND Datos LIKE '%bb1d6caf64ca48a596b462cbd8fb1e3c%'
+ORDER BY Id DESC;
+
+
+SELECT
+    Id,
+    WF_InstanciaId,
+    NodoId,
+    Estado,
+    Resultado,
+    FechaCreacion,
+    FechaCierre,
+    Datos
+FROM dbo.WF_Tarea
+WHERE WF_InstanciaId = 110426
+ORDER BY Id DESC;
+
+
 
 SELECT *
 FROM WF_Adjunto

@@ -303,13 +303,22 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.Panel pnlFuncional;
 
         /// <summary>
-        /// Control litEstado.
+        /// Control litEstadoNegocio.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litEstado;
+        protected global::System.Web.UI.WebControls.Literal litEstadoNegocio;
+
+        /// <summary>
+        /// Control litEstadoTecnico.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Literal litEstadoTecnico;
 
         /// <summary>
         /// Control litTipo.

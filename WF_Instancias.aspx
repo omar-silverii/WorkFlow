@@ -146,7 +146,7 @@
                                             <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-secondary"
                                                 CommandName="Logs" CommandArgument='<%# Eval("Id") %>'>Logs</asp:LinkButton>
                                             <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-success"
-                                                CommandName="Reej" CommandArgument='<%# Eval("Id") %>'>Reej.</asp:LinkButton>
+                                                CommandName="Docs" CommandArgument='<%# Eval("Id") %>'>Docs</asp:LinkButton>
                                         </ItemTemplate>
                                     </asp:TemplateField>
                                 </Columns>
@@ -187,14 +187,24 @@
                                                 <div class="list-group-item d-flex justify-content-between align-items-center">
                                                     <div>
                                                         <div class="fw-semibold">
-                                                            <%# Eval("Tipo") %>
-                                                            <span class="text-muted small">docId: <%# Eval("DocumentoId") %></span>
+                                                            <%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("FileName")))
+                                                                    ? Eval("FileName")
+                                                                    : (!string.IsNullOrWhiteSpace(Convert.ToString(Eval("DocumentoId")))
+                                                                        ? ("DocId: " + Eval("DocumentoId"))
+                                                                        : "Documento") %>
                                                         </div>
+
                                                         <div class="text-muted small">
-                                                            carpetaId: <%# Eval("CarpetaId") %> | ficheroId: <%# Eval("FicheroId") %>
+                                                            Tipo: <%# Eval("Tipo") %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("DocumentoId"))) ? "" : (" | docId: " + Eval("DocumentoId")) %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("CarpetaId"))) ? "" : (" | carpetaId: " + Eval("CarpetaId")) %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("FicheroId"))) ? "" : (" | ficheroId: " + Eval("FicheroId")) %>
                                                             <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("TareaId"))) ? "" : (" | tareaId: " + Eval("TareaId")) %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("Fecha"))) ? "" : (" | fecha: " + Eval("Fecha")) %>
+                                                            <%# string.IsNullOrWhiteSpace(Convert.ToString(Eval("Usuario"))) ? "" : (" | usuario: " + Eval("Usuario")) %>
                                                         </div>
                                                     </div>
+
                                                     <div class="d-flex gap-2">
                                                         <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-primary"
                                                             NavigateUrl='<%# Eval("ViewerUrl") %>' Target="_blank"

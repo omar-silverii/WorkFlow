@@ -1,0 +1,12 @@
+Empresa: CHARITO.s.a
+RECIBO DE PAGO Nº: 0001-00001
+Fecha: 17/12/2025
+Recibimos de: [Nombre del Cliente / Razón Social]
+La cantidad de: $520.257________ (Pesos: __________________________)
+En concepto de: [Pago de Factura Nº / Seña de mercadería / Saldo de cuenta]
+Forma de pago:
+[x] Efectivo
+[ ] Transferencia (Ref: __________)
+[ ] Cheque (Nº: __________ Banco: __________)
+Saldo restante: $___________
+Firma y Sello del Cajero

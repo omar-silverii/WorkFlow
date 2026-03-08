@@ -22,6 +22,27 @@
         return sel;
     }
 
+    function getRolDisplayText(sel) {
+        if (!sel || !sel.options || sel.selectedIndex < 0) return '';
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt) return '';
+
+        const raw = (opt.textContent || '').trim();
+        if (!raw || raw === '-- seleccionar rol --') return '';
+
+        // Si viene "Compras (COMPRAS)" => usar "Compras"
+        const p = raw.indexOf('(');
+        if (p > 0) return raw.substring(0, p).trim();
+
+        return raw;
+    }
+
+    function buildEstadoNegocioSugerido(selRol) {
+        const txt = getRolDisplayText(selRol);
+        if (!txt) return 'Pendiente';
+        return 'Pendiente de ' + txt;
+    }
+
     register('human.task', async (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
         const { body, title, sub } = dom;
@@ -51,13 +72,25 @@
         const selRol = buildRolSelect(p.rol || '');
         const sRol = section('Rol destino', selRol);
 
-        // Mensaje de carga/error roles
         const rolMsg = el('div', 'help');
         rolMsg.style.fontSize = '12px';
         rolMsg.style.marginTop = '6px';
         rolMsg.style.opacity = '0.8';
         rolMsg.textContent = 'Cargando roles...';
         sRol.appendChild(rolMsg);
+
+        // Estado negocio pendiente
+        const inpEstadoNeg = el('input', 'input');
+        inpEstadoNeg.value = p.estadoNegocioPendiente || '';
+        inpEstadoNeg.placeholder = 'Ej: Pendiente de Compras';
+        const sEstadoNeg = section('Estado de negocio', inpEstadoNeg);
+
+        const estadoMsg = el('div', 'help');
+        estadoMsg.style.fontSize = '12px';
+        estadoMsg.style.marginTop = '6px';
+        estadoMsg.style.opacity = '0.8';
+        estadoMsg.textContent = 'Si queda vacío, se sugerirá automáticamente según el rol.';
+        sEstadoNeg.appendChild(estadoMsg);
 
         // Usuario asignado
         const inpUser = el('input', 'input');
@@ -93,10 +126,26 @@
 
             selRol.value = p.rol || '';
             rolMsg.textContent = 'Seleccione el rol destino desde la base.';
+
+            if (!inpEstadoNeg.value || !inpEstadoNeg.value.trim()) {
+                inpEstadoNeg.value = buildEstadoNegocioSugerido(selRol);
+            }
         } catch (err) {
             rolMsg.textContent = 'No se pudieron cargar los roles.';
             rolMsg.style.color = '#b02a37';
         }
+
+        selRol.addEventListener('change', () => {
+            const actual = (inpEstadoNeg.value || '').trim();
+            const sugeridoAnterior = buildEstadoNegocioSugerido({
+                options: selRol.options,
+                selectedIndex: selRol.selectedIndex
+            });
+
+            if (!actual || actual === 'Pendiente' || actual.indexOf('Pendiente de ') === 0) {
+                inpEstadoNeg.value = buildEstadoNegocioSugerido(selRol);
+            }
+        });
 
         bTpl.onclick = () => {
             const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['human.task']) || {};
@@ -105,14 +154,17 @@
             if (def.rol) selRol.value = def.rol;
             if (def.usuarioAsignado) inpUser.value = def.usuarioAsignado;
             if (typeof def.deadlineMinutes !== 'undefined') inpDead.value = def.deadlineMinutes;
+            if (def.estadoNegocioPendiente) {
+                inpEstadoNeg.value = def.estadoNegocioPendiente;
+            } else if (!inpEstadoNeg.value || !inpEstadoNeg.value.trim()) {
+                inpEstadoNeg.value = buildEstadoNegocioSugerido(selRol);
+            }
         };
 
         bSave.onclick = () => {
             const rol = (selRol.value || '').trim();
             const usuarioAsignado = (inpUser.value || '').trim();
 
-            // Regla profesional:
-            // si no hay usuario puntual, el rol es obligatorio
             if (!rol && !usuarioAsignado) {
                 alert('Debe seleccionar un Rol destino o completar Usuario asignado.');
                 try { selRol.focus(); } catch (e) { }
@@ -122,12 +174,18 @@
             node.label = inpLbl.value || node.label || 'Tarea humana';
 
             const deadlineVal = inpDead.value ? parseInt(inpDead.value, 10) : null;
+            let estadoNegocioPendiente = (inpEstadoNeg.value || '').trim();
+
+            if (!estadoNegocioPendiente) {
+                estadoNegocioPendiente = buildEstadoNegocioSugerido(selRol);
+            }
 
             node.params = node.params || {};
             node.params.titulo = inpTitulo.value || '';
             node.params.descripcion = inpDesc.value || '';
             node.params.rol = rol;
             node.params.usuarioAsignado = usuarioAsignado;
+            node.params.estadoNegocioPendiente = estadoNegocioPendiente;
 
             if (deadlineVal !== null && !isNaN(deadlineVal)) {
                 node.params.deadlineMinutes = deadlineVal;
@@ -171,6 +229,7 @@
         body.appendChild(sTitulo);
         body.appendChild(sDesc);
         body.appendChild(sRol);
+        body.appendChild(sEstadoNeg);
         body.appendChild(sUser);
         body.appendChild(sDead);
         body.appendChild(rowButtons(bTpl, bSave, bDel));

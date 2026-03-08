@@ -1,7 +1,9 @@
+using DocumentFormat.OpenXml.EMMA;
+using Intranet.WorkflowStudio.Runtime;
 using Intranet.WorkflowStudio.WebForms;
 using Intranet.WorkflowStudio.WebForms.DocumentProcessing;
-using Intranet.WorkflowStudio.Runtime;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -359,8 +361,31 @@ WHERE Id = @Id;", cn))
                 wf,
                 logAction,
                 handlers: handlersExtra,
-                ct: ct
+                ct: CancellationToken.None
             );
+
+            try
+            {
+                var finalItems = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                if (finalItems != null && finalItems["WF_CTX_ESTADO"] is IDictionary<string, object> finalState)
+                {
+                    if (finalState.TryGetValue("wf.error", out var errVal) && ContextoEjecucion.ToBool(errVal))
+                        finalState["wf.estado"] = "Error";
+                    else if (finalState.TryGetValue("wf.detener", out var detVal) && ContextoEjecucion.ToBool(detVal))
+                        finalState["wf.estado"] = "Iniciado";
+                    else
+                        finalState["wf.estado"] = "Finalizado";
+
+                    if ((!finalState.TryGetValue("wf.estadoNegocio", out var estNegObj) || estNegObj == null || string.IsNullOrWhiteSpace(Convert.ToString(estNegObj)))
+                        && seed.TryGetValue("wf.estadoNegocio", out var estNegSeed) && estNegSeed != null && !string.IsNullOrWhiteSpace(Convert.ToString(estNegSeed)))
+                    {
+                        finalState["wf.estadoNegocio"] = Convert.ToString(estNegSeed);
+                    }
+
+                    EntidadService.SnapshotFromState(finalState, usuario ?? "app");
+                }
+            }
+            catch { }
 
             PersistirFinal(instId, logs);
         }
@@ -724,6 +749,47 @@ WHERE Id = @Id;", cn))
             }
         }
 
+        private static string ResolveEstadoNegocioDesdeResultado(string resultado, string returnToNodeId)
+        {
+            var r = (resultado ?? "").Trim().ToLowerInvariant();
+
+            if (r == "aprobado" || r == "aprobada" || r == "approve" || r == "approved" || r == "ok" || r == "apto" || r == "apta")
+                return "Aprobada";
+
+            if (r == "rechazado" || r == "rechazada" || r == "reject" || r == "rejected")
+            {
+                if (!string.IsNullOrWhiteSpace(returnToNodeId))
+                    return "Observada";
+
+                return "Rechazada";
+            }
+
+            return null;
+        }
+
+        private static string ExtraerEstadoNegocioDesdeDatosJson(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
+
+                var tok = JToken.Parse(datosJson);
+
+                var est =
+                    tok["estadoNegocio"] ??
+                    tok["data"]?["estadoNegocio"] ??
+                    tok["pedido"]?["estadoNegocio"] ??
+                    tok["data"]?["pedido"]?["estadoNegocio"];
+
+                var s = est == null ? null : Convert.ToString(est);
+                return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         // ======================================================================
         //                      Reanudar desde tarea (MISMA instancia)
         // ======================================================================
@@ -817,6 +883,10 @@ WHERE Id = @Id;", cn))
                     seed["wf.tarea.datosRaw"] = datosJson;
                     seed["tarea.datosRaw"] = datosJson;
                 }
+
+                var estadoNegocioDesdeCierre = ExtraerEstadoNegocioDesdeDatosJson(datosJson);
+                if (!string.IsNullOrWhiteSpace(estadoNegocioDesdeCierre))
+                    seed["wf.estadoNegocio"] = estadoNegocioDesdeCierre;
             }
 
             // ✅ CONTRATO BIZ (genérico, estable)
@@ -845,6 +915,13 @@ WHERE Id = @Id;", cn))
             seed["biz.task.result"] = resNorm;
 
             var backMeta = LeerBackMetaDesdeTarea(tareaId);
+
+            if ((!seed.TryGetValue("wf.estadoNegocio", out var estNegObj) || estNegObj == null || string.IsNullOrWhiteSpace(Convert.ToString(estNegObj))))
+            {
+                var estNegFallback = ResolveEstadoNegocioDesdeResultado(resultado, backMeta?.ReturnToNodeId);
+                if (!string.IsNullOrWhiteSpace(estNegFallback))
+                    seed["wf.estadoNegocio"] = estNegFallback;
+            }
 
             if (backMeta != null && string.Equals(resNorm, "rechazado", StringComparison.OrdinalIgnoreCase))
             {
@@ -964,10 +1041,16 @@ WHERE Id = @Id;", cn))
                     var fr = FindFrame(stack, backMeta.FrameId);
                     if (fr != null)
                     {
-                        if (string.Equals(resNorm, "apto", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(resNorm, "apto", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(resNorm, "aprobado", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(resNorm, "aprobada", StringComparison.OrdinalIgnoreCase))
+                        {
                             fr["status"] = "approved";
+                        }
                         else
+                        {
                             fr["status"] = "closed";
+                        }
                     }
 
                     if (seed.TryGetValue("wf.back.activeFrameId", out var af) && af != null &&
@@ -1056,11 +1139,28 @@ WHERE Id = @Id;", cn))
             };
 
             await WorkflowRunner.EjecutarAsync(
-                wf,
-                logAction,
-                handlers: handlersExtra,
-                ct: CancellationToken.None
-            );
+                    wf,
+                    logAction,
+                    handlers: handlersExtra,
+                    ct: CancellationToken.None
+                );
+
+            try
+            {
+                var finalItems = HttpContext.Current?.Items ?? WorkflowAmbient.Items.Value;
+                if (finalItems != null && finalItems["WF_CTX_ESTADO"] is IDictionary<string, object> finalState)
+                {
+                    if (finalState.TryGetValue("wf.error", out var errVal) && ContextoEjecucion.ToBool(errVal))
+                        finalState["wf.estado"] = "Error";
+                    else if (finalState.TryGetValue("wf.detener", out var detVal) && ContextoEjecucion.ToBool(detVal))
+                        finalState["wf.estado"] = "Iniciado";
+                    else
+                        finalState["wf.estado"] = "Finalizado";
+
+                    EntidadService.SnapshotFromState(finalState, usuario ?? "app");
+                }
+            }
+            catch { }
 
             PersistirFinal(info.InstanciaId, logs);
         }

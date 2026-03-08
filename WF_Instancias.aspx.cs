@@ -341,24 +341,12 @@ ORDER BY Id DESC;";
             {
                 MostrarLogs(instId);
             }
-            else if (e.CommandName == "Reej")
+            else if (e.CommandName == "Docs")
             {
-                try
-                {
-                    string usuario = (Context?.User?.Identity?.Name ?? "").Trim();
-                    var newId = Runtime.WorkflowRuntime.ReejecutarInstanciaAsync(instId, usuario).GetAwaiter().GetResult();
+                MostrarDatos(instId);
 
-                    txtBuscar.Text = newId.ToString();
-                    CargarInstancias();
-                    MostrarDatos((int)newId);
-                    MostrarLogs((int)newId);
-                }
-                catch (Exception ex)
-                {
-                    pnlLogs.Visible = true;
-                    pnlLogsEmpty.Visible = false;
-                    litLogs.Text = Server.HtmlEncode("Error al reejecutar:\n" + ex.Message);
-                }
+                pnlLogs.Visible = false;
+                pnlLogsEmpty.Visible = true;
             }
         }
 
@@ -413,13 +401,18 @@ ORDER BY Id DESC;";
             public string Tipo { get; set; }
             public string ViewerUrl { get; set; }
             public string TareaId { get; set; }
+
+            public string FileName { get; set; }
+            public string Fecha { get; set; }
+            public string Usuario { get; set; }
         }
 
         private void BindDocsFromDatosContexto(string datosContextoJson)
         {
+            var rows = new List<DocUiRow>();
+
             try
             {
-                var rows = new List<DocUiRow>();
                 if (string.IsNullOrWhiteSpace(datosContextoJson))
                 {
                     ShowDocs(rows);
@@ -434,14 +427,22 @@ ORDER BY Id DESC;";
                     return;
                 }
 
-                var biz = root["biz"] as JObject;
-                var bcase = biz?["case"] as JObject;
+                var biz =
+                    (root["biz"] as JObject) ??
+                    (root["estado"]?["biz"] as JObject);
 
-                var rootDoc = bcase?["rootDoc"] as JObject;
+                var bcase = biz?["case"] as JObject;
+                if (bcase == null)
+                {
+                    ShowDocs(rows);
+                    return;
+                }
+
+                var rootDoc = bcase["rootDoc"] as JObject;
                 if (rootDoc != null)
                     rows.Add(ToRow(rootDoc));
 
-                var atts = bcase?["attachments"] as JArray;
+                var atts = bcase["attachments"] as JArray;
                 if (atts != null)
                 {
                     foreach (var it in atts)
@@ -451,6 +452,13 @@ ORDER BY Id DESC;";
                         rows.Add(ToRow(jo));
                     }
                 }
+
+                rows = rows
+                    .Where(x =>
+                        !string.IsNullOrWhiteSpace(x.DocumentoId) ||
+                        !string.IsNullOrWhiteSpace(x.ViewerUrl) ||
+                        !string.IsNullOrWhiteSpace(x.FileName))
+                    .ToList();
 
                 ShowDocs(rows);
             }
@@ -485,16 +493,22 @@ ORDER BY Id DESC;";
             }
         }
 
-        private static DocUiRow ToRow(JObject doc)
+        private DocUiRow ToRow(JObject doc)
         {
+            if (doc == null) return new DocUiRow();
+
             return new DocUiRow
             {
                 DocumentoId = Convert.ToString(doc["documentoId"] ?? ""),
                 CarpetaId = Convert.ToString(doc["carpetaId"] ?? ""),
                 FicheroId = Convert.ToString(doc["ficheroId"] ?? ""),
-                Tipo = Convert.ToString(doc["tipo"] ?? ""),
+                Tipo = Convert.ToString(doc["tipo"] ?? doc["mimeType"] ?? "Documento"),
                 ViewerUrl = Convert.ToString(doc["viewerUrl"] ?? ""),
-                TareaId = Convert.ToString(doc["tareaId"] ?? "")
+                TareaId = Convert.ToString(doc["tareaId"] ?? ""),
+
+                FileName = Convert.ToString(doc["fileName"] ?? doc["nombre"] ?? ""),
+                Fecha = Convert.ToString(doc["fecha"] ?? ""),
+                Usuario = Convert.ToString(doc["usuario"] ?? "")
             };
         }
 

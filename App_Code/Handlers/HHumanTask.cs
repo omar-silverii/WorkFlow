@@ -68,6 +68,12 @@ namespace Intranet.WorkflowStudio.WebForms
                     {
                         ctx.Log($"[human.task] ya existe WF_Tarea PENDIENTE para instancia {instanciaId}, nodo {nodo.Id}; se detiene aquí. tareaId={tarea.Id}");
 
+                        string rolPend = ctx.ExpandString(GetString(p, "rol") ?? "");
+                        string estNegPend = ResolveEstadoNegocioPendiente(p, rolPend);
+                        ctx.Estado["wf.estadoNegocio"] = estNegPend;
+
+                        ctx.Estado["wf.estadoNegocio"] = estNegPend;
+
                         ctx.Estado["wf.detener"] = true;
                         ctx.Estado["wf.currentNodeId"] = nodo.Id;
                         ctx.Estado["wf.currentNodeType"] = nodo.Type;
@@ -76,6 +82,12 @@ namespace Intranet.WorkflowStudio.WebForms
                         var f0 = ExtraerFrameId(tarea.Datos);
                         if (!string.IsNullOrWhiteSpace(f0))
                             ctx.Estado["wf.back.activeFrameId"] = f0;
+
+                        try
+                        {
+                            Runtime.EntidadService.SnapshotFromState(ctx.Estado, usuario: "app");
+                        }
+                        catch { }
 
                         return new ResultadoEjecucion { Etiqueta = "always" };
                     }
@@ -268,6 +280,16 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             ctx.Log($"[human.task] tarea creada para instancia {instanciaId} (nodo {nodo.Id}), tareaId={tareaId}");
+
+
+            var estNegNueva = ResolveEstadoNegocioPendiente(p, rol);
+            ctx.Estado["wf.estadoNegocio"] = estNegNueva;
+
+            try
+            {
+                Runtime.EntidadService.SnapshotFromState(ctx.Estado, usuario: "app");
+            }
+            catch { }
 
             // 5) Marcar que el motor debe detenerse aquí
             ctx.Estado["wf.detener"] = true;
@@ -780,6 +802,18 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
                 var scalar = await cmd.ExecuteScalarAsync(ct);
                 return Convert.ToInt64(scalar);
             }
+        }
+
+        private static string ResolveEstadoNegocioPendiente(Dictionary<string, object> p, string rolExpandido)
+        {
+            var est = GetString(p, "estadoNegocioPendiente");
+            if (!string.IsNullOrWhiteSpace(est))
+                return est.Trim();
+
+            if (!string.IsNullOrWhiteSpace(rolExpandido))
+                return "Pendiente de " + rolExpandido.Trim();
+
+            return "Pendiente";
         }
 
         private static string GetString(Dictionary<string, object> p, string key)

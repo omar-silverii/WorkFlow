@@ -357,7 +357,46 @@ ORDER BY
             }
             catch { return null; }
         }
+        private string ExtraerReturnToDesdeDatos(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
 
+                dynamic o = JsonConvert.DeserializeObject(datosJson);
+                if (o == null) return null;
+
+                if (o.wfBack != null && o.wfBack.returnToNodeId != null)
+                    return (string)o.wfBack.returnToNodeId;
+
+                if (o.meta != null && o.meta.wfBack != null && o.meta.wfBack.returnToNodeId != null)
+                    return (string)o.meta.wfBack.returnToNodeId;
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string ResolveEstadoNegocioCierre(string resultado, string returnToNodeId)
+        {
+            var r = (resultado ?? "").Trim().ToLowerInvariant();
+
+            if (r == "aprobado" || r == "aprobada" || r == "approve" || r == "approved" || r == "ok")
+                return "Aprobada";
+
+            if (r == "rechazado" || r == "rechazada" || r == "reject" || r == "rejected")
+            {
+                if (!string.IsNullOrWhiteSpace(returnToNodeId))
+                    return "Observada";
+
+                return "Rechazada";
+            }
+
+            return null;
+        }
         private DateTime? ExtraerCerradoEnDesdeDatos(string datosJson)
         {
             try
@@ -586,6 +625,10 @@ ORDER BY
             }
 
             string resultado = ddlResultado.SelectedValue;
+            string datosTareaActual = ObtenerDatosTarea(tareaId);
+            string returnToNodeId = ExtraerReturnToDesdeDatos(datosTareaActual);
+            string estadoNegocioCierre = ResolveEstadoNegocioCierre(resultado, returnToNodeId);
+
             string observaciones = txtObs.Text ?? string.Empty;
 
             string usuarioActual = Context.User?.Identity?.Name;
@@ -606,21 +649,41 @@ ORDER BY
                     {
                         if (o.cerradoPor == null) o.cerradoPor = usuarioActual;
                         if (o.cerradoEn == null) o.cerradoEn = DateTime.Now;
+                        if (o.estadoNegocio == null && !string.IsNullOrWhiteSpace(estadoNegocioCierre)) o.estadoNegocio = estadoNegocioCierre;
+
                         datosJson = JsonConvert.SerializeObject(o, Formatting.None);
                     }
                     else
                     {
-                        datosJson = JsonConvert.SerializeObject(new { observaciones, cerradoPor = usuarioActual, cerradoEn = DateTime.Now }, Formatting.None);
+                        datosJson = JsonConvert.SerializeObject(new
+                        {
+                            observaciones,
+                            cerradoPor = usuarioActual,
+                            cerradoEn = DateTime.Now,
+                            estadoNegocio = estadoNegocioCierre
+                        }, Formatting.None);
                     }
                 }
                 catch
                 {
-                    datosJson = JsonConvert.SerializeObject(new { observaciones, cerradoPor = usuarioActual, cerradoEn = DateTime.Now }, Formatting.None);
+                    datosJson = JsonConvert.SerializeObject(new
+                    {
+                        observaciones,
+                        cerradoPor = usuarioActual,
+                        cerradoEn = DateTime.Now,
+                        estadoNegocio = estadoNegocioCierre
+                    }, Formatting.None);
                 }
             }
             else
             {
-                datosJson = JsonConvert.SerializeObject(new { observaciones, cerradoPor = usuarioActual, cerradoEn = DateTime.Now }, Formatting.None);
+                datosJson = JsonConvert.SerializeObject(new
+                {
+                    observaciones,
+                    cerradoPor = usuarioActual,
+                    cerradoEn = DateTime.Now,
+                    estadoNegocio = estadoNegocioCierre
+                }, Formatting.None);
             }
 
             try

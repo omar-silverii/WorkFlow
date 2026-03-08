@@ -233,7 +233,18 @@ FROM (
 
         -- ✅ Estado efectivo: si hay tarea pendiente => Iniciado
         CASE
-            WHEN t.Titulo IS NOT NULL THEN 'Iniciado'
+            WHEN ISNULL(NULLIF(e.EstadoActual,''), '') = 'Error'
+                THEN 'Error'
+
+            WHEN ISNULL(NULLIF(e.EstadoActual,''), '') = 'Finalizado'
+                THEN 'Finalizado'
+
+            WHEN ISNULL(NULLIF(e.EstadoNegocio,''), '') <> ''
+                THEN e.EstadoNegocio
+
+            WHEN t.Titulo IS NOT NULL
+                THEN 'Iniciado'
+
             ELSE ISNULL(NULLIF(e.EstadoActual,''), '-')
         END AS EstadoActual,
 
@@ -273,7 +284,15 @@ WHERE 1=1
                 // ✅ Estado: filtra por el estado EFECTIVO (q.EstadoActual)
                 if (!string.IsNullOrWhiteSpace(estado))
                 {
-                    sb.Append(" AND q.EstadoActual = @Estado ");
+                    sb.Append(@"
+                         AND (
+                                ISNULL(NULLIF(q.EstadoActual,''),'') = @Estado
+                             OR (
+                                    @Estado IN ('Iniciado','Finalizado','Error')
+                                AND ISNULL(NULLIF(q.EstadoActual,''),'') = @Estado
+                                )
+                         )
+                        ");
                     cmd.Parameters.Add("@Estado", SqlDbType.NVarChar, 50).Value = estado;
                 }
 
@@ -354,8 +373,19 @@ FROM (
     SELECT
         e.EntidadId,
         e.TipoEntidad,
-        CASE
-            WHEN t.Titulo IS NOT NULL THEN 'Iniciado'
+       CASE
+            WHEN ISNULL(NULLIF(e.EstadoActual,''), '') = 'Error'
+                THEN 'Error'
+
+            WHEN ISNULL(NULLIF(e.EstadoActual,''), '') = 'Finalizado'
+                THEN 'Finalizado'
+
+            WHEN ISNULL(NULLIF(e.EstadoNegocio,''), '') <> ''
+                THEN e.EstadoNegocio
+
+            WHEN t.Titulo IS NOT NULL
+                THEN 'Iniciado'
+
             ELSE ISNULL(NULLIF(e.EstadoActual,''), '-')
         END AS EstadoActual,
         CASE WHEN t.Titulo IS NOT NULL THEN 1 ELSE 0 END AS TieneTareaPendiente
@@ -439,6 +469,7 @@ WHERE 1=1
                 lblKpiIniciado.Text = Convert.ToString(r["Iniciado"] ?? "0");
                 lblKpiFinalizado.Text = Convert.ToString(r["Finalizado"] ?? "0");
                 lblKpiError.Text = Convert.ToString(r["Error"] ?? "0");
+               
             }
             else
             {
@@ -446,6 +477,7 @@ WHERE 1=1
                 lblKpiIniciado.Text = "0";
                 lblKpiFinalizado.Text = "0";
                 lblKpiError.Text = "0";
+                
             }
         }
 
@@ -460,7 +492,7 @@ WHERE 1=1
                 // 1) Header + json
                 using (var cmd = new SqlCommand(@"
 SELECT TOP 1
-    EntidadId, TipoEntidad, EstadoActual, InstanciaId, Total, CreadoUtc, ActualizadoUtc, DataJson
+    EntidadId, TipoEntidad, EstadoActual, EstadoNegocio, InstanciaId, Total, CreadoUtc, ActualizadoUtc, DataJson
 FROM dbo.WF_Entidad
 WHERE EntidadId=@Id;", cn))
                 {
@@ -470,7 +502,8 @@ WHERE EntidadId=@Id;", cn))
                         if (rd.Read())
                         {
                             string tipo = Convert.ToString(rd["TipoEntidad"]);
-                            string est = Convert.ToString(rd["EstadoActual"]);
+                            string estTec = Convert.ToString(rd["EstadoActual"]);
+                            string estNeg = rd["EstadoNegocio"] == DBNull.Value ? "" : Convert.ToString(rd["EstadoNegocio"]);
 
                             // InstanciaId: null -> "" (no usar "-")
                             string inst = rd["InstanciaId"] == DBNull.Value ? "" : Convert.ToString(rd["InstanciaId"]);
@@ -483,11 +516,12 @@ WHERE EntidadId=@Id;", cn))
 
                             // Subtítulo (si no hay instancia, mostramos "-")
                             litDetalleSub.Text =
-                                $"Id {entidadId} · {tipo} · Estado {est} · Instancia {(string.IsNullOrWhiteSpace(inst) ? "-" : inst)} · Creado {creado} · Actualizado {act}";
+                               $"Id {entidadId} · {tipo} · Estado {(string.IsNullOrWhiteSpace(estNeg) ? estTec : estNeg)} · Instancia {(string.IsNullOrWhiteSpace(inst) ? "-" : inst)} · Creado {creado} · Actualizado {act}";
 
                             // Funcional (siempre)
                             litTipo.Text = Server.HtmlEncode(tipo);
-                            litEstado.Text = Server.HtmlEncode(string.IsNullOrWhiteSpace(est) ? "-" : est);
+                            litEstadoNegocio.Text = Server.HtmlEncode(string.IsNullOrWhiteSpace(estNeg) ? "-" : estNeg);
+                            litEstadoTecnico.Text = Server.HtmlEncode(string.IsNullOrWhiteSpace(estTec) ? "-" : estTec);
                             litTotal.Text = total.ToString("N2");
                             litInst.Text = string.IsNullOrWhiteSpace(inst) ? "-" : inst;
 
@@ -530,7 +564,8 @@ WHERE EntidadId=@Id;", cn))
                             litJson.Text = "";
 
                             litTipo.Text = "";
-                            litEstado.Text = "";
+                            litEstadoNegocio.Text = "";
+                            litEstadoTecnico.Text = "";
                             litTotal.Text = "";
                             litInst.Text = "-";
 

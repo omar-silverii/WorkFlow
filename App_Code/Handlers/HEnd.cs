@@ -1,4 +1,5 @@
 ﻿using Intranet.WorkflowStudio.Runtime;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,10 +13,22 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             ctx.Log("[End]");
 
-            // ✅ ENTIDAD: snapshot final (si existe entidad.id en el contexto)
             try
             {
-                // usuario: si no lo tenés en ctx.Estado, dejamos "app"
+                string estNeg = null;
+
+                if (nodo?.Parameters != null &&
+                    nodo.Parameters.TryGetValue("estadoNegocio", out var tmp) &&
+                    tmp != null)
+                {
+                    estNeg = Convert.ToString(tmp);
+                }
+
+                if (!string.IsNullOrWhiteSpace(estNeg))
+                {
+                    ctx.Estado["wf.estadoNegocio"] = estNeg;
+                }
+
                 EntidadService.SnapshotFromState(ctx.Estado, usuario: "app");
             }
             catch { }

@@ -5,18 +5,23 @@ using System.Data.SqlClient;
 using System.Web;
 using Newtonsoft.Json;
 
-public class WF_Roles_List : IHttpHandler
+namespace Intranet.WorkflowStudio.WebForms.Api
 {
-    private static string Cnn => ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
-
-    public void ProcessRequest(HttpContext context)
+    public class WF_Roles_List : IHttpHandler
     {
-        context.Response.ContentType = "application/json; charset=utf-8";
+        private static string Cnn
+        {
+            get { return ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString; }
+        }
 
-        var dt = new DataTable();
+        public void ProcessRequest(HttpContext context)
+        {
+            context.Response.ContentType = "application/json; charset=utf-8";
 
-        using (var cn = new SqlConnection(Cnn))
-        using (var cmd = new SqlCommand(@"
+            var dt = new DataTable();
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
 SELECT DISTINCT
     r.RolKey,
     r.Nombre
@@ -29,13 +34,18 @@ INNER JOIN dbo.WF_User u
    AND u.Activo = 1
 WHERE r.Activo = 1
 ORDER BY r.Nombre, r.RolKey;", cn))
-        using (var da = new SqlDataAdapter(cmd))
-        {
-            da.Fill(dt);
+            using (var da = new SqlDataAdapter(cmd))
+            {
+                cn.Open();
+                da.Fill(dt);
+            }
+
+            context.Response.Write(JsonConvert.SerializeObject(dt));
         }
 
-        context.Response.Write(JsonConvert.SerializeObject(dt));
+        public bool IsReusable
+        {
+            get { return false; }
+        }
     }
-
-    public bool IsReusable => false;
 }

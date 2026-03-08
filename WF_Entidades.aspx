@@ -59,6 +59,7 @@
                                 CssClass="form-select form-select-sm"
                                 AutoPostBack="true"
                                 OnSelectedIndexChanged="ddlTipo_SelectedIndexChanged" />
+                            <div class="form-text ws-muted">Busca entidades.</div>
                         </div>
 
                         <div class="col-md-4">
@@ -74,20 +75,22 @@
                         <div class="col-md-4">
                             <label class="form-label mb-0">Estado:</label>
                             <div class="btn-group btn-group-sm w-100" role="group">
-                                <asp:LinkButton ID="lnkEstadoTodos" runat="server" CssClass="btn btn-outline-secondary" CommandArgument="" OnClick="lnkEstado_Click">Todos</asp:LinkButton>
-                                <asp:LinkButton ID="lnkEstadoIniciado" runat="server" CssClass="btn btn-outline-primary" CommandArgument="Iniciado" OnClick="lnkEstado_Click">Iniciado</asp:LinkButton>
-                                <asp:LinkButton ID="lnkEstadoFinalizado" runat="server" CssClass="btn btn-outline-success" CommandArgument="Finalizado" OnClick="lnkEstado_Click">Finalizado</asp:LinkButton>
-                                <asp:LinkButton ID="lnkEstadoError" runat="server" CssClass="btn btn-outline-danger" CommandArgument="Error" OnClick="lnkEstado_Click">Error</asp:LinkButton>
+                                <asp:LinkButton ID="lnkEstadoTodos" runat="server" CssClass="btn btn-sm btn-outline-secondary" CommandArgument="" OnClick="lnkEstado_Click">Todos</asp:LinkButton>
+                                <asp:LinkButton ID="lnkEstadoIniciado" runat="server" CssClass="btn btn-sm btn-outline-primary" CommandArgument="Iniciado" OnClick="lnkEstado_Click">Iniciado</asp:LinkButton>
+                                <asp:LinkButton ID="lnkEstadoFinalizado" runat="server" CssClass="btn btn-sm btn-outline-success" CommandArgument="Finalizado" OnClick="lnkEstado_Click">Finalizado</asp:LinkButton>
+                                <asp:LinkButton ID="lnkEstadoError" runat="server" CssClass="btn btn-sm btn-outline-danger" CommandArgument="Error" OnClick="lnkEstado_Click">Error</asp:LinkButton>
                             </div>
+                            <div class="form-text ws-muted">Filtros.</div>
                         </div>
 
-                        <div class="row g-2 align-items-end mt-1">
+                        <div class="row g-2 mt-1">
                             <div class="col-md-4">
                                 <label class="form-label mb-0">Índice (Key):</label>
                                 <asp:DropDownList ID="ddlIdxKey" runat="server"
                                     CssClass="form-select form-select-sm"
                                     AutoPostBack="true"
                                     OnSelectedIndexChanged="ddlIdxKey_SelectedIndexChanged" />
+                                 <div class="form-text ws-muted">Busca índices.</div>
                             </div>
 
                             <div class="col-md-4">
@@ -98,19 +101,24 @@
                                 <div class="form-text ws-muted">Filtra por WF_EntidadIndice (Key/ValueNorm).</div>
                             </div>
 
-                            <div class="col-md-4 d-flex align-items-center gap-3">
-                                <div class="form-check mt-4">
-                                    <asp:CheckBox ID="chkSoloActivas" runat="server"
-                                        CssClass="form-check-input"
-                                        AutoPostBack="true"
-                                        OnCheckedChanged="chkSoloActivas_CheckedChanged" />
-                                    <label class="form-check-label ws-muted" for="<%= chkSoloActivas.ClientID %>">Solo activas</label>
-                                </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0">&nbsp;</label>
+                                <div class="d-flex align-items-center gap-3" style="min-height:31px;">
+                                    <div class="form-check mb-0">
+                                        <asp:CheckBox ID="chkSoloActivas" runat="server"
+                                            CssClass="form-check-input"
+                                            AutoPostBack="true"
+                                            OnCheckedChanged="chkSoloActivas_CheckedChanged" />
+                                        <label class="form-check-label ws-muted" for="<%= chkSoloActivas.ClientID %>">Solo activas</label>
+                                    </div>
 
-                                <asp:Button ID="btnFiltrarIdx" runat="server" Text="Aplicar"
-                                    CssClass="btn btn-sm btn-primary mt-4"
-                                    OnClick="btnFiltrarIdx_Click" />
+                                    <asp:Button ID="btnFiltrarIdx" runat="server" Text="Aplicar"
+                                        CssClass="btn btn-sm btn-primary"
+                                        OnClick="btnFiltrarIdx_Click" />
+                                </div>
+                                <div class="form-text ws-muted">&nbsp;</div>
                             </div>
+                            
                         </div>
                     </div>
                 </div>
@@ -130,7 +138,7 @@
                     </div>
 
                    <div class="row text-center mt-3 g-2">
-                        <div class="col-6 col-md-3">
+                        <div class="col-6 col-md-2">
                             <div class="fw-bold fs-5">
                                 <asp:LinkButton ID="kpiTodos" runat="server" CssClass="btn btn-link p-0 text-decoration-none"
                                     CommandArgument="" OnClick="lnkEstado_Click">
@@ -140,7 +148,7 @@
                             <div class="ws-muted small">Total</div>
                         </div>
 
-                        <div class="col-6 col-md-3">
+                        <div class="col-6 col-md-2">
                             <div class="fw-bold">
                                 <asp:LinkButton ID="kpiIniciado" runat="server" CssClass="btn btn-link p-0 text-decoration-none text-primary"
                                     CommandArgument="Iniciado" OnClick="lnkEstado_Click">
@@ -150,7 +158,7 @@
                             <div class="ws-muted small">Iniciado</div>
                         </div>
 
-                        <div class="col-6 col-md-3">
+                        <div class="col-6 col-md-2">
                             <div class="fw-bold">
                                 <asp:LinkButton ID="kpiFinalizado" runat="server" CssClass="btn btn-link p-0 text-decoration-none text-success"
                                     CommandArgument="Finalizado" OnClick="lnkEstado_Click">
@@ -160,7 +168,7 @@
                             <div class="ws-muted small">Finalizado</div>
                         </div>
 
-                        <div class="col-6 col-md-3">
+                        <div class="col-6 col-md-2">
                             <div class="fw-bold">
                                 <asp:LinkButton ID="kpiError" runat="server" CssClass="btn btn-link p-0 text-decoration-none text-danger"
                                     CommandArgument="Error" OnClick="lnkEstado_Click">
@@ -169,6 +177,8 @@
                             </div>
                             <div class="ws-muted small">Error</div>
                         </div>
+
+                       
                     </div>
 
 
@@ -260,9 +270,13 @@
                    <!-- Resumen funcional (siempre visible) -->
                     <asp:Panel ID="pnlFuncional" runat="server">
                         <div class="row g-3 mb-2">
-                            <div class="col-md-3">
-                                <div class="ws-muted small">Estado</div>
-                                <div class="fw-semibold"><asp:Literal ID="litEstado" runat="server" /></div>
+                            <div class="col-md-2">
+                                <div class="ws-muted small">Estado negocio</div>
+                                <div class="fw-semibold"><asp:Literal ID="litEstadoNegocio" runat="server" /></div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="ws-muted small">Estado técnico</div>
+                                <div class="fw-semibold"><asp:Literal ID="litEstadoTecnico" runat="server" /></div>
                             </div>
                             <div class="col-md-3">
                                 <div class="ws-muted small">Tipo</div>
@@ -272,7 +286,7 @@
                                 <div class="ws-muted small">Total</div>
                                 <div class="fw-semibold"><asp:Literal ID="litTotal" runat="server" /></div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="ws-muted small">Instancia</div>
                                 <div class="fw-semibold"><asp:Literal ID="litInst" runat="server" /></div>
                             </div>
