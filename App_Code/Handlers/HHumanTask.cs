@@ -13,7 +13,10 @@ namespace Intranet.WorkflowStudio.WebForms
     /// <summary>
     /// Handler para "human.task": crea una fila en WF_Tarea y puede detener el flujo.
     /// - Primera vez que pasa por el nodo en una instancia → crea tarea y detiene.
-    /// - Si ya existe una tarea para ese nodo+instancia → NO crea otra y deja seguir.
+    /// - Si ya existe una tarea para ese nodo+instancia:
+    ///   - si está Pendiente => se detiene
+    ///   - si está Completada/Cerrada => normalmente continúa
+    ///   - si viene de reproceso/revisión obligatoria => crea una nueva
     /// </summary>
     public class HHumanTask : IManejadorNodo
     {
@@ -33,25 +36,30 @@ namespace Intranet.WorkflowStudio.WebForms
 
             ctx.Log($"[human.task] ejecutando: inst={instanciaId} nodoId={nodo.Id} tipo={nodo.Type}");
 
-            // 2) Si ya existe una tarea para este nodo+instancia, NO crear otra
             // 2) Si ya existe una tarea para este nodo+instancia:
             //    - si está Pendiente => detenerse acá
-            //    - si está Completada/Cerrada => continuar
+            //    - si está Completada/Cerrada => continuar, salvo que deba reabrirse por backtrack/revisión
             if (!string.IsNullOrWhiteSpace(nodo.Id))
             {
-
                 var tarea = await GetTareaParaNodoAsync(instanciaId, nodo.Id, nodo.Type, ct);
 
                 // ===== Retroceso controlado (backtrack) =====
                 var back = GetOrCreateBackState(ctx);
                 var activeFrame = back.ActiveFrameForTaskNode(nodo.Id);
                 var returnFrame = back.ActiveRejectedFrameReturningTo(nodo.Id);
+                var revisitFrame = back.ActiveFrameReturningTo(nodo.Id);
 
                 int expectedCycle = 0;
                 if (activeFrame != null && activeFrame.StatusEquals("rejected"))
                     expectedCycle = activeFrame.Cycle + 1;
                 else if (returnFrame != null)
                     expectedCycle = returnFrame.Cycle + 1;
+                else if (revisitFrame != null)
+                    expectedCycle = revisitFrame.Cycle;
+
+                bool forceRecreateByPreviousTask = false;
+                if (tarea != null)
+                    forceRecreateByPreviousTask = await DebeRecrearsePorRetornoPrevioAsync(instanciaId, nodo.Id, tarea.Id, ct);
 
                 if (tarea != null)
                 {
@@ -74,15 +82,21 @@ namespace Intranet.WorkflowStudio.WebForms
 
                     // 2) Si está cerrada:
                     //    - si venimos por rechazo y corresponde nuevo ciclo => NO retornar (deja que cree una nueva)
+                    //    - si el último paso de la instancia apunta a este nodo => NO retornar (revisión obligatoria)
                     //    - si no => continuar normalmente
                     if (EstaCerrada(tarea.Estado))
                     {
                         tarea.Cycle = ExtraerCycle(tarea.Datos);
                         tarea.FrameId = ExtraerFrameId(tarea.Datos);
 
-                        if (expectedCycle > 0 && tarea.Cycle > 0 && tarea.Cycle < expectedCycle)
+                        if (forceRecreateByPreviousTask)
                         {
-                            ctx.Log($"[human.task] backtrack: ciclo anterior detectado (lastCycle={tarea.Cycle}, expectedCycle={expectedCycle}) -> se crea nueva tarea.");
+                            ctx.Log($"[human.task] reapertura obligatoria por retorno previo: nodo={nodo.Id}. Se crea nueva tarea.");
+                            // NO retornar => cae al bloque de creación abajo
+                        }
+                        else if ((revisitFrame != null) || (expectedCycle > 0 && tarea.Cycle > 0 && tarea.Cycle < expectedCycle))
+                        {
+                            ctx.Log($"[human.task] backtrack/revisit: la tarea cerrada actual no sirve para este paso; se crea nueva tarea. lastCycle={tarea.Cycle}, expectedCycle={expectedCycle}");
                             // NO retornar => cae al bloque de creación abajo
                         }
                         else
@@ -118,9 +132,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 // Si tarea == null, o si estaba cerrada pero corresponde crear nuevo ciclo,
                 // cae al flujo de creación que ya tenés más abajo.
-
             }
-
 
             // ===== Retroceso controlado (backtrack): definir frame/cycle/returnTo =====
             var back2 = GetOrCreateBackState(ctx);
@@ -129,16 +141,18 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var rf0 = back2.ActiveRejectedFrameReturningTo(nodo.Id);
             if (rf0 != null)
-                prevNodeId = rf0.ReturnToNodeId;
+                prevNodeId = rf0.TaskNodeId;
 
             string frameId = null;
             int cycle = 1;
+            string returnToNodeIdForNewTask = prevNodeId;
 
             // Si venimos de un rechazo:
             // - si el nodo actual es el rechazado, reabrimos ESE frame y subimos ciclo
             // - si el nodo actual es el returnTo del frame rechazado, creamos NUEVA tarea para el anterior
             var af = back2.ActiveFrameForTaskNode(nodo.Id);
             var rf = back2.ActiveRejectedFrameReturningTo(nodo.Id);
+            var rv = back2.ActiveFrameReturningTo(nodo.Id);
 
             if (af != null && af.StatusEquals("rejected"))
             {
@@ -146,14 +160,28 @@ namespace Intranet.WorkflowStudio.WebForms
                 cycle = af.Cycle + 1;
                 af.Cycle = cycle;
                 af.Status = "open";
+                returnToNodeIdForNewTask = prevNodeId;
             }
             else if (rf != null)
             {
                 frameId = Guid.NewGuid().ToString("N");
                 cycle = rf.Cycle + 1;
 
-                // Nuevo frame para el nodo al que vuelve el rechazo
-                back2.EnsureFrame(frameId, nodo.Id, prevNodeId, cycle);
+                // Nuevo frame para el nodo al que vuelve el rechazo.
+                // El siguiente reviewer obligado es el nodo que rechazó.
+                returnToNodeIdForNewTask = prevNodeId;
+                back2.EnsureFrame(frameId, nodo.Id, returnToNodeIdForNewTask, cycle);
+            }
+            else if (rv != null)
+            {
+                frameId = Guid.NewGuid().ToString("N");
+                cycle = rv.Cycle;
+
+                // Revisión posterior al reproceso:
+                // este nodo debe ejecutarse otra vez y si vuelve a rechazar,
+                // debe regresar al nodo del frame activo.
+                returnToNodeIdForNewTask = rv.TaskNodeId;
+                back2.EnsureFrame(frameId, nodo.Id, returnToNodeIdForNewTask, cycle);
             }
             else
             {
@@ -161,7 +189,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 cycle = 1;
 
                 // Nuevo frame normal
-                back2.EnsureFrame(frameId, nodo.Id, prevNodeId, cycle);
+                returnToNodeIdForNewTask = prevNodeId;
+                back2.EnsureFrame(frameId, nodo.Id, returnToNodeIdForNewTask, cycle);
             }
 
             // Dejar activo el frame (el flujo queda detenido en este human.task)
@@ -208,7 +237,7 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 { "frameId", frameId },
                 { "taskNodeId", nodo.Id },
-                { "returnToNodeId", prevNodeId },
+                { "returnToNodeId", returnToNodeIdForNewTask },
                 { "cycle", cycle }
             };
 
@@ -240,11 +269,11 @@ namespace Intranet.WorkflowStudio.WebForms
 
             ctx.Log($"[human.task] tarea creada para instancia {instanciaId} (nodo {nodo.Id}), tareaId={tareaId}");
 
-            // 5) Marcar que el motor debe detenerse aquí (primera vez)
+            // 5) Marcar que el motor debe detenerse aquí
             ctx.Estado["wf.detener"] = true;
             ctx.Estado["wf.currentNodeId"] = nodo.Id;
             ctx.Estado["wf.currentNodeType"] = nodo.Type;
-            ctx.Estado["wf.tarea.id"] = tareaId;   // por si lo necesitás después
+            ctx.Estado["wf.tarea.id"] = tareaId;
 
             return new ResultadoEjecucion { Etiqueta = "always" };
         }
@@ -253,14 +282,15 @@ namespace Intranet.WorkflowStudio.WebForms
         private sealed class TareaInfo
         {
             public long Id { get; set; }
+            public string NodoId { get; set; }
             public string Estado { get; set; }      // "Pendiente", "Completada", etc.
             public string Resultado { get; set; }   // opcional
-            public string Datos { get; set; }        // JSON (metadata / data)
-            public int Cycle { get; set; }           // wfBack.cycle
-            public string FrameId { get; set; }      // wfBack.frameId
+            public string Datos { get; set; }       // JSON (metadata / data)
+            public int Cycle { get; set; }          // wfBack.cycle
+            public string FrameId { get; set; }     // wfBack.frameId
         }
 
-                // ===== Backtrack helpers (retroceso controlado) =====
+        // ===== Backtrack helpers (retroceso controlado) =====
         private sealed class BackFrame
         {
             private readonly Dictionary<string, object> _d;
@@ -314,6 +344,25 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 _ctx = ctx;
                 _stack = stack;
+            }
+
+            public BackFrame ActiveFrameReturningTo(string nodeId)
+            {
+                if (_ctx?.Estado == null) return null;
+
+                if (!_ctx.Estado.TryGetValue("wf.back.activeFrameId", out var v) || v == null) return null;
+                var fid = Convert.ToString(v);
+                if (string.IsNullOrWhiteSpace(fid)) return null;
+
+                var fr = FindFrame(fid);
+                if (fr == null) return null;
+
+                if (string.IsNullOrWhiteSpace(nodeId)) return null;
+
+                if (!string.Equals(fr.ReturnToNodeId, nodeId, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                return fr;
             }
 
             public BackFrame ActiveFrameForTaskNode(string taskNodeId)
@@ -399,14 +448,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
 
                 return null;
-            }
-
-            private static int TryToInt(object v, int defVal)
-            {
-                if (v == null) return defVal;
-                if (v is int i) return i;
-                if (int.TryParse(Convert.ToString(v), out var x)) return x;
-                return defVal;
             }
         }
 
@@ -520,27 +561,24 @@ namespace Intranet.WorkflowStudio.WebForms
             catch { return null; }
         }
 
-
-        
-
         private static async Task<TareaInfo> GetTareaParaNodoAsync(
-                                                                    long instanciaId,
-                                                                    string nodoId,
-                                                                    string nodoTipo,
-                                                                    CancellationToken ct)
+            long instanciaId,
+            string nodoId,
+            string nodoTipo,
+            CancellationToken ct)
         {
             var cs = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
 
             using (var cn = new SqlConnection(cs))
             using (var cmd = new SqlCommand(@"
-                                            SELECT TOP 1 Id, Estado, Resultado, Datos
-                                            FROM dbo.WF_Tarea
-                                            WHERE WF_InstanciaId = @InstId
-                                              AND NodoId         = @NodoId
-                                              AND NodoTipo       = @NodoTipo
-                                            ORDER BY
-                                              CASE WHEN Estado IS NULL OR Estado='Pendiente' OR Estado='Abierta' THEN 0 ELSE 1 END,
-                                              Id DESC;", cn))
+SELECT TOP 1 Id, NodoId, Estado, Resultado, Datos
+FROM dbo.WF_Tarea
+WHERE WF_InstanciaId = @InstId
+  AND NodoId         = @NodoId
+  AND NodoTipo       = @NodoTipo
+ORDER BY
+  CASE WHEN Estado IS NULL OR Estado='Pendiente' OR Estado='Abierta' THEN 0 ELSE 1 END,
+  Id DESC;", cn))
             {
                 cmd.Parameters.Add("@InstId", SqlDbType.BigInt).Value = instanciaId;
                 cmd.Parameters.Add("@NodoId", SqlDbType.NVarChar, 50).Value = nodoId;
@@ -554,14 +592,62 @@ namespace Intranet.WorkflowStudio.WebForms
                     return new TareaInfo
                     {
                         Id = rd.GetInt64(0),
-                        Estado = rd.IsDBNull(1) ? null : rd.GetString(1),
-                        Resultado = rd.IsDBNull(2) ? null : rd.GetString(2),
-                        Datos = rd.IsDBNull(3) ? null : rd.GetString(3)
+                        NodoId = rd.IsDBNull(1) ? null : rd.GetString(1),
+                        Estado = rd.IsDBNull(2) ? null : rd.GetString(2),
+                        Resultado = rd.IsDBNull(3) ? null : rd.GetString(3),
+                        Datos = rd.IsDBNull(4) ? null : rd.GetString(4)
                     };
                 }
             }
         }
 
+        private static async Task<TareaInfo> GetUltimaTareaInstanciaAsync(long instanciaId, CancellationToken ct)
+        {
+            var cs = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+
+            using (var cn = new SqlConnection(cs))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP 1 Id, NodoId, Estado, Resultado, Datos
+FROM dbo.WF_Tarea
+WHERE WF_InstanciaId = @InstId
+ORDER BY Id DESC;", cn))
+            {
+                cmd.Parameters.Add("@InstId", SqlDbType.BigInt).Value = instanciaId;
+
+                await cn.OpenAsync(ct);
+                using (var rd = await cmd.ExecuteReaderAsync(ct))
+                {
+                    if (!await rd.ReadAsync(ct)) return null;
+
+                    return new TareaInfo
+                    {
+                        Id = rd.GetInt64(0),
+                        NodoId = rd.IsDBNull(1) ? null : rd.GetString(1),
+                        Estado = rd.IsDBNull(2) ? null : rd.GetString(2),
+                        Resultado = rd.IsDBNull(3) ? null : rd.GetString(3),
+                        Datos = rd.IsDBNull(4) ? null : rd.GetString(4)
+                    };
+                }
+            }
+        }
+
+        private static async Task<bool> DebeRecrearsePorRetornoPrevioAsync(long instanciaId, string nodoActual, long tareaExistenteId, CancellationToken ct)
+        {
+            if (instanciaId <= 0 || string.IsNullOrWhiteSpace(nodoActual)) return false;
+
+            var ultima = await GetUltimaTareaInstanciaAsync(instanciaId, ct);
+            if (ultima == null) return false;
+
+            // Si la última ya es la misma tarea existente, no aplica.
+            if (ultima.Id == tareaExistenteId) return false;
+
+            // Solo nos interesa si la última tarea de la instancia ya quedó cerrada.
+            if (!EstaCerrada(ultima.Estado)) return false;
+
+            var returnTo = ExtraerReturnTo(ultima.Datos);
+            return !string.IsNullOrWhiteSpace(returnTo) &&
+                   string.Equals(returnTo, nodoActual, StringComparison.OrdinalIgnoreCase);
+        }
 
         private static bool EstaPendiente(string estado)
         {
@@ -637,58 +723,43 @@ namespace Intranet.WorkflowStudio.WebForms
         }
 
         private static async Task<long> InsertarTareaAsync(
-                                                            long instanciaId,
-                                                            string nodoId,
-                                                            string nodoTipo,
-                                                            string titulo,
-                                                            string descripcion,
-                                                            string rol,
-                                                            string usuarioAsignado,
-                                                            string scopeKey,
-                                                            string asignadoA,
-                                                            DateTime? fechaVencimiento,
-                                                            string metadataJson,
-                                                            CancellationToken ct)
+            long instanciaId,
+            string nodoId,
+            string nodoTipo,
+            string titulo,
+            string descripcion,
+            string rol,
+            string usuarioAsignado,
+            string scopeKey,
+            string asignadoA,
+            DateTime? fechaVencimiento,
+            string metadataJson,
+            CancellationToken ct)
         {
             var cs = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
 
             using (var cn = new SqlConnection(cs))
             using (var cmd = new SqlCommand(@"
-                                                INSERT INTO dbo.WF_Tarea
-                                                    (WF_InstanciaId, NodoId, NodoTipo,
-                                                     Titulo, Descripcion,
-                                                     RolDestino, UsuarioAsignado,
-                                                     Estado, Resultado,
-                                                     FechaCreacion, FechaVencimiento, FechaCierre,
-                                                     Datos,
-                                                     ScopeKey,
-                                                     AsignadoA)
-                                                VALUES
-                                                    (@InstId, @NodoId, @NodoTipo,
-                                                     @Titulo, @Descripcion,
-                                                     @RolDestino, @UsuarioAsignado,
-                                                     @Estado, @Resultado,
-                                                     GETDATE(), @FechaVencimiento, NULL,
-                                                     @Datos,
-                                                     @ScopeKey,
-                                                     @AsignadoA);
-                                                SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
+INSERT INTO dbo.WF_Tarea
+    (WF_InstanciaId, NodoId, NodoTipo,
+     Titulo, Descripcion,
+     RolDestino, UsuarioAsignado,
+     Estado, Resultado,
+     FechaCreacion, FechaVencimiento, FechaCierre,
+     Datos,
+     ScopeKey,
+     AsignadoA)
+VALUES
+    (@InstId, @NodoId, @NodoTipo,
+     @Titulo, @Descripcion,
+     @RolDestino, @UsuarioAsignado,
+     @Estado, @Resultado,
+     GETDATE(), @FechaVencimiento, NULL,
+     @Datos,
+     @ScopeKey,
+     @AsignadoA);
+SELECT CAST(SCOPE_IDENTITY() AS BIGINT);", cn))
             {
-                // ---------------------------
-                // 1) ScopeKey desde el documento (mejor forma: mismo criterio que Instancia)
-                //    Priorizo input.sector, y dejo fallback a input.Sector (por si alguna vez cambia).
-                // ---------------------------
-                //scopeKey = null;
-
-                // OJO: esta función no recibe ctx, entonces el scope lo tenés que calcular ANTES
-                // y pasarlo como parámetro, o mover este bloque afuera.
-                //
-                // 👉 Mejor opción: agregar 2 parámetros nuevos a InsertarTareaAsync:
-                //    string scopeKey, string asignadoA
-                //
-                // Como vos me pasaste la firma actual, dejo el SQL listo,
-                // pero estos 2 valores los paso por parámetros y los seteás donde llamás a InsertarTareaAsync.
-
                 cmd.Parameters.Add("@InstId", SqlDbType.BigInt).Value = instanciaId;
                 cmd.Parameters.Add("@NodoId", SqlDbType.NVarChar, 50).Value = (object)nodoId ?? DBNull.Value;
                 cmd.Parameters.Add("@NodoTipo", SqlDbType.NVarChar, 100).Value = (object)nodoTipo ?? DBNull.Value;
@@ -702,11 +773,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 cmd.Parameters.Add("@FechaVencimiento", SqlDbType.DateTime).Value = (object)fechaVencimiento ?? DBNull.Value;
                 cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value = (object)metadataJson ?? DBNull.Value;
 
-                // ✅ NUEVOS CAMPOS (ya existen en tu tabla)
                 cmd.Parameters.Add("@ScopeKey", SqlDbType.NVarChar, 100).Value = (object)scopeKey ?? DBNull.Value;
-
-                // ✅ “AsignadoA” = usuario puntual (si existe). Si no, NULL.
-                //    (en tareas por rol puede estar vacío)
                 cmd.Parameters.Add("@AsignadoA", SqlDbType.NVarChar, 100).Value = (object)asignadoA ?? DBNull.Value;
 
                 await cn.OpenAsync(ct);
@@ -714,7 +781,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return Convert.ToInt64(scalar);
             }
         }
-
 
         private static string GetString(Dictionary<string, object> p, string key)
         {

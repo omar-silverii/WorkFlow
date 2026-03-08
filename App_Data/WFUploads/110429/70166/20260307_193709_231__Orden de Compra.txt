@@ -1,0 +1,20 @@
+EMPRESA ACME S.A.
+ORDEN DE COMPRA Nº OC-2025-009182
+Fecha: 09/12/2025
+
+Proveedor:
+COD: PRV-1082
+Razón Social: Ferretería El Tornillo SRL
+CUIT: 30-55678112-9
+
+Detalle de la compra:
+Item: Tornillos acero inoxidable 10mm
+Cantidad: 120 unidades
+Precio Unitario: 1.280,00
+Total: 153.600,00
+
+Condiciones:
+Entrega en 48 hs.
+Pago 30 días.
+
+Autorizado por: Jefe de Compras

@@ -35,6 +35,17 @@ namespace Intranet.WorkflowStudio.WebForms
             public string Fecha { get; set; }
             public string Url { get; set; }
         }
+
+        private class ObservacionInstanciaRow
+        {
+            public long TareaId;
+            public string NodoId;
+            public string Datos;
+            public string CerradoPor;
+            public DateTime? CerradoEn;
+            public string Resultado;
+        }
+
         protected void Page_Load(object sender, EventArgs e)
         {
             try { Topbar1.ActiveSection = "Documentos"; } catch { }
@@ -93,7 +104,7 @@ SELECT  t.Id,
         t.FechaVencimiento,
         t.FechaCierre,
         t.Datos
-FROM    dbo.WF_Tarea      t
+FROM    dbo.WF_Tarea t
 WHERE   t.Id = @Id;", cn))
             {
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = id;
@@ -108,7 +119,6 @@ WHERE   t.Id = @Id;", cn))
                     }
 
                     long instanciaId = Convert.ToInt64(dr["WF_InstanciaId"]);
-                    string nodoId = Convert.ToString(dr["NodoId"]);
 
                     InstanciaIdActual = instanciaId;
 
@@ -124,7 +134,6 @@ WHERE   t.Id = @Id;", cn))
 
                     string estado = Convert.ToString(dr["Estado"]);
 
-                    // Si ya está cerrada, deshabilito edición
                     if (estado.Equals("Completada", StringComparison.OrdinalIgnoreCase) ||
                         estado.Equals("Cancelada", StringComparison.OrdinalIgnoreCase))
                     {
@@ -134,12 +143,10 @@ WHERE   t.Id = @Id;", cn))
                         lblInfo.Text = "La tarea ya está cerrada.";
                     }
 
-                    // Si ya tenía resultado guardado, reflejarlo
                     var res = dr["Resultado"] as string;
                     if (!string.IsNullOrEmpty(res) && ddlResultado.Items.FindByValue(res) != null)
                         ddlResultado.SelectedValue = res;
 
-                    // Si en Datos hay JSON con observaciones, intentar mostrarlo
                     var datos = dr["Datos"] as string;
                     if (!string.IsNullOrWhiteSpace(datos))
                     {
@@ -187,7 +194,6 @@ WHERE   t.Id = @Id;", cn))
                     return;
                 }
 
-                // Guardar en App_Data/WFUploads/<inst>/<tarea>/
                 var baseDir = Server.MapPath("~/App_Data/WFUploads");
                 var dir = Path.Combine(baseDir, instanciaId.ToString(), tareaId.ToString());
                 Directory.CreateDirectory(dir);
@@ -201,7 +207,6 @@ WHERE   t.Id = @Id;", cn))
                 var tipo = (txtAdjTipo.Text ?? "").Trim();
                 var user = (Context.User?.Identity?.Name ?? "").Trim();
 
-                // URL servida por handler (lo creás en el punto B)
                 var url = ResolveUrl("~/API/WF_Upload_Get.ashx") +
                       "?inst=" + instanciaId +
                       "&tarea=" + tareaId +
@@ -223,33 +228,12 @@ WHERE   t.Id = @Id;", cn))
         {
             try
             {
-                // 1) Obtener frameId/cycle desde Datos de la tarea actual
-                string datosActual = ObtenerDatosTarea(tareaIdActual);
-                if (string.IsNullOrWhiteSpace(datosActual)) { pnlPedidosPendientes.Visible = false; return; }
-
-                string frameId = ExtraerFrameIdDesdeDatos(datosActual);
-                int cycle = ExtraerCycleDesdeDatos(datosActual);
-
-                if (string.IsNullOrWhiteSpace(frameId) || cycle <= 1)
-                {
-                    pnlPedidosPendientes.Visible = false;
-                    return;
-                }
-
-                // 2) Buscar la última tarea rechazada del mismo frame
-                var rech = ObtenerUltimaTareaRechazadaPorFrame(instanciaId, frameId, tareaIdActual);
-                if (rech == null)
-                {
-                    pnlPedidosPendientes.Visible = false;
-                    return;
-                }
-
-                // 3) Renderizar pedido
-                string html = RenderPedidoPendiente(rech.Datos, rech.CerradoPor, rech.CerradoEn, rech.TareaId);
+                string html = RenderObservacionesInstancia(instanciaId, tareaIdActual);
 
                 if (string.IsNullOrWhiteSpace(html))
                 {
                     pnlPedidosPendientes.Visible = false;
+                    litPedidosPendientes.Text = "";
                     return;
                 }
 
@@ -258,8 +242,8 @@ WHERE   t.Id = @Id;", cn))
             }
             catch
             {
-                // Si algo falla, no rompemos la página
                 pnlPedidosPendientes.Visible = false;
+                litPedidosPendientes.Text = "";
             }
         }
 
@@ -303,8 +287,6 @@ ORDER BY
                 cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
                 cmd.Parameters.Add("@TareaActual", SqlDbType.BigInt).Value = tareaIdActual;
                 cmd.Parameters.Add("@ResRech", SqlDbType.VarChar, 50).Value = "rechazado";
-
-                // MVP robusto: buscamos el frameId como substring JSON
                 cmd.Parameters.Add("@LikeFrame", SqlDbType.NVarChar, 200).Value = "%" + frameId + "%";
 
                 cn.Open();
@@ -316,9 +298,10 @@ ORDER BY
                     info.TareaId = Convert.ToInt64(dr["Id"]);
                     info.Datos = dr["Datos"] as string;
                     info.CerradoEn = dr["FechaCierre"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(dr["FechaCierre"]);
-
-                    // CerradoPor está dentro del JSON "data" (porque lo guardamos como meta+data)
                     info.CerradoPor = ExtraerCerradoPorDesdeDatos(info.Datos);
+
+                    if (!info.CerradoEn.HasValue)
+                        info.CerradoEn = ExtraerCerradoEnDesdeDatos(info.Datos);
 
                     return info;
                 }
@@ -367,10 +350,167 @@ ORDER BY
 
                 if (o.cerradoPor != null) return (string)o.cerradoPor;
                 if (o.data != null && o.data.cerradoPor != null) return (string)o.data.cerradoPor;
+                if (o.pedido != null && o.pedido.cerradoPor != null) return (string)o.pedido.cerradoPor;
+                if (o.data != null && o.data.pedido != null && o.data.pedido.cerradoPor != null) return (string)o.data.pedido.cerradoPor;
 
                 return null;
             }
             catch { return null; }
+        }
+
+        private DateTime? ExtraerCerradoEnDesdeDatos(string datosJson)
+        {
+            try
+            {
+                dynamic o = JsonConvert.DeserializeObject(datosJson);
+                if (o == null) return null;
+
+                object v = null;
+
+                if (o.cerradoEn != null) v = o.cerradoEn;
+                else if (o.data != null && o.data.cerradoEn != null) v = o.data.cerradoEn;
+                else if (o.pedido != null && o.pedido.cerradoEn != null) v = o.pedido.cerradoEn;
+                else if (o.data != null && o.data.pedido != null && o.data.pedido.cerradoEn != null) v = o.data.pedido.cerradoEn;
+
+                if (v == null) return null;
+
+                DateTime dt;
+                return DateTime.TryParse(Convert.ToString(v), out dt) ? (DateTime?)dt : null;
+            }
+            catch { return null; }
+        }
+
+        private string ExtraerObservacionDesdeDatos(string datosJson)
+        {
+            try
+            {
+                dynamic o = JsonConvert.DeserializeObject(datosJson);
+                if (o == null) return null;
+
+                if (o.observaciones != null) return (string)o.observaciones;
+                if (o.data != null && o.data.observaciones != null) return (string)o.data.observaciones;
+                if (o.pedido != null && o.pedido.observaciones != null) return (string)o.pedido.observaciones;
+                if (o.data != null && o.data.pedido != null && o.data.pedido.observaciones != null) return (string)o.data.pedido.observaciones;
+
+                return null;
+            }
+            catch { return null; }
+        }
+
+        private System.Collections.Generic.List<ObservacionInstanciaRow> ObtenerObservacionesInstancia(long instanciaId, long tareaIdActual)
+        {
+            var list = new System.Collections.Generic.List<ObservacionInstanciaRow>();
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+SELECT
+    t.Id,
+    t.NodoId,
+    t.Datos,
+    t.FechaCierre,
+    t.Resultado
+FROM dbo.WF_Tarea t
+WHERE
+    t.WF_InstanciaId = @InstanciaId
+    AND t.NodoTipo = 'human.task'
+    AND t.Estado = 'Completada'
+ORDER BY
+    ISNULL(t.FechaCierre, t.FechaCreacion) ASC,
+    t.Id ASC;", cn))
+            {
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        var row = new ObservacionInstanciaRow();
+                        row.TareaId = Convert.ToInt64(dr["Id"]);
+                        row.NodoId = dr["NodoId"] == DBNull.Value ? "" : Convert.ToString(dr["NodoId"]);
+                        row.Datos = dr["Datos"] as string;
+                        row.CerradoEn = dr["FechaCierre"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(dr["FechaCierre"]);
+                        row.CerradoPor = ExtraerCerradoPorDesdeDatos(row.Datos);
+                        row.Resultado = dr["Resultado"] == DBNull.Value ? "" : Convert.ToString(dr["Resultado"]);
+
+                        if (!row.CerradoEn.HasValue)
+                            row.CerradoEn = ExtraerCerradoEnDesdeDatos(row.Datos);
+
+                        var obs = ExtraerObservacionDesdeDatos(row.Datos);
+                        if (string.IsNullOrWhiteSpace(obs))
+                            continue;
+
+                        list.Add(row);
+                    }
+                }
+            }
+
+            return list;
+        }
+
+        private string RenderObservacionesInstancia(long instanciaId, long tareaIdActual)
+        {
+            var list = ObtenerObservacionesInstancia(instanciaId, tareaIdActual);
+            if (list == null || list.Count == 0) return null;
+
+            string html = "";
+            html += "<div class='table-responsive'>";
+            html += "<table class='table table-sm table-hover align-middle mb-0'>";
+            html += "<thead>";
+            html += "<tr>";
+            html += "<th style='width:140px'>Fecha</th>";
+            html += "<th style='width:180px'>Usuario</th>";
+            html += "<th style='width:90px'>Nodo</th>";
+            html += "<th style='width:110px'>Resultado</th>";
+            html += "<th>Observación</th>";
+            html += "</tr>";
+            html += "</thead>";
+            html += "<tbody>";
+
+            foreach (var it in list)
+            {
+                string rowHtml = RenderObservacionInstanciaRow(it);
+                if (!string.IsNullOrWhiteSpace(rowHtml))
+                    html += rowHtml;
+            }
+
+            html += "</tbody>";
+            html += "</table>";
+            html += "</div>";
+            html += "<div class='mt-2'><a href='#adjuntos'>Ir a adjuntar documentación</a></div>";
+
+            return html;
+        }
+
+        private string RenderObservacionInstanciaRow(ObservacionInstanciaRow it)
+        {
+            if (it == null || string.IsNullOrWhiteSpace(it.Datos)) return null;
+
+            try
+            {
+                string obs = ExtraerObservacionDesdeDatos(it.Datos);
+                if (string.IsNullOrWhiteSpace(obs)) return null;
+
+                string quien = !string.IsNullOrWhiteSpace(it.CerradoPor) ? it.CerradoPor : "—";
+                string cuando = it.CerradoEn.HasValue ? it.CerradoEn.Value.ToString("dd/MM/yyyy HH:mm") : "—";
+                string nodo = !string.IsNullOrWhiteSpace(it.NodoId) ? it.NodoId : "—";
+                string resultado = !string.IsNullOrWhiteSpace(it.Resultado) ? it.Resultado : "—";
+
+                string html = "";
+                html += "<tr>";
+                html += "<td>" + Server.HtmlEncode(cuando) + "</td>";
+                html += "<td>" + Server.HtmlEncode(quien) + "</td>";
+                html += "<td>" + Server.HtmlEncode(nodo) + "</td>";
+                html += "<td>" + Server.HtmlEncode(resultado) + "</td>";
+                html += "<td>" + Server.HtmlEncode(obs).Replace("\r\n", "<br/>").Replace("\n", "<br/>") + "</td>";
+                html += "</tr>";
+
+                return html;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private string RenderPedidoPendiente(string datosRechazoJson, string cerradoPor, DateTime? cerradoEn, long tareaRechazadaId)
@@ -382,36 +522,51 @@ ORDER BY
                 dynamic o = JsonConvert.DeserializeObject(datosRechazoJson);
                 if (o == null) return null;
 
-                // el pedido está en data.pedido (nuevo formato) o en pedido (viejo)
                 dynamic data = (o.data != null) ? o.data : o;
+                dynamic pedido = (data.pedido != null) ? data.pedido : null;
 
-                dynamic pedido = data.pedido;
-                string obs = data.observaciones != null ? (string)data.observaciones : null;
-
-                if (pedido == null && string.IsNullOrWhiteSpace(obs)) return null;
+                string obs = null;
+                if (pedido != null && pedido.observaciones != null)
+                    obs = (string)pedido.observaciones;
+                else if (data.observaciones != null)
+                    obs = (string)data.observaciones;
+                else if (o.observaciones != null)
+                    obs = (string)o.observaciones;
 
                 string quien = !string.IsNullOrWhiteSpace(cerradoPor) ? cerradoPor : "—";
                 string cuando = cerradoEn.HasValue ? cerradoEn.Value.ToString("dd/MM/yyyy HH:mm") : "—";
 
-                string titulo = pedido != null && pedido.titulo != null ? (string)pedido.titulo : "Pedido";
-                string detalle = pedido != null && pedido.detalle != null ? (string)pedido.detalle : null;
-                string codigo = pedido != null && pedido.codigo != null ? (string)pedido.codigo : null;
+                string titulo = "Pedido de reproceso";
+                if (pedido != null && pedido.titulo != null && !string.IsNullOrWhiteSpace((string)pedido.titulo))
+                    titulo = (string)pedido.titulo;
 
-                // HTML simple (sin depender de nada)
+                string detalle = null;
+                if (pedido != null && pedido.detalle != null)
+                    detalle = (string)pedido.detalle;
+
+                string codigo = null;
+                if (pedido != null && pedido.codigo != null)
+                    codigo = (string)pedido.codigo;
+
+                if (string.IsNullOrWhiteSpace(obs) && string.IsNullOrWhiteSpace(detalle) && string.IsNullOrWhiteSpace(codigo))
+                    return null;
+
                 string html = "";
-                html += "<div><b>Último rechazo:</b> " + Server.HtmlEncode(quien) + " – " + Server.HtmlEncode(cuando) + "</div>";
-                html += "<div class='mt-1'><b>" + Server.HtmlEncode(titulo) + "</b></div>";
+                html += "<div><b>Solicitado por:</b> " + Server.HtmlEncode(quien) + "</div>";
+                html += "<div><b>Fecha:</b> " + Server.HtmlEncode(cuando) + "</div>";
+                html += "<div class='mt-2'><b>" + Server.HtmlEncode(titulo) + "</b></div>";
 
                 if (!string.IsNullOrWhiteSpace(codigo))
-                    html += "<div><b>Código:</b> " + Server.HtmlEncode(codigo) + "</div>";
+                    html += "<div class='mt-1'><b>Código:</b> " + Server.HtmlEncode(codigo) + "</div>";
 
                 if (!string.IsNullOrWhiteSpace(detalle))
-                    html += "<div>" + Server.HtmlEncode(detalle) + "</div>";
+                    html += "<div class='mt-1'><b>Detalle:</b> " + Server.HtmlEncode(detalle) + "</div>";
 
                 if (!string.IsNullOrWhiteSpace(obs))
-                    html += "<div class='mt-1'><b>Observaciones:</b> " + Server.HtmlEncode(obs) + "</div>";
+                    html += "<div class='mt-2'><b>Observaciones:</b><br/>" + Server.HtmlEncode(obs).Replace("\r\n", "<br/>").Replace("\n", "<br/>") + "</div>";
 
-                html += "<div class='mt-2'><a href='#adjuntos'>Adjuntar documentación solicitada</a></div>";
+                html += "<div class='mt-2'><a href='#adjuntos'>Ir a adjuntar documentación</a></div>";
+
                 return html;
             }
             catch
@@ -439,8 +594,6 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(usuarioActual))
                 usuarioActual = "workflow.ui";
 
-            // Si el usuario pegó JSON (empieza con "{"), lo respetamos como "data"
-            // y solo aseguramos cerradoPor/cerradoEn si faltan.
             string datosJson;
 
             string obsTrim = observaciones.TrimStart();
@@ -462,7 +615,6 @@ ORDER BY
                 }
                 catch
                 {
-                    // Si pegó algo que parece JSON pero está mal, caemos al formato simple
                     datosJson = JsonConvert.SerializeObject(new { observaciones, cerradoPor = usuarioActual, cerradoEn = DateTime.Now }, Formatting.None);
                 }
             }
@@ -481,7 +633,7 @@ ORDER BY
                 );
 
                 lblInfo.Text = "Tarea completada y workflow reanudado.";
-                CargarTarea(tareaId); // refresca pantalla
+                CargarTarea(tareaId);
             }
             catch (Exception ex)
             {
@@ -553,9 +705,9 @@ ORDER BY
                             var tipo = Convert.ToString(jo["tipo"] ?? "");
 
                             var url = Convert.ToString(jo["viewerUrl"] ?? "");
-                           
+
                             var storedFileName = Convert.ToString(jo["storedFileName"] ?? "");
-                            
+
                             if (!string.IsNullOrWhiteSpace(tareaIdDoc) && !string.IsNullOrWhiteSpace(storedFileName))
                             {
                                 url = ResolveUrl("~/API/WF_Upload_Get.ashx")
@@ -623,7 +775,6 @@ ORDER BY
                 catch { root = new JObject(); }
             }
 
-            // ✅ escribir en estado.biz.case.attachments (porque tu DatosContexto real vive ahí)
             var estado = root["estado"] as JObject;
             if (estado == null) { estado = new JObject(); root["estado"] = estado; }
 

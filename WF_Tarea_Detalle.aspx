@@ -34,13 +34,15 @@
           </div>
       </div>
 
-
             <asp:ValidationSummary ID="valSummary" runat="server"
                 CssClass="text-danger" />
 
             <asp:Panel ID="pnlDatos" runat="server">
                 <asp:Panel ID="pnlPedidosPendientes" runat="server" Visible="false" CssClass="alert alert-warning">
-                    <div class="fw-bold mb-1">Pedidos pendientes</div>
+                    <div class="fw-bold mb-1">Observaciones del expediente</div>
+                    <div class="small mb-2">
+                        Acá se muestra el historial completo de observaciones registradas para esta instancia.
+                    </div>
                     <asp:Literal ID="litPedidosPendientes" runat="server" />
                 </asp:Panel>
 
@@ -119,7 +121,6 @@
                     </asp:Repeater>
                 </div>
             </asp:Panel>
-
 
                 <div class="row mb-2">
                     <div class="col-md-2">

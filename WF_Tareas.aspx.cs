@@ -3,6 +3,8 @@ using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Web.UI.WebControls;
+using Newtonsoft.Json.Linq;
+using System.Web;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -56,6 +58,7 @@ SELECT
     T.ScopeKey,
     T.Estado,
     T.Resultado,
+    T.Datos,
     T.FechaCreacion,
     T.FechaVencimiento
 FROM dbo.WF_Tarea T
@@ -184,6 +187,123 @@ WHERE P.Activo=1
             Response.StatusCode = 403;
             Response.Write("No autorizado.");
             Response.End();
+        }
+
+        protected string GetFlujoIconoHtml(object instanciaIdObj, object tareaIdObj)
+        {
+            long instanciaId;
+            long tareaId;
+
+            if (instanciaIdObj == null || !long.TryParse(Convert.ToString(instanciaIdObj), out instanciaId))
+                return "";
+
+            if (tareaIdObj == null || !long.TryParse(Convert.ToString(tareaIdObj), out tareaId))
+                return "";
+
+            if (!VieneDeRechazo(instanciaId, tareaId))
+                return "";
+
+            return "<span class='ws-flow-pill' title='Reproceso'>↺</span>";
+        }
+
+        private bool VieneDeRechazo(long instanciaId, long tareaIdActual)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT TOP 1
+    t.Estado,
+    t.Resultado
+FROM dbo.WF_Tarea t
+WHERE
+    t.WF_InstanciaId = @InstanciaId
+    AND t.Id < @TareaActual
+ORDER BY
+    t.Id DESC;";
+
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@TareaActual", SqlDbType.BigInt).Value = tareaIdActual;
+
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    if (!dr.Read()) return false;
+
+                    string estado = dr["Estado"] == DBNull.Value ? "" : Convert.ToString(dr["Estado"]);
+                    string resultado = dr["Resultado"] == DBNull.Value ? "" : Convert.ToString(dr["Resultado"]);
+
+                    return string.Equals(estado, "Completada", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(resultado, "rechazado", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        private string ExtraerFrameIdDesdeDatos(string datosJson)
+        {
+            if (string.IsNullOrWhiteSpace(datosJson)) return null;
+
+            try
+            {
+                var o = JObject.Parse(datosJson);
+
+                JToken tok =
+                    o.SelectToken("meta.wfBack.frameId") ??
+                    o.SelectToken("wfBack.frameId");
+
+                return tok == null ? null : Convert.ToString(tok);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private bool ExisteRechazoPrevioMismoFrame(long instanciaId, long tareaIdActual, string frameId)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT COUNT(1)
+FROM dbo.WF_Tarea t
+WHERE
+    t.WF_InstanciaId = @InstanciaId
+    AND t.Id <> @TareaActual
+    AND t.Resultado = @ResRech
+    AND t.Datos LIKE @LikeFrame;";
+
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@TareaActual", SqlDbType.BigInt).Value = tareaIdActual;
+                cmd.Parameters.Add("@ResRech", SqlDbType.VarChar, 50).Value = "rechazado";
+                cmd.Parameters.Add("@LikeFrame", SqlDbType.NVarChar, 200).Value = "%" + frameId + "%";
+
+                cn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+        }
+
+        private int ExtraerCycleDesdeDatos(string datosJson)
+        {
+            if (string.IsNullOrWhiteSpace(datosJson)) return 0;
+
+            try
+            {
+                var o = JObject.Parse(datosJson);
+
+                JToken tok =
+                    o.SelectToken("meta.wfBack.cycle") ??
+                    o.SelectToken("wfBack.cycle");
+
+                if (tok == null) return 0;
+
+                int cycle;
+                return int.TryParse(Convert.ToString(tok), out cycle) ? cycle : 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         protected void btnBuscar_Click(object sender, EventArgs e)

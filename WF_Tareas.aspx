@@ -21,7 +21,20 @@
         .ws-title { font-weight: 700; letter-spacing: .2px; }
         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
-
+        .ws-flow-pill{
+                        display:inline-flex;
+                        align-items:center;
+                        justify-content:center;
+                        min-width:30px;
+                        height:24px;
+                        padding:0 8px;
+                        border-radius:999px;
+                        font-size:.85rem;
+                        font-weight:700;
+                        border:1px solid rgba(255,193,7,.35);
+                        background:rgba(255,193,7,.18);
+                        color:#8a5300;
+                    }
     </style> 
     
 </head>
@@ -101,6 +114,12 @@
                                 <asp:BoundField DataField="NodoId" HeaderText="Nodo" ItemStyle-Width="70px" />
                                 <asp:BoundField DataField="NodoTipo" HeaderText="Tipo" ItemStyle-Width="110px" />
                                 <asp:BoundField DataField="Titulo" HeaderText="Título" />
+                                <asp:TemplateField HeaderText="" ItemStyle-Width="56px" ItemStyle-HorizontalAlign="Center">
+                                    <ItemTemplate>
+                                        <asp:Literal ID="litFlujo" runat="server"
+                                            Text='<%# GetFlujoIconoHtml(Eval("WF_InstanciaId"), Eval("Id")) %>' />
+                                    </ItemTemplate>
+                                </asp:TemplateField>
                                 <asp:BoundField DataField="RolDestino" HeaderText="Rol destino" />
                                 <asp:BoundField DataField="UsuarioAsignado" HeaderText="Usuario" />
                                 <asp:BoundField DataField="AsignadoA" HeaderText="AsignadoA" ItemStyle-Width="160px" />
