@@ -150,6 +150,15 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.GridView gvInst;
 
         /// <summary>
+        /// Control pnlDatosCard.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlDatosCard;
+
+        /// <summary>
         /// Control pnlDatos.
         /// </summary>
         /// <remarks>
@@ -256,6 +265,15 @@ namespace Intranet.WorkflowStudio.WebForms
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
         protected global::System.Web.UI.WebControls.Panel pnlDocAuditEmpty;
+
+        /// <summary>
+        /// Control pnlLogsCard.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlLogsCard;
 
         /// <summary>
         /// Control pnlLogs.

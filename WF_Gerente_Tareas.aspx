@@ -92,7 +92,7 @@
                                     <asp:TemplateField HeaderText="">
                                         <ItemTemplate>
                                             <a class="btn btn-sm btn-outline-primary"
-                                               href='<%# "WF_Tarea_Ver.aspx?tareaId=" + Eval("Id") %>'>
+                                               href='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") + "&src=gerencia" %>'>
                                                 Abrir
                                             </a>
                                             <asp:LinkButton
@@ -148,7 +148,7 @@
                                     <asp:TemplateField HeaderText="">
                                         <ItemTemplate>
                                             <a class="btn btn-sm btn-outline-primary"
-                                               href='<%# "WF_Tarea_Ver.aspx?tareaId=" + Eval("Id") %>'>
+                                               href='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") + "&src=gerencia" %>'>
                                                 Abrir
                                             </a>
 
@@ -204,7 +204,7 @@
                                     <asp:TemplateField HeaderText="">
                                         <ItemTemplate>
                                             <a class="btn btn-sm btn-outline-primary me-1"
-                                               href='<%# "WF_Tarea_Ver.aspx?tareaId=" + Eval("Id") %>'>
+                                               href='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") + "&src=gerencia" %>'>
                                                 Abrir
                                             </a>
 
@@ -262,7 +262,7 @@
                                     <asp:TemplateField HeaderText="">
                                         <ItemTemplate>
                                             <a class="btn btn-sm btn-outline-primary"
-                                               href='<%# "WF_Tarea_Ver.aspx?tareaId=" + Eval("Id") %>'>
+                                               href='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") + "&src=gerencia" %>'>
                                                 Abrir
                                             </a>
                                         </ItemTemplate>

@@ -28,6 +28,16 @@ namespace Intranet.WorkflowStudio.WebForms
             set { ViewState["InstanciaId"] = value; }
         }
 
+        private string ResolveBackUrl()
+        {
+            string src = (Request.QueryString["src"] ?? "").Trim().ToLowerInvariant();
+
+            if (src == "gerencia")
+                return "WF_Gerente_Tareas.aspx";
+
+            return "WF_Tareas.aspx";
+        }
+
         private class AdjRow
         {
             public string Tipo { get; set; }
@@ -141,6 +151,9 @@ WHERE   t.Id = @Id;", cn))
                         txtObs.Enabled = false;
                         btnCompletar.Enabled = false;
                         lblInfo.Text = "La tarea ya está cerrada.";
+                        btnAdjuntar.Enabled = false;   // ✔️
+                        fuAdjunto.Enabled = false;     // ✔️
+                        txtAdjTipo.Enabled = false;    // ✔️
                     }
 
                     var res = dr["Resultado"] as string;
@@ -695,8 +708,12 @@ ORDER BY
                     usuarioActual
                 );
 
-                lblInfo.Text = "Tarea completada y workflow reanudado.";
+                lblInfo.Text = "Tarea completada correctamente. Volviendo...";
                 CargarTarea(tareaId);
+
+                string backUrl = ResolveBackUrl();
+                string js = "setTimeout(function(){ window.location='" + ResolveUrl("~/" + backUrl) + "'; }, 1800);";
+                ClientScript.RegisterStartupScript(this.GetType(), "volverAutomatico", js, true);
             }
             catch (Exception ex)
             {
@@ -714,7 +731,7 @@ ORDER BY
 
         protected void btnVolver_Click(object sender, EventArgs e)
         {
-            Response.Redirect("WF_Tareas.aspx");
+            Response.Redirect(ResolveBackUrl(), false);
         }
 
         private void MostrarError(string mensaje)

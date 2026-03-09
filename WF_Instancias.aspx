@@ -160,19 +160,21 @@
                 <div class="col-md-5">
 
                     <!-- DatosContexto -->
-                    <div class="card ws-card mb-3">
-                        <div class="card-body">
-                            <div class="ws-title mb-2">Datos (DatosContexto)</div>
+                    <asp:Panel ID="pnlDatosCard" runat="server" Visible="true">
+                        <div class="card ws-card mb-3">
+                            <div class="card-body">
+                                <div class="ws-title mb-2">Datos (DatosContexto)</div>
 
-                            <asp:Panel ID="pnlDatos" runat="server" Visible="false">
-                                <pre class="log-view"><asp:Literal ID="litDatos" runat="server"></asp:Literal></pre>
-                            </asp:Panel>
+                                <asp:Panel ID="pnlDatos" runat="server" Visible="false">
+                                    <pre class="log-view"><asp:Literal ID="litDatos" runat="server"></asp:Literal></pre>
+                                </asp:Panel>
 
-                            <asp:Panel ID="pnlDatosEmpty" runat="server" Visible="true" CssClass="ws-muted small">
-                                Seleccioná una instancia y presioná “Datos”.
-                            </asp:Panel>
+                                <asp:Panel ID="pnlDatosEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                    Seleccioná una instancia y presioná “Datos”.
+                                </asp:Panel>
+                            </div>
                         </div>
-                    </div>
+                    </asp:Panel>
 
                     <!-- Documentos (Caso) - SOLO si hay datos -->
                     <asp:Panel ID="pnlDocsCard" runat="server" Visible="false">
@@ -275,19 +277,21 @@
                     </asp:Panel>
 
                     <!-- Logs -->
-                    <div class="card ws-card">
-                        <div class="card-body">
-                            <div class="ws-title mb-2">Logs</div>
+                    <asp:Panel ID="pnlLogsCard" runat="server" Visible="true">
+                        <div class="card ws-card">
+                            <div class="card-body">
+                                <div class="ws-title mb-2">Logs</div>
 
-                            <asp:Panel ID="pnlLogs" runat="server" Visible="false">
-                                <pre class="log-view"><asp:Literal ID="litLogs" runat="server"></asp:Literal></pre>
-                            </asp:Panel>
+                                <asp:Panel ID="pnlLogs" runat="server" Visible="false">
+                                    <pre class="log-view"><asp:Literal ID="litLogs" runat="server"></asp:Literal></pre>
+                                </asp:Panel>
 
-                            <asp:Panel ID="pnlLogsEmpty" runat="server" Visible="true" CssClass="ws-muted small">
-                                Seleccioná una instancia y presioná “Logs”.
-                            </asp:Panel>
+                                <asp:Panel ID="pnlLogsEmpty" runat="server" Visible="true" CssClass="ws-muted small">
+                                    Seleccioná una instancia y presioná “Logs”.
+                                </asp:Panel>
+                            </div>
                         </div>
-                    </div>
+                    </asp:Panel>
 
                 </div>
             </div>

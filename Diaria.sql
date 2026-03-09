@@ -8,9 +8,9 @@ select * from WF_UserPermiso where UserKey = 'OMARD\USUARIO1' And Activo = 1
 select * from WF_UserPermiso where UserKey = 'OMARD\OMARD' And Activo = 1
 /*
 delete WF_Instancia where id = 110422
-delete WF_Instancia where id = 110429
-delete WF_InstanciaLog where WF_Instanciaid = 110429
-delete WF_Tarea  where WF_Instanciaid = 	110429
+delete WF_Instancia where id = 110440
+delete WF_InstanciaLog where WF_Instanciaid = 110440
+delete WF_Tarea  where WF_Instanciaid = 	110440
 */
 
 tarea creada para instancia 110430 (nodo n2), tareaId=70169

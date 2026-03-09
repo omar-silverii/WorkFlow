@@ -41,10 +41,7 @@
                     <h3 class="mb-1 ws-section-title">Inicio</h3>
                     <div class="ws-muted">Diseñá workflows, administrá documentos y revisá ejecuciones — todo desde un solo lugar.</div>
                 </div>
-                <div class="d-flex gap-2">
-                    <a class="btn btn-primary" href="WorkflowUI.aspx">➕ Nuevo Workflow</a>
-                    <a class="btn btn-outline-secondary" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a>
-                </div>
+                
             </div>
 
             <div class="row g-3 g-md-4">
@@ -177,9 +174,27 @@
                                 <div class="card-body">
                                     <div class="ws-icon">🧑‍💻</div>
                                     <h5 class="mt-2 mb-1">Mis tareas</h5>
-                                    <div class="ws-muted">
+                                    <div class="ws-muted mb-3">
                                         Bandeja del usuario logueado. Tareas pendientes, resolución y seguimiento del trabajo diario.
                                     </div>
+
+                                    <div class="row text-center mb-3">
+                                        <div class="col-4">
+                                            <div class="fw-bold fs-5" id="wsTaskTotalCount">0</div>
+                                            <div class="ws-muted small">Pendientes</div>
+                                        </div>
+
+                                        <div class="col-4">
+                                            <div class="fw-bold text-danger" id="wsTaskBackCount">0</div>
+                                            <div class="ws-muted small">Back</div>
+                                        </div>
+
+                                        <div class="col-4">
+                                            <div class="fw-bold text-primary" id="wsTaskPendingCount">0</div>
+                                            <div class="ws-muted small">En bandeja</div>
+                                        </div>
+                                    </div>
+
                                     <div class="d-flex gap-2 mt-3">
                                         <a class="btn btn-primary" href="WF_Tareas.aspx">Abrir mis tareas</a>
                                     </div>

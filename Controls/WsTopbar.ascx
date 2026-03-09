@@ -59,6 +59,9 @@
                     <a id="lnkTareas" runat="server" class="nav-link dropdown-toggle" href="#"
                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Tareas
+                        <span id="wsTaskBadge"
+                              class="badge rounded-pill bg-danger ms-1"
+                              style="display:none;">0</span>
                     </a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Tareas.aspx") %>">🧑‍💻 Mis tareas</a></li>
@@ -76,3 +79,48 @@
         </div>
     </div>
 </nav>
+<script>
+(function () {
+    var url = '<%= ResolveUrl("~/Api/WF_TaskCounters.ashx") %>';
+
+    function setText(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function setBadge(total) {
+        var badge = document.getElementById('wsTaskBadge');
+        if (!badge) return;
+
+        if (total > 0) {
+            badge.style.display = '';
+            badge.textContent = total;
+        } else {
+            badge.style.display = 'none';
+            badge.textContent = '0';
+        }
+    }
+
+    function refreshTaskCounters() {
+        fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || data.ok !== true) return;
+
+                setBadge(data.total || 0);
+
+                setText('wsTaskPendingCount', data.pendientes || 0);
+                setText('wsTaskBackCount', data.back || 0);
+                setText('wsTaskTotalCount', data.total || 0);
+            })
+            .catch(function () {
+                // silencioso
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshTaskCounters();
+        window.setInterval(refreshTaskCounters, 30000);
+    });
+})();
+</script>

@@ -332,7 +332,7 @@ WHERE
             if (e.CommandName == "Detalle")
             {
                 long tareaId = Convert.ToInt64(e.CommandArgument);
-                Response.Redirect("WF_Tarea_Detalle.aspx?id=" + tareaId);
+                Response.Redirect("WF_Tarea_Detalle.aspx?id=" + tareaId + "&src=tareas");
                 return;
             }
 

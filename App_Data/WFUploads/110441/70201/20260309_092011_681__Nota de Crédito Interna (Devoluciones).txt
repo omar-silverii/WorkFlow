@@ -1,0 +1,15 @@
+[NOMBRE DE TU EMPRESA]
+NOTA DE DEVOLUCIÓN / CRÉDITO INTERNO
+Fecha: //2025 | Referencia Factura Nº: __________
+Cliente: ___________________________
+Motivo de la devolución:
+[ ] Producto defectuoso
+[ ] Error en envío
+[ ] Fecha de vencimiento próxima
+[ ] Otro: __________________
+Detalle de productos retornados:
+| Cantidad | Descripción | Precio Unit. | Total |
+|----------|-------------|--------------|-------|
+| | | | |
+Monto a acreditar al cliente: $___________
+Autorizado por Firma del Cliente

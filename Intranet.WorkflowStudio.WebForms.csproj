@@ -424,6 +424,7 @@
     <Content Include="Api\DocPreview.ashx" />
     <Content Include="Api\WF_Upload_Get.ashx" />
     <Content Include="Api\WF_Roles_List.ashx" />
+    <Content Include="Api\WF_TaskCounters.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -494,6 +495,9 @@
     </Compile>
     <Compile Include="Api\WF_Roles_List.ashx.cs">
       <DependentUpon>WF_Roles_List.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_TaskCounters.ashx.cs">
+      <DependentUpon>WF_TaskCounters.ashx</DependentUpon>
     </Compile>
     <Compile Include="Api\WF_Upload_Get.ashx.cs">
       <DependentUpon>WF_Upload_Get.ashx</DependentUpon>

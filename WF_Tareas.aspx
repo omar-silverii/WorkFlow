@@ -133,7 +133,7 @@
                                         <div class="d-flex gap-2">
                                             <asp:HyperLink ID="lnkAbrir" runat="server"
                                                 CssClass="btn btn-sm btn-primary"
-                                                NavigateUrl='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") %>'>
+                                                NavigateUrl='<%# "WF_Tarea_Detalle.aspx?id=" + Eval("Id") + "&src=tareas" %>'>
                                                 Abrir
                                             </asp:HyperLink>
 

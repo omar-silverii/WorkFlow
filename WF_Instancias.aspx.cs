@@ -343,10 +343,34 @@ ORDER BY Id DESC;";
             }
             else if (e.CommandName == "Docs")
             {
-                MostrarDatos(instId);
+                MostrarDocumentos(instId);
+            }
+        }
+
+        void MostrarDocumentos(int instId)
+        {
+            string sql = "SELECT DatosContexto FROM WF_Instancia WHERE Id=@Id;";
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(sql, cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = instId;
+                cn.Open();
+                var val = cmd.ExecuteScalar();
+                string json = val == DBNull.Value || val == null ? "" : Convert.ToString(val);
+
+                _instanciaActualId = instId;
+
+                pnlDatosCard.Visible = false;
+                pnlLogsCard.Visible = false;
+
+                pnlDatos.Visible = false;
+                pnlDatosEmpty.Visible = false;
 
                 pnlLogs.Visible = false;
-                pnlLogsEmpty.Visible = true;
+                pnlLogsEmpty.Visible = false;
+
+                BindDocsFromDatosContexto(json);
+                BindDocAudit(instId);
             }
         }
 
@@ -361,8 +385,14 @@ ORDER BY Id DESC;";
                 var val = cmd.ExecuteScalar();
                 string json = val == DBNull.Value || val == null ? "" : Convert.ToString(val);
 
+                pnlDatosCard.Visible = true;
+                pnlLogsCard.Visible = false;
+
                 pnlDatos.Visible = true;
                 pnlDatosEmpty.Visible = false;
+
+                pnlLogs.Visible = false;
+                pnlLogsEmpty.Visible = false;
 
                 litDatos.Text = Server.HtmlEncode(PrettyJson(json));
 
@@ -427,11 +457,10 @@ ORDER BY Id DESC;";
                     return;
                 }
 
-                var biz =
-                    (root["biz"] as JObject) ??
-                    (root["estado"]?["biz"] as JObject);
+                JObject bcase =
+                    (root["estado"]?["biz"]?["case"] as JObject) ??
+                    (root["biz"]?["case"] as JObject);
 
-                var bcase = biz?["case"] as JObject;
                 if (bcase == null)
                 {
                     ShowDocs(rows);
@@ -625,6 +654,9 @@ ORDER BY Id ASC;";
                     }
                 }
             }
+
+            pnlDatosCard.Visible = false;
+            pnlLogsCard.Visible = true;
 
             pnlLogs.Visible = true;
             pnlLogsEmpty.Visible = false;
