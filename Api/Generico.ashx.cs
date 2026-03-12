@@ -753,8 +753,12 @@ SELECT
             public string hintLabel { get; set; }
             public string hintContext { get; set; }
             public string modo { get; set; }         // LabelValue|...
-            public string regex { get; set; }        // generado
+            public string regex { get; set; }          // generado
             public string labelDetected { get; set; }  // opcional (para HintLabel)
+
+            public string selectedLine { get; set; }
+            public string selectionPrefix { get; set; }
+            public string selectionSuffix { get; set; }
         }
 
         private string ReadRequestBody(HttpContext ctx)
@@ -842,18 +846,91 @@ ORDER BY r.Orden, r.Id;", cn))
             return System.Text.RegularExpressions.Regex.Escape(s ?? "");
         }
 
+        private string EscapeRegexFlexible(string s)
+        {
+            var esc = System.Text.RegularExpressions.Regex.Escape(s ?? "");
+
+            // Reemplaza espacios escapados por \s+ real de regex
+            esc = esc.Replace(@"\ ", @"\s+");
+            esc = esc.Replace(@"\t", @"\s+");
+
+            return esc;
+        }
+
+        private string BuildCapturePattern(string tipoDato, bool boundedText)
+        {
+            var td = (tipoDato ?? "").Trim().ToLowerInvariant();
+
+            if (td == "cuit") return "(\\d{2}-\\d{8}-\\d)";
+            if (td == "fecha") return "(\\d{2}/\\d{2}/\\d{4})";
+            if (td == "importe") return "\\$\\s*([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})?)";
+            if (td == "numero") return "([0-9]+)";
+            if (td == "email") return "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})";
+
+            return boundedText ? "(.+?)" : "([^\\r\\n]+)";
+        }
+
+        private string BuildRegexManual(string tipoDato, string ejemplo, string selectedLine, string selectionPrefix, string selectionSuffix, string hintContext)
+        {
+            var ex = (ejemplo ?? "").Trim();
+            var line = (selectedLine ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Trim('\n');
+            var left = selectionPrefix ?? "";
+            var right = selectionSuffix ?? "";
+
+            if (string.IsNullOrWhiteSpace(ex))
+                return BuildRegex(tipoDato, ejemplo, hintContext);
+
+            if (!string.IsNullOrWhiteSpace(line) && string.Equals(line.Trim(), ex, StringComparison.OrdinalIgnoreCase))
+            {
+                var exEsc = EscapeRegex(ex);
+                return "^\\s*(" + exEsc + ")\\s*$";
+            }
+
+            var td = (tipoDato ?? "").Trim().ToLowerInvariant();
+
+            // Caso manual para Texto seleccionado dentro de una línea mixta:
+            // confiamos en el texto exacto seleccionado, no en toda la cola derecha.
+            if (td == "texto" && ex.Length >= 3)
+            {
+                var exEsc = EscapeRegexFlexible(ex);
+                var rightTrim = (right ?? "").Trim();
+
+                // Si a la derecha hay contexto real, lo usamos.
+                if (!string.IsNullOrWhiteSpace(rightTrim))
+                {
+                    var rightCtxEsc = EscapeRegexFlexible(rightTrim);
+
+                    // Si el valor está al inicio de la línea, lo dejamos anclado.
+                    if (string.IsNullOrWhiteSpace(left))
+                        return "^\\s*(" + exEsc + ")\\s*" + rightCtxEsc;
+
+                    // Si está en el medio, no anclamos al inicio.
+                    return "(" + exEsc + ")\\s*" + rightCtxEsc;
+                }
+
+                return "(" + exEsc + ")";
+            }
+
+            var cap = BuildCapturePattern(tipoDato, !string.IsNullOrWhiteSpace(right));
+            var leftEsc = EscapeRegexFlexible(left.TrimEnd());
+            var rightEsc = EscapeRegexFlexible(right.TrimStart());
+
+            if (!string.IsNullOrWhiteSpace(leftEsc) && !string.IsNullOrWhiteSpace(rightEsc))
+                return "^\\s*" + leftEsc + "\\s*" + cap + "\\s*" + rightEsc + "\\s*$";
+
+            if (!string.IsNullOrWhiteSpace(leftEsc))
+                return "^\\s*" + leftEsc + "\\s*" + cap + "\\s*$";
+
+            if (!string.IsNullOrWhiteSpace(rightEsc))
+                return "^\\s*" + cap + "\\s*" + rightEsc + "\\s*$";
+
+            return BuildRegex(tipoDato, ejemplo, hintContext);
+        }
+
         private string BuildRegex(string tipoDato, string ejemplo, string hintContext)
         {
             // patrón base por tipo (SIEMPRE capturante)
-            string cap;
-            var td = (tipoDato ?? "").Trim().ToLowerInvariant();
-
-            if (td == "cuit") cap = "(\\d{2}-\\d{8}-\\d)";
-            else if (td == "fecha") cap = "(\\d{2}/\\d{2}/\\d{4})";
-            else if (td == "importe") cap = "\\$\\s*([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})?)";
-            else if (td == "numero") cap = "([0-9]+)";
-            else if (td == "email") cap = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})";
-            else cap = "([^\\r\\n]+)";
+            string cap = BuildCapturePattern(tipoDato, false);
 
             string ctx = hintContext ?? "";
             string ex = (ejemplo ?? "").Trim();
@@ -923,7 +1000,15 @@ ORDER BY r.Orden, r.Id;", cn))
                         }
                     }
 
-                    // 3) Caso raro: el ejemplo está al inicio y NO hay ':'
+                    // 3) Caso especial: el ejemplo coincide con TODA la línea
+                    //    Ej: tipo de factura "A" en una línea sola.
+                    if (string.Equals(line, ex, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var exEsc = EscapeRegex(ex);
+                        return "^\\s*(" + exEsc + ")\\s*$";
+                    }
+
+                    // 4) Caso raro: el ejemplo está al inicio y NO hay ':'
                     if (idx == 0)
                     {
                         var exEsc = EscapeRegex(ex);
@@ -1019,14 +1104,24 @@ ORDER BY r.Orden, r.Id;", cn))
 
             if (string.IsNullOrWhiteSpace(regex))
             {
-                // 🟦 Caso profesional: items[] en TABLA (pipes)
-                // Inferimos columna a partir de Ejemplo + HintContext (sin hardcodear nombres)
                 if (isItemField && !string.IsNullOrWhiteSpace(dto.hintContext) && dto.hintContext.Contains("|"))
                 {
                     regex = BuildTableColumnRegex(dto.ejemplo, dto.hintContext) ?? "";
                 }
 
-                // Fallback al generador existente
+                if (string.IsNullOrWhiteSpace(regex)
+                    && string.Equals(dto.modo ?? "", "ManualSelection", StringComparison.OrdinalIgnoreCase))
+                {
+                    regex = BuildRegexManual(
+                        dto.tipoDato,
+                        dto.ejemplo,
+                        dto.selectedLine,
+                        dto.selectionPrefix,
+                        dto.selectionSuffix,
+                        dto.hintContext
+                    );
+                }
+
                 if (string.IsNullOrWhiteSpace(regex))
                 {
                     regex = BuildRegex(dto.tipoDato, dto.ejemplo, dto.hintContext);

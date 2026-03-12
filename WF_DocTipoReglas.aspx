@@ -194,6 +194,30 @@
                     <label class="mt-2 d-block">HintContext (auto)</label>
                     <textarea id="taHint" rows="4" placeholder="Se llena al seleccionar texto (contexto alrededor)"></textarea>
 
+                    <div class="ws-row-2col mt-2">
+                        <div>
+                            <label>Modo de captura</label>
+                            <select id="selModoCaptura">
+                                <option value="Auto">Automático</option>
+                                <option value="ManualSelection">Manual (selección en visor)</option>
+                            </select>
+                            <div class="ws-help">
+                                Automático intenta inferir la regla. Manual usa exactamente la selección hecha en el visor como base.
+                            </div>
+                        </div>
+
+                        <div class="ws-rightbtn">
+                            <label class="ws-label-spacer">&nbsp;</label>
+                            <button type="button" id="btnUsarSeleccion" class="btn btn-outline-secondary w-100 ws-btn-34">
+                                Usar selección
+                            </button>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="hfSelectedLine" />
+                    <input type="hidden" id="hfSelectionPrefix" />
+                    <input type="hidden" id="hfSelectionSuffix" />
+
                     <div class="d-flex gap-2 mt-3">
                         <button type="button" id="btnGuardar" class="btn btn-primary w-100">Guardar</button>
                         <button type="button" id="btnProbar" class="btn btn-outline-primary w-100">Probar</button>
@@ -275,6 +299,12 @@
             const inpEjemplo = document.getElementById('inpEjemplo');
             const taHint = document.getElementById('taHint');
 
+            const selModoCaptura = document.getElementById('selModoCaptura');
+            const btnUsarSeleccion = document.getElementById('btnUsarSeleccion');
+            const hfSelectedLine = document.getElementById('hfSelectedLine');
+            const hfSelectionPrefix = document.getElementById('hfSelectionPrefix');
+            const hfSelectionSuffix = document.getElementById('hfSelectionSuffix');
+
             const btnGuardar = document.getElementById('btnGuardar');
             const btnProbar = document.getElementById('btnProbar');
             const lblEstado = document.getElementById('lblEstado');
@@ -307,6 +337,16 @@
             function setStatus(msg, ok) {
                 lblEstado.textContent = msg;
                 lblEstado.className = 'pill ' + (ok ? 'ok' : 'bad');
+            }
+
+            function updateModoCapturaUI() {
+                const manual = (selModoCaptura && selModoCaptura.value === 'ManualSelection');
+
+                if (btnUsarSeleccion) {
+                    btnUsarSeleccion.disabled = !manual;
+                    btnUsarSeleccion.classList.toggle('btn-outline-secondary', manual);
+                    btnUsarSeleccion.classList.toggle('btn-outline-light', !manual);
+                }
             }
 
             function escapeHtml(s) {
@@ -442,6 +482,13 @@
                 selActivo.value = r.activo ? '1' : '0';
                 inpEjemplo.value = r.ejemplo || '';
                 taHint.value = r.hintContext || '';
+                selModoCaptura.value = r.modo || 'Auto';
+
+                hfSelectedLine.value = '';
+                hfSelectionPrefix.value = '';
+                hfSelectionSuffix.value = '';
+
+                updateModoCapturaUI();
 
                 setStatus('Editando regla Id=' + id, true);
             }
@@ -458,15 +505,25 @@
                 if (chkItem) chkItem.checked = false;
                 if (chkItemBlock) chkItemBlock.checked = false;
 
+                selModoCaptura.value = 'Auto';
+                hfSelectedLine.value = '';
+                hfSelectionPrefix.value = '';
+                hfSelectionSuffix.value = '';
+
                 applyItemBlockRulesUI();
                 updateCampoFinalPreview();
+                updateModoCapturaUI();
             }
 
             function getPreviewText() {
                 return prePreview.textContent || '';
             }
 
-            function captureSelectionFromPreview() {
+            function captureSelectionFromPreview(forceManual) {
+                const manual = (selModoCaptura && selModoCaptura.value === 'ManualSelection');
+
+                if (manual && !forceManual) return;
+
                 const sel = window.getSelection();
                 if (!sel || sel.rangeCount === 0) return;
 
@@ -479,40 +536,60 @@
                 const selected = (sel.toString() || '').trim();
                 if (!selected) return;
 
-                // ✅ Usar el MISMO texto que se ve en el preview
-                // innerText respeta saltos de línea visibles en el <pre>
-                let full = (root.innerText || "");
-
-                // Normalizar saltos para que índices y substrings no se corran
-                full = full.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+                let full = (root.innerText || '');
+                full = full.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
                 inpEjemplo.value = selected;
 
-                // ✅ Offset real dentro del preview (en caracteres)
                 const preRange = document.createRange();
                 preRange.selectNodeContents(root);
                 preRange.setEnd(range.startContainer, range.startOffset);
 
-                let beforeText = (preRange.toString() || "");
-                beforeText = beforeText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+                let beforeText = (preRange.toString() || '');
+                beforeText = beforeText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
                 const startIdx = beforeText.length;
+                const endIdx = startIdx + selected.length;
 
                 if (startIdx < 0 || startIdx > full.length) {
                     taHint.value = selected;
-                    setStatus('Ejemplo capturado ✅', true);
+                    hfSelectedLine.value = '';
+                    hfSelectionPrefix.value = '';
+                    hfSelectionSuffix.value = '';
+                    setStatus(manual ? 'Selección manual capturada ✅' : 'Ejemplo capturado ✅', true);
                     return;
                 }
 
                 const beforeStart = Math.max(0, startIdx - 250);
-                const afterEnd = Math.min(full.length, startIdx + selected.length + 250);
-
+                const afterEnd = Math.min(full.length, endIdx + 250);
                 taHint.value = full.substring(beforeStart, afterEnd);
 
-                setStatus('Ejemplo capturado ✅', true);
+                const lineStart = full.lastIndexOf('\n', Math.max(0, startIdx - 1));
+                const realLineStart = (lineStart < 0 ? 0 : lineStart + 1);
+
+                const lineEnd = full.indexOf('\n', endIdx);
+                const realLineEnd = (lineEnd < 0 ? full.length : lineEnd);
+
+                const selectedLine = full.substring(realLineStart, realLineEnd);
+                const startInLine = Math.max(0, startIdx - realLineStart);
+                const endInLine = Math.min(selectedLine.length, startInLine + selected.length);
+
+                hfSelectedLine.value = selectedLine;
+                hfSelectionPrefix.value = selectedLine.substring(0, startInLine);
+                hfSelectionSuffix.value = selectedLine.substring(endInLine);
+
+                setStatus(manual ? 'Selección manual capturada ✅' : 'Ejemplo capturado ✅', true);
             }
 
-            document.getElementById('prePreview').addEventListener('mouseup', () => setTimeout(captureSelectionFromPreview, 0));
+            document.getElementById('prePreview').addEventListener('mouseup', () => {
+                setTimeout(() => captureSelectionFromPreview(false), 0);
+            });
+
+            btnUsarSeleccion.onclick = () => {
+                captureSelectionFromPreview(true);
+            };
+
+            selModoCaptura.addEventListener('change', updateModoCapturaUI);
 
             async function apiLoadPreviewFile(file) {
                 const fd = new FormData();
@@ -577,7 +654,10 @@
                     activo: selActivo.value === '1',
                     ejemplo: ejemplo,
                     hintContext: hintContext,
-                    modo: 'Assisted'
+                    modo: selModoCaptura.value || 'Auto',
+                    selectedLine: hfSelectedLine.value || '',
+                    selectionPrefix: hfSelectionPrefix.value || '',
+                    selectionSuffix: hfSelectionSuffix.value || ''
                 };
 
                 try {
@@ -704,6 +784,7 @@
 
                     setStatus('Listo ✅', true);
                     updateCampoFinalPreview();
+                    updateModoCapturaUI();
                 } catch (e) {
                     console.warn(e);
                     setStatus('Error init: ' + e.message, false);

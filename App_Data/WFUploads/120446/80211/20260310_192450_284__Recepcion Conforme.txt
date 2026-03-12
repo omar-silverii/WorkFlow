@@ -1,0 +1,4 @@
+payload.text=${payload.text}
+payload.rawText=${payload.rawText}
+doc.text=${doc.text}
+input.text=${input.text}

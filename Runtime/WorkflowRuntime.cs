@@ -821,6 +821,14 @@ WHERE Id = @Id;", cn))
                 return e1.To;
             }
 
+            bool ExisteNodo(WorkflowDef w, string nodeId)
+            {
+                return w != null
+                    && !string.IsNullOrWhiteSpace(nodeId)
+                    && w.Nodes != null
+                    && w.Nodes.ContainsKey(nodeId);
+            }
+
             var logs = new List<string>();
 
             // Seed base desde snapshot
@@ -976,10 +984,30 @@ WHERE Id = @Id;", cn))
                 seed["wf.back.mode"] = "back";
 
                 // salto determinístico al llamador real
-                var returnTo = backMeta.ReturnToNodeId;
+                var volverA = ExtraerVolverADesdeDatosJson(datosJson);
+                string returnTo = null;
+
+                if (!string.IsNullOrWhiteSpace(volverA))
+                {
+                    if (string.Equals(volverA, "__inicio__", StringComparison.OrdinalIgnoreCase))
+                    {
+                        returnTo = wf.StartNodeId;
+                        logs.Add("[Backtrack] destino elegido por usuario: Inicio.");
+                    }
+                    else if (ExisteNodo(wf, volverA))
+                    {
+                        returnTo = volverA;
+                        logs.Add("[Backtrack] destino elegido por usuario: " + volverA);
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(returnTo))
                 {
-                    // 1) ✅ fallback profesional: volver al human.task anterior (nodo llamador)
+                    returnTo = backMeta.ReturnToNodeId;
+                }
+
+                if (string.IsNullOrWhiteSpace(returnTo))
+                {
                     returnTo = CalcularHumanTaskAnterior(wf, info.NodoId);
 
                     if (!string.IsNullOrWhiteSpace(returnTo))
@@ -1380,8 +1408,26 @@ WHERE Id = @Id;", cn))
             return JsonConvert.SerializeObject(payload, Formatting.None);
         }
 
-       
 
+        private static string ExtraerVolverADesdeDatosJson(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
+
+                dynamic o = JsonConvert.DeserializeObject(datosJson);
+                if (o == null) return null;
+
+                if (o.volverA != null)
+                    return Convert.ToString(o.volverA);
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
 
         private static IDictionary<string, object> FiltrarEstadoParaPersistencia(IDictionary<string, object> estado)

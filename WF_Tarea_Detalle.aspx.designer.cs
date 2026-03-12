@@ -96,15 +96,6 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.FileUpload fuAdjunto;
 
         /// <summary>
-        /// Control txtAdjTipo.
-        /// </summary>
-        /// <remarks>
-        /// Campo generado automáticamente.
-        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
-        /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtAdjTipo;
-
-        /// <summary>
         /// Control btnAdjuntar.
         /// </summary>
         /// <remarks>
@@ -220,6 +211,24 @@ namespace Intranet.WorkflowStudio.WebForms
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
         protected global::System.Web.UI.WebControls.RequiredFieldValidator rfvResultado;
+
+        /// <summary>
+        /// Control pnlVolverA.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlVolverA;
+
+        /// <summary>
+        /// Control ddlVolverA.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.DropDownList ddlVolverA;
 
         /// <summary>
         /// Control txtObs.

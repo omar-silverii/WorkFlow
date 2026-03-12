@@ -63,14 +63,9 @@
                     <asp:Panel ID="pnlAdjuntosMsg" runat="server" Visible="false" />
 
                     <div class="row g-2 align-items-end">
-                        <div class="col-md-6">
+                        <div class="col-md-9">
                             <label class="form-label">Archivo</label>
                             <asp:FileUpload ID="fuAdjunto" runat="server" CssClass="form-control" />
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label">Tipo (opcional)</label>
-                            <asp:TextBox ID="txtAdjTipo" runat="server" CssClass="form-control" placeholder="DNI / Respaldo / ..." />
                         </div>
 
                         <div class="col-md-3">
@@ -88,7 +83,7 @@
                         (Sin adjuntos cargados para esta tarea)
                     </asp:Panel>
 
-                    <asp:Repeater ID="rptAdjuntos" runat="server">
+                    <asp:Repeater ID="rptAdjuntos" runat="server" OnItemCommand="rptAdjuntos_ItemCommand">
                         <HeaderTemplate>
                             <div class="table-responsive">
                             <table class="table table-sm align-middle mb-0">
@@ -110,6 +105,16 @@
                                 <td class="text-end">
                                     <a class="btn btn-sm btn-outline-secondary"
                                        href="<%# Eval("Url") %>" target="_blank">Ver</a>
+
+                                      <asp:LinkButton ID="lnkEliminarAdjunto" runat="server"
+                                        CssClass="btn btn-sm btn-outline-danger ms-1"
+                                        CausesValidation="false"
+                                        CommandName="delAdjunto"
+                                        CommandArgument='<%# Eval("StoredFileName") + "|" + Eval("TareaIdDoc") %>'
+                                        Visible='<%# Convert.ToBoolean(Eval("PuedeEliminar")) %>'
+                                        OnClientClick="return confirm('¿Eliminar este adjunto?');">
+                                        Eliminar
+                                    </asp:LinkButton>
                                 </td>
                             </tr>
                         </ItemTemplate>
@@ -179,6 +184,7 @@
                     <div class="col-md-4">
                         <label>Resultado</label>
                         <asp:DropDownList ID="ddlResultado" runat="server"
+                                          ClientIDMode="Static"
                                           CssClass="form-control">
                             <asp:ListItem Text="-- elegir --" Value=""></asp:ListItem>
                             <asp:ListItem Text="apto" Value="apto"></asp:ListItem>
@@ -192,6 +198,12 @@
                             CssClass="text-danger"
                             Display="Dynamic" />
                     </div>
+
+                    <asp:Panel ID="pnlVolverA" runat="server" ClientIDMode="Static" CssClass="col-md-4" Style="display:none;">
+                        <label>Volver a</label>
+                        <asp:DropDownList ID="ddlVolverA" runat="server" ClientIDMode="Static" CssClass="form-control" />
+                        <div class="form-text">Por defecto vuelve a la etapa humana anterior, pero podés elegir otra anterior o Inicio.</div>
+                    </asp:Panel>
                 </div>
 
                 <div class="form-group mt-2">
@@ -226,6 +238,28 @@
        
     </main>
     <script src="Scripts/bootstrap.bundle.min.js"></script>
+
+    <script>
+        (function () {
+            var ddl = document.getElementById('ddlResultado');
+            var pnl = document.getElementById('pnlVolverA');
+            var ddlVolverA = document.getElementById('ddlVolverA');
+
+            if (!ddl || !pnl) return;
+
+            function syncVolverA() {
+                var visible = (ddl.value === 'rechazado');
+                pnl.style.display = visible ? '' : 'none';
+
+                if (!visible && ddlVolverA) {
+                    ddlVolverA.selectedIndex = 0;
+                }
+            }
+
+            ddl.addEventListener('change', syncVolverA);
+            syncVolverA();
+        })();
+    </script>
 </form>
 </body>
 </html>

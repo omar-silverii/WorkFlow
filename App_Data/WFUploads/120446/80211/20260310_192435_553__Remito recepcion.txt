@@ -1,0 +1,13 @@
+[NOMBRE DE TU EMPRESA]
+REMITO (No válido como factura)
+Nº: 0001-0000XXXX | Fecha: //2025
+DESTINATARIO: [Nombre del Cliente]
+Domicilio de Entrega: ___________________________
+Cantidad	Descripción de la Mercadería	Estado
+[ OK ]
+[ OK ]
+Observaciones: _________________________________________
+Recibido conforme:
+Firma: ___________________
+Aclaración: ________________
+DNI: ______________________

@@ -2,12 +2,16 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Web;
 using System.Web.UI.WebControls;
+
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -44,6 +48,9 @@ namespace Intranet.WorkflowStudio.WebForms
             public string FileName { get; set; }
             public string Fecha { get; set; }
             public string Url { get; set; }
+            public string StoredFileName { get; set; }
+            public string TareaIdDoc { get; set; }
+            public bool PuedeEliminar { get; set; }
         }
 
         private class ObservacionInstanciaRow
@@ -56,6 +63,144 @@ namespace Intranet.WorkflowStudio.WebForms
             public string Resultado;
         }
 
+        private sealed class VolverAItem
+        {
+            public string NodeId { get; set; }
+            public string Texto { get; set; }
+            public int Distancia { get; set; }
+        }
+
+        private void CargarOpcionesVolverA(long tareaId)
+        {
+            ddlVolverA.Items.Clear();
+
+            var items = ObtenerOpcionesVolverA(tareaId);
+            foreach (var it in items)
+                ddlVolverA.Items.Add(new ListItem(it.Texto, it.NodeId));
+
+            if (ddlVolverA.Items.Count == 0)
+                ddlVolverA.Items.Add(new ListItem("Inicio", "__inicio__"));
+
+            if (ddlVolverA.Items.FindByValue("__inicio__") == null)
+                ddlVolverA.Items.Add(new ListItem("Inicio", "__inicio__"));
+        }
+
+        private List<VolverAItem> ObtenerOpcionesVolverA(long tareaId)
+        {
+            var result = new List<VolverAItem>();
+
+            string nodoActual = null;
+            string jsonDef = null;
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP 1
+    t.NodoId,
+    d.JsonDef
+FROM dbo.WF_Tarea t
+INNER JOIN dbo.WF_Instancia i ON i.Id = t.WF_InstanciaId
+INNER JOIN dbo.WF_Definicion d ON d.Id = i.WF_DefinicionId
+WHERE t.Id = @TareaId;", cn))
+            {
+                cmd.Parameters.AddWithValue("@TareaId", tareaId);
+                cn.Open();
+
+                using (var dr = cmd.ExecuteReader())
+                {
+                    if (dr.Read())
+                    {
+                        nodoActual = dr.IsDBNull(0) ? null : dr.GetString(0);
+                        jsonDef = dr.IsDBNull(1) ? null : dr.GetString(1);
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(nodoActual) || string.IsNullOrWhiteSpace(jsonDef))
+                return result;
+
+            var root = JObject.Parse(jsonDef);
+            var nodes = root["Nodes"] as JObject;
+            var edges = root["Edges"] as JArray;
+
+            if (nodes == null || edges == null)
+                return result;
+
+            var incoming = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var e in edges.OfType<JObject>())
+            {
+                var from = Convert.ToString(e["From"] ?? "");
+                var to = Convert.ToString(e["To"] ?? "");
+
+                if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+                    continue;
+
+                if (!incoming.ContainsKey(to))
+                    incoming[to] = new List<string>();
+
+                incoming[to].Add(from);
+            }
+
+            var visitados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var agregados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var cola = new Queue<Tuple<string, int>>();
+
+            cola.Enqueue(Tuple.Create(nodoActual, 0));
+            visitados.Add(nodoActual);
+
+            while (cola.Count > 0)
+            {
+                var item = cola.Dequeue();
+                var current = item.Item1;
+                var dist = item.Item2;
+
+                if (!incoming.ContainsKey(current))
+                    continue;
+
+                foreach (var prev in incoming[current])
+                {
+                    if (!visitados.Add(prev))
+                        continue;
+
+                    cola.Enqueue(Tuple.Create(prev, dist + 1));
+
+                    var n = nodes[prev] as JObject;
+                    if (n == null) continue;
+
+                    var tipo = Convert.ToString(n["Type"] ?? "");
+                    if (!string.Equals(tipo, "human.task", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!agregados.Add(prev))
+                        continue;
+
+                    var label = Convert.ToString(n["Label"] ?? "");
+                    var titulo = Convert.ToString(n["Parameters"]?["titulo"] ?? "");
+                    var rol = Convert.ToString(n["Parameters"]?["rol"] ?? "");
+
+                    var baseTexto = !string.IsNullOrWhiteSpace(label) ? label
+                                  : !string.IsNullOrWhiteSpace(titulo) ? titulo
+                                  : !string.IsNullOrWhiteSpace(rol) ? rol
+                                  : prev;
+
+                    var texto = baseTexto + " (" + prev + ")";
+
+                    result.Add(new VolverAItem
+                    {
+                        NodeId = prev,
+                        Texto = texto,
+                        Distancia = dist + 1
+                    });
+                }
+            }
+
+            return result
+                .OrderBy(x => x.Distancia)
+                .ThenBy(x => x.Texto)
+                .ToList();
+        }
+
+        
         protected void Page_Load(object sender, EventArgs e)
         {
             try { Topbar1.ActiveSection = "Documentos"; } catch { }
@@ -153,7 +298,7 @@ WHERE   t.Id = @Id;", cn))
                         lblInfo.Text = "La tarea ya está cerrada.";
                         btnAdjuntar.Enabled = false;   // ✔️
                         fuAdjunto.Enabled = false;     // ✔️
-                        txtAdjTipo.Enabled = false;    // ✔️
+                        
                     }
 
                     var res = dr["Resultado"] as string;
@@ -184,6 +329,7 @@ WHERE   t.Id = @Id;", cn))
 
                     CargarPedidosPendientes(id, instanciaId);
                     BindAdjuntos();
+                    CargarOpcionesVolverA(id);
                 }
             }
         }
@@ -217,7 +363,9 @@ WHERE   t.Id = @Id;", cn))
 
                 fuAdjunto.SaveAs(fullPath);
 
-                var tipo = (txtAdjTipo.Text ?? "").Trim();
+                var ext = (Path.GetExtension(originalName) ?? "").Trim().TrimStart('.').ToUpperInvariant();
+                var tipo = string.IsNullOrWhiteSpace(ext) ? "Archivo" : ext;
+
                 var user = (Context.User?.Identity?.Name ?? "").Trim();
 
                 var url = ResolveUrl("~/API/WF_Upload_Get.ashx") +
@@ -228,12 +376,134 @@ WHERE   t.Id = @Id;", cn))
                 AppendAttachmentToDatosContexto(instanciaId, tareaId, originalName, safeName, tipo, url, user);
 
                 ShowAdjMsg("Adjunto cargado OK.", isError: false);
-                txtAdjTipo.Text = "";
                 BindAdjuntos();
             }
             catch (Exception ex)
             {
                 ShowAdjMsg("Error al adjuntar: " + ex.Message, isError: true);
+            }
+        }
+
+        protected void rptAdjuntos_ItemCommand(object source, RepeaterCommandEventArgs e)
+        {
+            if (!string.Equals(e.CommandName, "delAdjunto", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            try
+            {
+                var tareaIdActual = TareaIdActual;
+                var instanciaId = InstanciaIdActual;
+
+                if (tareaIdActual <= 0 || instanciaId <= 0)
+                {
+                    ShowAdjMsg("No se pudo resolver Instancia/Tarea.", isError: true);
+                    return;
+                }
+
+                if (!string.Equals(lblEstado.Text ?? "", "Pendiente", StringComparison.OrdinalIgnoreCase))
+                {
+                    ShowAdjMsg("La tarea ya no está abierta para eliminar adjuntos.", isError: true);
+                    return;
+                }
+
+                var arg = Convert.ToString(e.CommandArgument ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(arg) || arg.IndexOf('|') < 0)
+                {
+                    ShowAdjMsg("No se pudo resolver el adjunto a eliminar.", isError: true);
+                    return;
+                }
+
+                var parts = arg.Split(new[] { '|' }, 2);
+                var safeName = (parts[0] ?? "").Trim();
+                var tareaIdDoc = (parts[1] ?? "").Trim();
+
+                if (string.IsNullOrWhiteSpace(safeName) || string.IsNullOrWhiteSpace(tareaIdDoc))
+                {
+                    ShowAdjMsg("No se pudo resolver el adjunto a eliminar.", isError: true);
+                    return;
+                }
+
+                if (!string.Equals(tareaIdDoc, tareaIdActual.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    ShowAdjMsg("Solo se pueden eliminar adjuntos cargados en la tarea actual.", isError: true);
+                    return;
+                }
+
+                var baseDir = Server.MapPath("~/App_Data/WFUploads");
+                var fullPath = Path.Combine(baseDir, instanciaId.ToString(), tareaIdActual.ToString(), safeName);
+
+                if (File.Exists(fullPath))
+                    File.Delete(fullPath);
+
+                RemoveAttachmentFromDatosContexto(instanciaId, tareaIdActual, safeName);
+
+                ShowAdjMsg("Adjunto eliminado OK.", isError: false);
+                BindAdjuntos();
+            }
+            catch (Exception ex)
+            {
+                ShowAdjMsg("Error al eliminar adjunto: " + ex.Message, isError: true);
+            }
+        }
+
+        private void RemoveAttachmentFromDatosContexto(long instanciaId, long tareaId, string safeName)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmdSel = new SqlCommand("SELECT DatosContexto FROM dbo.WF_Instancia WHERE Id=@Id", cn))
+            {
+                cmdSel.Parameters.AddWithValue("@Id", instanciaId);
+
+                cn.Open();
+
+                var raw = Convert.ToString(cmdSel.ExecuteScalar() ?? "");
+                if (string.IsNullOrWhiteSpace(raw))
+                    return;
+
+                var root = JObject.Parse(raw);
+
+                var estado = root["estado"] as JObject;
+                if (estado == null) return;
+
+                var biz = estado["biz"] as JObject;
+                if (biz == null) return;
+
+                var caseObj = biz["case"] as JObject;
+                if (caseObj == null) return;
+
+                var arr = caseObj["attachments"] as JArray;
+                if (arr == null || arr.Count == 0) return;
+
+                for (int i = arr.Count - 1; i >= 0; i--)
+                {
+                    var item = arr[i] as JObject;
+                    if (item == null) continue;
+
+                    var itemTareaId = Convert.ToString(item["tareaId"] ?? "");
+                    var itemStored = Convert.ToString(item["storedFileName"] ?? "");
+                    var itemUrl = Convert.ToString(item["viewerUrl"] ?? "");
+
+                    if (itemTareaId == tareaId.ToString() &&
+                        (
+                            string.Equals(itemStored, safeName, StringComparison.OrdinalIgnoreCase) ||
+                            itemUrl.IndexOf(safeName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            itemUrl.IndexOf(HttpUtility.UrlEncode(safeName), StringComparison.OrdinalIgnoreCase) >= 0
+                        ))
+                    {
+                        arr.RemoveAt(i);
+                    }
+                }
+
+                caseObj["attachments"] = arr;
+                biz["case"] = caseObj;
+                estado["biz"] = biz;
+                root["estado"] = estado;
+
+                using (var cmdUpd = new SqlCommand("UPDATE dbo.WF_Instancia SET DatosContexto=@Datos WHERE Id=@Id", cn))
+                {
+                    cmdUpd.Parameters.AddWithValue("@Id", instanciaId);
+                    cmdUpd.Parameters.AddWithValue("@Datos", root.ToString(Newtonsoft.Json.Formatting.None));
+                    cmdUpd.ExecuteNonQuery();
+                }
             }
         }
 
@@ -643,6 +913,15 @@ ORDER BY
             string estadoNegocioCierre = ResolveEstadoNegocioCierre(resultado, returnToNodeId);
 
             string observaciones = txtObs.Text ?? string.Empty;
+            string volverA = string.Equals(resultado, "rechazado", StringComparison.OrdinalIgnoreCase)
+                ? (ddlVolverA.SelectedValue ?? "").Trim()
+                : null;
+            if (string.Equals(resultado, "rechazado", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(volverA))
+            {
+                MostrarError("Seleccione a qué etapa desea volver.");
+                return;
+            }
 
             string usuarioActual = Context.User?.Identity?.Name;
             if (string.IsNullOrWhiteSpace(usuarioActual))
@@ -651,6 +930,15 @@ ORDER BY
                 usuarioActual = "workflow.ui";
 
             string datosJson;
+
+            Func<object> buildDatos = () => new
+            {
+                observaciones,
+                cerradoPor = usuarioActual,
+                cerradoEn = DateTime.Now,
+                estadoNegocio = estadoNegocioCierre,
+                volverA = string.IsNullOrWhiteSpace(volverA) ? null : volverA
+            };
 
             string obsTrim = observaciones.TrimStart();
             if (obsTrim.StartsWith("{"))
@@ -663,40 +951,23 @@ ORDER BY
                         if (o.cerradoPor == null) o.cerradoPor = usuarioActual;
                         if (o.cerradoEn == null) o.cerradoEn = DateTime.Now;
                         if (o.estadoNegocio == null && !string.IsNullOrWhiteSpace(estadoNegocioCierre)) o.estadoNegocio = estadoNegocioCierre;
+                        if (o.volverA == null && !string.IsNullOrWhiteSpace(volverA)) o.volverA = volverA;
 
                         datosJson = JsonConvert.SerializeObject(o, Formatting.None);
                     }
                     else
                     {
-                        datosJson = JsonConvert.SerializeObject(new
-                        {
-                            observaciones,
-                            cerradoPor = usuarioActual,
-                            cerradoEn = DateTime.Now,
-                            estadoNegocio = estadoNegocioCierre
-                        }, Formatting.None);
+                        datosJson = JsonConvert.SerializeObject(buildDatos(), Formatting.None);
                     }
                 }
                 catch
                 {
-                    datosJson = JsonConvert.SerializeObject(new
-                    {
-                        observaciones,
-                        cerradoPor = usuarioActual,
-                        cerradoEn = DateTime.Now,
-                        estadoNegocio = estadoNegocioCierre
-                    }, Formatting.None);
+                    datosJson = JsonConvert.SerializeObject(buildDatos(), Formatting.None);
                 }
             }
             else
             {
-                datosJson = JsonConvert.SerializeObject(new
-                {
-                    observaciones,
-                    cerradoPor = usuarioActual,
-                    cerradoEn = DateTime.Now,
-                    estadoNegocio = estadoNegocioCierre
-                }, Formatting.None);
+                datosJson = JsonConvert.SerializeObject(buildDatos(), Formatting.None);
             }
 
             try
@@ -806,7 +1077,12 @@ ORDER BY
                                 Tipo = tipo,
                                 FileName = fileName,
                                 Fecha = subido,
-                                Url = url
+                                Url = url,
+                                StoredFileName = storedFileName,
+                                TareaIdDoc = tareaIdDoc,
+                                PuedeEliminar =
+                                string.Equals(tareaIdDoc, tareaId.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(lblEstado.Text ?? "", "Pendiente", StringComparison.OrdinalIgnoreCase)
                             });
                         }
                     }

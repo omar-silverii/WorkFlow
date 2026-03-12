@@ -1,7 +1,7 @@
 select * from WF_Instancia where id = 	110422
 select * from WF_Instancia where id = 	110431
 select * from WF_InstanciaLog where WF_Instanciaid = 	110431
-select * from WF_Tarea  where WF_Instanciaid = 	110431 order by id asc
+select * from WF_Tarea  where WF_Instanciaid = 	110441 order by id asc
 
 select * from WF_UsuarioRol
 select * from WF_UserPermiso where UserKey = 'OMARD\USUARIO1' And Activo = 1
@@ -11,13 +11,77 @@ delete WF_Instancia where id = 110422
 delete WF_Instancia where id = 110440
 delete WF_InstanciaLog where WF_Instanciaid = 110440
 delete WF_Tarea  where WF_Instanciaid = 	110440
+
+WF_Gerente_Tareas_Cerradas_Mis 'OMARD\OMARD'
+WF_Gerente_Tareas_Pendientes_MiAlcance 'OMARD\OMARD'
+
 */
 
-tarea creada para instancia 110430 (nodo n2), tareaId=70169
-tarea creada para instancia 110430 (nodo n3), tareaId=70170
+SELECT
+    r.Id,
+    d.Codigo,
+    r.Campo,
+    r.TipoDato,
+    r.Modo,
+    r.Ejemplo,
+    r.HintContext,
+    r.Regex,
+    r.Grupo,
+    r.Orden,
+    r.Activo
+FROM dbo.WF_DocTipoReglaExtract r
+INNER JOIN dbo.WF_DocTipo d ON d.DocTipoId = r.DocTipoId
+WHERE d.Codigo = 'FACTURA_VENTA'
+ORDER BY r.Orden, r.Id;
 
-tarea creada para instancia 110430 (nodo n3), tareaId=70174
-tarea creada para instancia 110430 (nodo n4), tareaId=70175
+
+SELECT
+    Id,
+    Nombre,
+    JsonDef
+FROM WF_Definicion
+WHERE Id = 7126;
+
+SELECT
+    Id,
+    WF_DefinicionId,
+    Estado,
+    FechaInicio,
+    FechaFin,
+    DatosContexto
+FROM WF_Instancia
+WHERE Id = 110431;
+
+
+
+SELECT DatosContexto FROM WF_Instancia WHERE Id=110431
+
+;WITH X AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                ISNULL(DocumentoId,''), EsRoot, ISNULL(TareaId,'')
+            ORDER BY FechaAlta DESC, Id DESC
+        ) AS rn
+    FROM dbo.WF_InstanciaDocumento
+    WHERE WF_InstanciaId = 110431
+)
+SELECT
+    FechaAlta,
+    Accion,
+    CASE WHEN EsRoot = 1 THEN 'Root' ELSE 'Attachment' END AS Scope,
+    NodoTipo,
+    TareaId,
+    Tipo,
+    DocumentoId,
+    ViewerUrl,
+    IndicesJson
+FROM X
+WHERE rn = 1
+ORDER BY FechaAlta DESC;
+
+
 
 
 SELECT TOP 1
