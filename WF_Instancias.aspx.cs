@@ -9,6 +9,7 @@ using System.Text;
 using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
+using System.IO;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -435,6 +436,9 @@ ORDER BY Id DESC;";
             public string FileName { get; set; }
             public string Fecha { get; set; }
             public string Usuario { get; set; }
+
+            public string StoredFileName { get; set; }
+            public bool PuedeEliminar { get; set; }
         }
 
         private void BindDocsFromDatosContexto(string datosContextoJson)
@@ -478,7 +482,19 @@ ORDER BY Id DESC;";
                     {
                         var jo = it as JObject;
                         if (jo == null) continue;
-                        rows.Add(ToRow(jo));
+
+                        bool eliminado;
+                        if (bool.TryParse(Convert.ToString(jo["eliminado"] ?? "false"), out eliminado) && eliminado)
+                            continue;
+
+                        var row = ToRow(jo);
+                        row.StoredFileName = Convert.ToString(jo["storedFileName"] ?? "");
+                        row.PuedeEliminar =
+                            UsuarioPuedeEliminarAdjuntoInstancia() &&
+                            !string.IsNullOrWhiteSpace(row.StoredFileName) &&
+                            !string.IsNullOrWhiteSpace(row.TareaId);
+
+                        rows.Add(row);
                     }
                 }
 
@@ -499,6 +515,13 @@ ORDER BY Id DESC;";
 
         private void ShowDocs(List<DocUiRow> rows)
         {
+            if (litDocsTitle != null)
+            {
+                litDocsTitle.Text = _instanciaActualId > 0
+                    ? ("Documentos de la instancia #" + _instanciaActualId.ToString())
+                    : "Documentos (Caso)";
+            }
+
             if (rows != null && rows.Count > 0)
             {
                 pnlDocsCard.Visible = true;
@@ -537,8 +560,219 @@ ORDER BY Id DESC;";
 
                 FileName = Convert.ToString(doc["fileName"] ?? doc["nombre"] ?? ""),
                 Fecha = Convert.ToString(doc["fecha"] ?? ""),
-                Usuario = Convert.ToString(doc["usuario"] ?? "")
+                Usuario = Convert.ToString(doc["usuario"] ?? ""),
+
+                StoredFileName = Convert.ToString(doc["storedFileName"] ?? "")
             };
+        }
+
+        private bool UsuarioPuedeEliminarAdjuntoInstancia()
+        {
+            var userKey = (Context.User?.Identity?.Name ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(userKey))
+                return false;
+
+            return RbacService.HasPermiso(userKey, "ADJUNTOS_ELIMINAR_INSTANCIA");
+        }
+
+        protected void rptDocs_ItemCommand(object source, RepeaterCommandEventArgs e)
+        {
+            if (!string.Equals(e.CommandName, "EliminarAdjuntoInst", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!UsuarioPuedeEliminarAdjuntoInstancia())
+            {
+                ClientScript.RegisterStartupScript(GetType(), "wf_no_perm_adj", "alert('No tenés permisos para eliminar adjuntos de instancia.');", true);
+                return;
+            }
+
+            if (_instanciaActualId <= 0)
+            {
+                ClientScript.RegisterStartupScript(GetType(), "wf_no_inst_adj", "alert('No se pudo resolver la instancia actual.');", true);
+                return;
+            }
+
+            var arg = Convert.ToString(e.CommandArgument ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(arg) || arg.IndexOf('|') < 0)
+            {
+                ClientScript.RegisterStartupScript(GetType(), "wf_bad_adj_arg", "alert('No se pudo resolver el adjunto.');", true);
+                return;
+            }
+
+            var parts = arg.Split(new[] { '|' }, 3);
+            var storedFileName = (parts.Length > 0 ? parts[0] : "").Trim();
+            var tareaIdDoc = (parts.Length > 1 ? parts[1] : "").Trim();
+            var fileName = (parts.Length > 2 ? parts[2] : "").Trim();
+
+            var motivo = (hfMotivoEliminarAdjunto.Value ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(motivo))
+            {
+                ClientScript.RegisterStartupScript(GetType(), "wf_no_motivo_adj", "alert('Debe indicar un motivo.');", true);
+                return;
+            }
+
+            var user = (Context.User?.Identity?.Name ?? "").Trim();
+
+            try
+            {
+                var ok = MarcarAdjuntoEliminadoEnInstancia(_instanciaActualId, tareaIdDoc, storedFileName, fileName, user, motivo);
+                if (!ok)
+                {
+                    ClientScript.RegisterStartupScript(GetType(), "wf_no_match_adj", "alert('No se encontró el adjunto a eliminar.');", true);
+                    return;
+                }
+
+                MostrarDocumentos((int)_instanciaActualId);
+                ClientScript.RegisterStartupScript(GetType(), "wf_ok_adj", "alert('Adjunto eliminado correctamente.');", true);
+            }
+            catch (Exception ex)
+            {
+                ClientScript.RegisterStartupScript(GetType(), "wf_err_adj", "alert('Error al eliminar adjunto: " + HttpUtility.JavaScriptStringEncode(ex.Message) + "');", true);
+            }
+        }
+
+        private bool MarcarAdjuntoEliminadoEnInstancia(long instanciaId, string tareaIdDoc, string storedFileName, string fileName, string user, string motivo)
+        {
+            string json = "";
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand("SELECT DatosContexto FROM dbo.WF_Instancia WHERE Id=@Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instanciaId;
+                cn.Open();
+                json = Convert.ToString(cmd.ExecuteScalar() ?? "");
+            }
+
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            JObject root = null;
+            try { root = JObject.Parse(json); } catch { root = null; }
+            if (root == null) return false;
+
+            JObject bcase =
+                (root["estado"]?["biz"]?["case"] as JObject) ??
+                (root["biz"]?["case"] as JObject);
+
+            if (bcase == null) return false;
+
+            var atts = bcase["attachments"] as JArray;
+            if (atts == null || atts.Count == 0) return false;
+
+            JObject target = null;
+
+            for (int i = atts.Count - 1; i >= 0; i--)
+            {
+                var jo = atts[i] as JObject;
+                if (jo == null) continue;
+
+                var itemTareaId = Convert.ToString(jo["tareaId"] ?? "").Trim();
+                var itemStored = Convert.ToString(jo["storedFileName"] ?? "").Trim();
+                var itemViewer = Convert.ToString(jo["viewerUrl"] ?? "").Trim();
+                var itemFileName = Convert.ToString(jo["fileName"] ?? jo["nombre"] ?? "").Trim();
+
+                if (!string.Equals(itemTareaId, tareaIdDoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var matchStored =
+                    !string.IsNullOrWhiteSpace(storedFileName) &&
+                    string.Equals(itemStored, storedFileName, StringComparison.OrdinalIgnoreCase);
+
+                var matchViewer =
+                    !string.IsNullOrWhiteSpace(storedFileName) &&
+                    (
+                        itemViewer.IndexOf(storedFileName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        itemViewer.IndexOf(HttpUtility.UrlEncode(storedFileName), StringComparison.OrdinalIgnoreCase) >= 0
+                    );
+
+                var matchFileName =
+                    !string.IsNullOrWhiteSpace(fileName) &&
+                    string.Equals(itemFileName, fileName, StringComparison.OrdinalIgnoreCase);
+
+                if (!(matchStored || matchViewer || matchFileName))
+                    continue;
+
+                target = (JObject)jo.DeepClone();
+                atts.RemoveAt(i);
+                break;
+            }
+
+            if (target == null)
+                return false;
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+UPDATE dbo.WF_Instancia
+SET DatosContexto = @J
+WHERE Id = @Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@J", SqlDbType.NVarChar).Value = root.ToString(Newtonsoft.Json.Formatting.None);
+                cn.Open();
+                cmd.ExecuteNonQuery();
+            }
+
+            var path = Path.Combine(
+                HttpContext.Current.Server.MapPath("~/App_Data/WFUploads"),
+                instanciaId.ToString(),
+                tareaIdDoc,
+                storedFileName);
+
+            if (File.Exists(path))
+            {
+                try { File.Delete(path); } catch { }
+            }
+
+            GuardarLogAdjuntoEliminado(instanciaId, tareaIdDoc, target, user, motivo);
+
+            return true;
+        }
+
+        private void GuardarLogAdjuntoEliminado(long instanciaId, string tareaIdDoc, JObject adjunto, string user, string motivo)
+        {
+            var fileName = Convert.ToString(adjunto["fileName"] ?? "");
+            var storedFileName = Convert.ToString(adjunto["storedFileName"] ?? "");
+            var tipo = Convert.ToString(adjunto["tipo"] ?? "");
+            var usuarioSubio = Convert.ToString(adjunto["usuario"] ?? "");
+            var fechaSubida = Convert.ToString(adjunto["fecha"] ?? "");
+            var viewerUrl = Convert.ToString(adjunto["viewerUrl"] ?? "");
+
+            var datos = new JObject
+            {
+                ["accion"] = "ADJUNTO_ELIMINADO",
+                ["instanciaId"] = instanciaId,
+                ["tareaId"] = tareaIdDoc ?? "",
+                ["fileName"] = fileName,
+                ["storedFileName"] = storedFileName,
+                ["tipo"] = tipo,
+                ["usuarioSubio"] = usuarioSubio,
+                ["fechaSubida"] = fechaSubida,
+                ["viewerUrl"] = viewerUrl,
+                ["eliminadoPor"] = user ?? "",
+                ["fechaEliminacion"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["motivo"] = motivo ?? ""
+            };
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+INSERT INTO dbo.WF_InstanciaLog
+    (WF_InstanciaId, FechaLog, Nivel, Mensaje, NodoId, NodoTipo, Datos)
+VALUES
+    (@InstId, GETDATE(), 'Warn', @Msg, NULL, 'adjunto.delete.manual', @Datos);", cn))
+            {
+                cmd.Parameters.Add("@InstId", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@Msg", SqlDbType.NVarChar, 4000).Value =
+                    "Adjunto eliminado manualmente. Archivo: " + fileName +
+                    ". Tarea: " + (tareaIdDoc ?? "") +
+                    ". Subido por: " + usuarioSubio +
+                    ". Eliminado por: " + (user ?? "") +
+                    ". Motivo: " + (motivo ?? "");
+
+                cmd.Parameters.Add("@Datos", SqlDbType.NVarChar).Value =
+                    datos.ToString(Newtonsoft.Json.Formatting.None);
+
+                cn.Open();
+                cmd.ExecuteNonQuery();
+            }
         }
 
         private void BindDocAudit(long instanciaId)

@@ -180,11 +180,14 @@
                     <asp:Panel ID="pnlDocsCard" runat="server" Visible="false">
                         <div class="card ws-card mb-3">
                             <div class="card-body">
-                                <div class="ws-title mb-2">Documentos (Caso)</div>
+                                <div class="ws-title mb-2">
+                                    <asp:Literal ID="litDocsTitle" runat="server" />
+                                </div>
 
                                 <asp:Panel ID="pnlDocs" runat="server" Visible="false">
+                                    <asp:HiddenField ID="hfMotivoEliminarAdjunto" runat="server" />
                                     <div class="list-group">
-                                        <asp:Repeater ID="rptDocs" runat="server">
+                                        <asp:Repeater ID="rptDocs" runat="server" OnItemCommand="rptDocs_ItemCommand">
                                             <ItemTemplate>
                                                 <div class="list-group-item d-flex justify-content-between align-items-center">
                                                     <div>
@@ -213,6 +216,16 @@
                                                             Visible='<%# !string.IsNullOrWhiteSpace(Convert.ToString(Eval("ViewerUrl"))) %>'>
                                                             Ver
                                                         </asp:HyperLink>
+
+                                                        <asp:LinkButton ID="lnkEliminarAdjuntoInst" runat="server"
+                                                            CssClass="btn btn-sm btn-outline-danger"
+                                                            CommandName="EliminarAdjuntoInst"
+                                                            CommandArgument='<%# Eval("StoredFileName") + "|" + Eval("TareaId") + "|" + Eval("FileName") %>'
+                                                            Visible='<%# Convert.ToBoolean(Eval("PuedeEliminar")) %>'
+                                                            CausesValidation="false"
+                                                            OnClientClick='<%# "return wfConfirmarEliminarAdjunto(\"" + hfMotivoEliminarAdjunto.ClientID + "\",\"" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("FileName"))) + "\",\"" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("TareaId"))) + "\");" %>'>
+                                                            Eliminar
+                                                        </asp:LinkButton>
                                                     </div>
                                                 </div>
                                             </ItemTemplate>
@@ -299,6 +312,36 @@
         </div>
     </main>
      <script src="Scripts/bootstrap.bundle.min.js"></script>
+
+    <script>
+        function wfConfirmarEliminarAdjunto(hiddenId, fileName, tareaId) {
+            var nombre = (fileName || '').trim();
+            if (!nombre) nombre = '(sin nombre)';
+
+            var msg = 'Vas a eliminar el adjunto:\n\n' + nombre;
+            if ((tareaId || '').trim() !== '') {
+                msg += '\nTarea origen: ' + tareaId;
+            }
+            msg += '\n\nEl archivo se quitará de la instancia actual y quedará auditado en Logs.';
+
+            if (!confirm(msg)) return false;
+
+            var m = prompt('Motivo de eliminación para "' + nombre + '":', '');
+            if (m === null) return false;
+
+            m = (m || '').trim();
+            if (!m) {
+                alert('Debe indicar un motivo.');
+                return false;
+            }
+
+            var hf = document.getElementById(hiddenId);
+            if (hf) hf.value = m;
+
+            return true;
+        }
+    </script>
+
 </form>
 </body>
 </html>

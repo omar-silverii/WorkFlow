@@ -28,6 +28,9 @@ namespace Intranet.WorkflowStudio.WebForms
         private void BindAll()
         {
             lblMsg.Visible = false;
+
+            EnsureCustomPermisos();
+
             BindUsers();
             BindRoles();
             BindPermisos();
@@ -36,6 +39,21 @@ namespace Intranet.WorkflowStudio.WebForms
 
             // precargar todo sincronizado
             SyncAsignacionesDesdeUsuario(ddlUserRoles.SelectedValue);
+        }
+        private void EnsureCustomPermisos()
+        {
+            X(@"
+            IF NOT EXISTS (SELECT 1 FROM dbo.WF_Permiso WHERE PermisoKey='ADJUNTOS_ELIMINAR_INSTANCIA')
+            BEGIN
+                INSERT INTO dbo.WF_Permiso(PermisoKey, Nombre, Descripcion, Activo)
+                VALUES
+                (
+                    'ADJUNTOS_ELIMINAR_INSTANCIA',
+                    'Eliminar adjuntos de instancia',
+                    'Permite eliminar adjuntos mal cargados desde WF_Instancias, con motivo y trazabilidad en WF_InstanciaLog.',
+                    1
+                );
+            END");
         }
 
         private void SyncAsignacionesDesdeUsuario(string userKey, string preferredRolKey = null)

@@ -821,6 +821,32 @@ WHERE Id = @Id;", cn))
                 return e1.To;
             }
 
+            string ResolverPrimerHumanTaskDesde(string startNodeId)
+            {
+                if (wf == null || string.IsNullOrWhiteSpace(startNodeId) || wf.Nodes == null)
+                    return null;
+
+                var visitados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var actual = startNodeId;
+
+                for (int i = 0; i < 100 && !string.IsNullOrWhiteSpace(actual); i++)
+                {
+                    if (!visitados.Add(actual))
+                        break;
+
+                    if (wf.Nodes.TryGetValue(actual, out var nodoActual) &&
+                        nodoActual != null &&
+                        string.Equals(nodoActual.Type, "human.task", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return actual;
+                    }
+
+                    actual = CalcularSiguienteNodo(wf, actual);
+                }
+
+                return null;
+            }
+
             bool ExisteNodo(WorkflowDef w, string nodeId)
             {
                 return w != null
@@ -986,17 +1012,25 @@ WHERE Id = @Id;", cn))
                 // salto determinístico al llamador real
                 var volverA = ExtraerVolverADesdeDatosJson(datosJson);
                 string returnTo = null;
+                string startOverride = null;
 
                 if (!string.IsNullOrWhiteSpace(volverA))
                 {
                     if (string.Equals(volverA, "__inicio__", StringComparison.OrdinalIgnoreCase))
                     {
-                        returnTo = wf.StartNodeId;
+                        startOverride = wf.StartNodeId;
+                        returnTo = ResolverPrimerHumanTaskDesde(wf.StartNodeId);
+
+                        if (string.IsNullOrWhiteSpace(returnTo))
+                            returnTo = wf.StartNodeId;
+
                         logs.Add("[Backtrack] destino elegido por usuario: Inicio.");
+                        logs.Add("[Backtrack] retorno lógico resuelto a: " + returnTo);
                     }
                     else if (ExisteNodo(wf, volverA))
                     {
                         returnTo = volverA;
+                        startOverride = volverA;
                         logs.Add("[Backtrack] destino elegido por usuario: " + volverA);
                     }
                 }
@@ -1041,11 +1075,14 @@ WHERE Id = @Id;", cn))
                     return;
                 }
 
-                if (!string.IsNullOrWhiteSpace(returnTo))
+                if (string.IsNullOrWhiteSpace(startOverride))
+                    startOverride = returnTo;
+
+                if (!string.IsNullOrWhiteSpace(startOverride))
                 {
-                    seed["wf.startNodeIdOverride"] = returnTo;
+                    seed["wf.startNodeIdOverride"] = startOverride;
                     seed["wf.resume.taskNodeId"] = info.NodoId;
-                    seed["wf.resume.fromNodeId"] = returnTo;
+                    seed["wf.resume.fromNodeId"] = startOverride;
                     seed["wf.resume.kind"] = "back";
                 }
             }

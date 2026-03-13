@@ -399,6 +399,7 @@
     <Content Include="Styles\workflow.ui.css" />
     <Content Include="Styles\ws-theme.css" />
     <Content Include="WF_Definiciones.aspx" />
+    <Content Include="WF_Definicion_Adjuntos.aspx" />
     <Content Include="WF_DocTipo.aspx" />
     <Content Include="WF_DocTipoReglas.aspx" />
     <Content Include="WF_Entidades.aspx" />
@@ -679,6 +680,13 @@
     </Compile>
     <Compile Include="WF_Definiciones.aspx.designer.cs">
       <DependentUpon>WF_Definiciones.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_Definicion_Adjuntos.aspx.cs">
+      <DependentUpon>WF_Definicion_Adjuntos.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Definicion_Adjuntos.aspx.designer.cs">
+      <DependentUpon>WF_Definicion_Adjuntos.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_DocTipo.aspx.cs">
       <DependentUpon>WF_DocTipo.aspx</DependentUpon>

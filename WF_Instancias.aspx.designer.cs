@@ -195,6 +195,15 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.Panel pnlDocsCard;
 
         /// <summary>
+        /// Control litDocsTitle.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Literal litDocsTitle;
+
+        /// <summary>
         /// Control pnlDocs.
         /// </summary>
         /// <remarks>
@@ -202,6 +211,15 @@ namespace Intranet.WorkflowStudio.WebForms
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
         protected global::System.Web.UI.WebControls.Panel pnlDocs;
+
+        /// <summary>
+        /// Control hfMotivoEliminarAdjunto.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.HiddenField hfMotivoEliminarAdjunto;
 
         /// <summary>
         /// Control rptDocs.

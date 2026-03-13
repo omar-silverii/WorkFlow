@@ -65,25 +65,27 @@
         <asp:BoundField DataField="FechaCreacion" HeaderText="Creado" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
         <asp:BoundField DataField="CreadoPor" HeaderText="Creado por" />
 
-        <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="320px">
-            <ItemTemplate>
-                <asp:HyperLink ID="lnkEditar" runat="server"
-                    CssClass="btn btn-sm btn-primary mr-1"
-                    NavigateUrl='<%# "WorkflowUI.aspx?defId=" + Eval("Id") %>'>Editar</asp:HyperLink>
+        <asp:TemplateField HeaderText="Acciones" ItemStyle-Width="420px">
+        <ItemTemplate>
+            <asp:HyperLink ID="lnkEditar" runat="server"
+                CssClass="btn btn-sm btn-primary mr-1"
+                NavigateUrl='<%# "WorkflowUI.aspx?defId=" + Eval("Id") %>'>Editar</asp:HyperLink>
 
-                <asp:LinkButton ID="lnkVerJson" runat="server"
-                    CommandName="VerJson"
-                    CommandArgument='<%# Eval("Id") %>'
-                    CssClass="btn btn-sm btn-info mr-1">JSON</asp:LinkButton>
+            <asp:HyperLink ID="lnkAdjuntos" runat="server"
+                CssClass="btn btn-sm btn-outline-dark mr-1"
+                NavigateUrl='<%# "WF_Definicion_Adjuntos.aspx?defId=" + Eval("Id") %>'>Adjuntos</asp:HyperLink>
 
-                <asp:LinkButton ID="lnkVerInst" runat="server"
-                    CommandName="VerInst"
-                    CommandArgument='<%# Eval("Id") %>'
-                    CssClass="btn btn-sm btn-secondary mr-1">Instancias</asp:LinkButton>
+            <asp:LinkButton ID="lnkVerJson" runat="server"
+                CommandName="VerJson"
+                CommandArgument='<%# Eval("Id") %>'
+                CssClass="btn btn-sm btn-info mr-1">JSON</asp:LinkButton>
 
-                
-            </ItemTemplate>
-        </asp:TemplateField>
+            <asp:LinkButton ID="lnkVerInst" runat="server"
+                CommandName="VerInst"
+                CommandArgument='<%# Eval("Id") %>'
+                CssClass="btn btn-sm btn-secondary mr-1">Instancias</asp:LinkButton>
+        </ItemTemplate>
+    </asp:TemplateField>
     </Columns>
 </asp:GridView>
 

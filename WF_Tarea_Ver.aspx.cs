@@ -377,6 +377,10 @@ ORDER BY FechaAlta DESC;";
                         var jo = it as Newtonsoft.Json.Linq.JObject;
                         if (jo == null) continue;
 
+                        bool eliminado;
+                        if (bool.TryParse(Convert.ToString(jo["eliminado"] ?? "false"), out eliminado) && eliminado)
+                            continue;
+
                         var tareaIdDoc = Convert.ToString(jo["tareaId"] ?? "");
                         var fileName = Convert.ToString(jo["fileName"] ?? "");
                         string scope;

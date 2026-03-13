@@ -57,7 +57,7 @@
                     </div>
 
                     <div class="text-muted small mb-3">
-                        Adjuntá archivos para responder a lo pedido en el rechazo (se asocian a esta instancia y tarea).
+                        <asp:Literal ID="litAdjuntosDestino" runat="server" />
                     </div>
 
                     <asp:Panel ID="pnlAdjuntosMsg" runat="server" Visible="false" />

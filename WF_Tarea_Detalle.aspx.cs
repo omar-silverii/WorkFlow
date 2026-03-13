@@ -53,6 +53,13 @@ namespace Intranet.WorkflowStudio.WebForms
             public bool PuedeEliminar { get; set; }
         }
 
+        private class AdjuntosConfig
+        {
+            public bool Habilitado { get; set; }
+            public string DestinoTipo { get; set; }
+            public string DestinoTexto { get; set; }
+        }
+
         private class ObservacionInstanciaRow
         {
             public long TareaId;
@@ -330,8 +337,71 @@ WHERE   t.Id = @Id;", cn))
                     CargarPedidosPendientes(id, instanciaId);
                     BindAdjuntos();
                     CargarOpcionesVolverA(id);
+                    AplicarConfiguracionAdjuntos(instanciaId);
                 }
             }
+        }
+
+        private AdjuntosConfig ObtenerConfiguracionAdjuntos(long instanciaId)
+        {
+            var cfg = new AdjuntosConfig
+            {
+                Habilitado = true,
+                DestinoTipo = "INSTANCIA",
+                DestinoTexto = ""
+            };
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+SELECT d.JsonDef
+FROM dbo.WF_Instancia i
+INNER JOIN dbo.WF_Definicion d ON d.Id = i.WF_DefinicionId
+WHERE i.Id = @Id;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = instanciaId;
+                cn.Open();
+
+                var jsonDef = Convert.ToString(cmd.ExecuteScalar() ?? "");
+                if (string.IsNullOrWhiteSpace(jsonDef))
+                    return cfg;
+
+                JObject root = null;
+                try { root = JObject.Parse(jsonDef); } catch { root = null; }
+                if (root == null) return cfg;
+
+                var attachments = root["Meta"]?["attachments"] as JObject;
+                if (attachments == null) return cfg;
+
+                bool habilitado;
+                if (bool.TryParse(Convert.ToString(attachments["enabled"] ?? "true"), out habilitado))
+                    cfg.Habilitado = habilitado;
+
+                cfg.DestinoTipo = Convert.ToString(attachments["destinoTipo"] ?? "INSTANCIA").Trim().ToUpperInvariant();
+                cfg.DestinoTexto = Convert.ToString(attachments["destinoTexto"] ?? "").Trim();
+            }
+
+            return cfg;
+        }
+
+        private void AplicarConfiguracionAdjuntos(long instanciaId)
+        {
+            var cfg = ObtenerConfiguracionAdjuntos(instanciaId);
+
+            var destino = string.IsNullOrWhiteSpace(cfg.DestinoTexto)
+                ? cfg.DestinoTipo
+                : (cfg.DestinoTipo + " - " + cfg.DestinoTexto);
+
+            var txt = "Adjuntá archivos para responder a lo pedido en el rechazo.";
+            txt += " Destino configurado: " + destino + ".";
+
+            if (!cfg.Habilitado)
+            {
+                fuAdjunto.Enabled = false;
+                btnAdjuntar.Enabled = false;
+                txt += " La carga manual está deshabilitada para esta definición.";
+            }
+
+            litAdjuntosDestino.Text = Server.HtmlEncode(txt);
         }
 
         protected void btnAdjuntar_Click(object sender, EventArgs e)
@@ -346,6 +416,13 @@ WHERE   t.Id = @Id;", cn))
 
                 var tareaId = TareaIdActual;
                 var instanciaId = InstanciaIdActual;
+
+                var cfg = ObtenerConfiguracionAdjuntos(instanciaId);
+                if (!cfg.Habilitado)
+                {
+                    ShowAdjMsg("La carga manual de adjuntos está deshabilitada para esta definición.", isError: true);
+                    return;
+                }
 
                 if (tareaId <= 0 || instanciaId <= 0)
                 {
@@ -1049,6 +1126,10 @@ ORDER BY
                             var jo = it as JObject;
                             if (jo == null) continue;
 
+                            bool eliminado;
+                            if (bool.TryParse(Convert.ToString(jo["eliminado"] ?? "false"), out eliminado) && eliminado)
+                                continue;
+
                             var tareaIdDoc = Convert.ToString(jo["tareaId"] ?? "");
                             var fileName = Convert.ToString(jo["fileName"] ?? "");
                             var fecha = Convert.ToString(jo["fecha"] ?? "");
@@ -1143,6 +1224,8 @@ ORDER BY
             var atts = bcase["attachments"] as JArray;
             if (atts == null) { atts = new JArray(); bcase["attachments"] = atts; }
 
+            var cfg = ObtenerConfiguracionAdjuntos(instanciaId);
+
             var jo = new JObject
             {
                 ["tareaId"] = tareaId.ToString(),
@@ -1151,7 +1234,9 @@ ORDER BY
                 ["tipo"] = tipo ?? "",
                 ["viewerUrl"] = viewerUrl ?? "",
                 ["fecha"] = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
-                ["usuario"] = user ?? ""
+                ["usuario"] = user ?? "",
+                ["destinoTipo"] = cfg.DestinoTipo ?? "INSTANCIA",
+                ["destinoTexto"] = cfg.DestinoTexto ?? ""
             };
 
             atts.Add(jo);
