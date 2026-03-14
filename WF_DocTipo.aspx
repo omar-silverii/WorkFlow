@@ -79,6 +79,7 @@
                             <asp:BoundField DataField="Codigo" HeaderText="Código" />
                             <asp:BoundField DataField="Nombre" HeaderText="Nombre" />
                             <asp:BoundField DataField="ContextPrefix" HeaderText="Prefix" />
+                            <asp:BoundField DataField="MotorExtraccion" HeaderText="Motor" />
                             <asp:TemplateField HeaderText="Estado">
                                 <ItemTemplate>
                                     <span class="badge badge-soft">
@@ -147,6 +148,15 @@
                                 <label class="form-label">ContextPrefix</label>
                                 <asp:TextBox runat="server" ID="txtPrefix" CssClass="form-control" placeholder="oc" />
                                 <div class="hint">Ej: oc / np / fact</div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label">Motor de extracción</label>
+                                <asp:DropDownList runat="server" ID="ddlMotorExtraccion" CssClass="form-select">
+                                    <asp:ListItem Text="Reglas estándar" Value="REGLAS" />
+                                    <asp:ListItem Text="Factura electrónica AR" Value="FACTURA_AR" />
+                                </asp:DropDownList>
+                                <div class="hint">Define cómo se procesa este tipo documental.</div>
                             </div>
 
                             <div class="col-md-6">

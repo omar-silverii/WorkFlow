@@ -244,7 +244,7 @@
                 <div class="row g-3">
 
                     <!-- Usuario -> Roles -->
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-6 col-xl-3">
                         <div class="card" data-asigblock="user-roles">
                             <div class="card-header">Usuario → Roles</div>
                             <div class="card-body">
@@ -262,7 +262,7 @@
                     </div>
 
                     <!-- Rol -> Permisos -->
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-6 col-xl-3">
                         <div class="card" data-asigblock="rol-perms">
                             <div class="card-header">Rol → Permisos</div>
                             <div class="card-body">
@@ -283,7 +283,7 @@
                     </div>
 
                     <!-- Usuario -> Permisos override -->
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-6 col-xl-3">
                         <div class="card" data-asigblock="user-perms">
                             <div class="card-header">Usuario → Permisos (Override)</div>
                             <div class="card-body">
@@ -299,6 +299,132 @@
                                 <div class="form-text mt-2">Override sirve para ADMIN / excepciones puntuales.</div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Rol -> Alcances -->
+                    
+
+                                        <!-- Rol -> Alcances -->
+                    <div class="col-12 col-lg-6 col-xl-3">
+                        <div class="card" data-asigblock="rol-alcances">
+                            <div class="card-header">Permisos por rol (por proceso o sector)</div>
+                            <div class="card-body">
+                                <div class="alert alert-light border mb-3 py-2 px-3 small">
+                                    Use este bloque para indicar si un permiso de un rol aplica:
+                                    <br />
+                                    • a todos los procesos y sectores
+                                    <br />
+                                    • o solo a un proceso, sector o área específica.
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label">Rol</label>
+                                        <asp:DropDownList runat="server" ID="ddlRolAlcances" CssClass="form-select"
+                                            AutoPostBack="true" OnSelectedIndexChanged="ddlRolAlcances_SelectedIndexChanged" />
+                                    </div>
+
+                                    <div class="col-12">
+                                        <label class="form-label">Permiso a otorgar</label>
+                                        <asp:DropDownList runat="server" ID="ddlPermisoAlcance" CssClass="form-select" />
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-floating wf-float-sm">
+                                            <asp:TextBox runat="server" ID="txtProcesoKeyAlcance" CssClass="form-control"
+                                                placeholder="Ej.: OC" />
+                                            <label for="<%= txtProcesoKeyAlcance.ClientID %>">Proceso (código)</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-floating wf-float-sm">
+                                            <asp:TextBox runat="server" ID="txtScopeKeyAlcance" CssClass="form-control"
+                                                placeholder="Ej.: COMPRAS" />
+                                            <label for="<%= txtScopeKeyAlcance.ClientID %>">Sector / área (código)</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <asp:CheckBox runat="server" ID="chkVerTodoAlcance" />
+                                            <label class="form-check-label" for="<%= chkVerTodoAlcance.ClientID %>">Aplica a todos</label>
+                                        </div>
+                                        <div class="form-text mt-1">
+                                            Marque esta opción si el permiso aplica a todos los procesos y sectores. En ese caso, deje Proceso y Sector vacíos.
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <asp:HiddenField runat="server" ID="hfRolAlcanceId" />
+                                            <div class="form-text mb-2">
+                                                Pasos: 1) elija el rol, 2) elija el permiso, 3) marque “Aplica a todos” o complete Proceso y/o Sector, 4) presione Guardar.
+                                            </div>
+                                            <div class="d-flex flex-wrap gap-2">
+                                            <asp:Button runat="server" ID="btnGuardarRolAlcance" Text="Guardar"
+                                                CssClass="btn btn-primary"
+                                                OnClick="btnGuardarRolAlcance_Click" />
+
+                                            <asp:Button runat="server" ID="btnLimpiarRolAlcance" Text="Limpiar"
+                                                CssClass="btn btn-outline-secondary"
+                                                OnClick="btnLimpiarRolAlcance_Click" />
+
+                                            <asp:Button runat="server" ID="btnRecargarRolAlcance" Text="Recargar"
+                                                CssClass="btn btn-outline-secondary"
+                                                OnClick="btnRecargarRolAlcance_Click" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <asp:GridView runat="server" ID="gvRolAlcances"
+                                        CssClass="table table-sm table-hover"
+                                        AutoGenerateColumns="false"
+                                        DataKeyNames="Id"
+                                        OnRowCommand="gvRolAlcances_RowCommand">
+                                        <Columns>
+                                            <asp:BoundField DataField="PermisoKey" HeaderText="Permiso" />
+                                            <asp:BoundField DataField="ProcesoKey" HeaderText="Proceso" />
+                                            <asp:BoundField DataField="ScopeKey" HeaderText="Sector / área" />
+                                            <asp:BoundField DataField="VerTodo" HeaderText="Aplica a todos" />
+                                            <asp:BoundField DataField="Activo" HeaderText="Activo" />
+                                            <asp:TemplateField HeaderText="">
+                                                <ItemTemplate>
+                                                    <asp:LinkButton runat="server"
+                                                        CommandName="EditRolAlcance"
+                                                        CommandArgument='<%# Eval("Id") %>'
+                                                        CssClass="btn btn-sm btn-outline-primary">
+                                                        Editar
+                                                    </asp:LinkButton>
+
+                                                    <asp:LinkButton runat="server"
+                                                        CommandName="ToggleRolAlcance"
+                                                        CommandArgument='<%# Eval("Id") %>'
+                                                        CssClass="btn btn-sm btn-outline-warning ms-1">
+                                                        Activar/Desactivar
+                                                    </asp:LinkButton>
+                                                </ItemTemplate>
+                                            </asp:TemplateField>
+                                        </Columns>
+                                    </asp:GridView>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+
+
+
+
+
+
+                            </div>
+                        </div>
+
+
+
+
+
                     </div>
 
                 </div>

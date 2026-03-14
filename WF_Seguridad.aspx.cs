@@ -90,11 +90,17 @@ ORDER BY r.Nombre, ur.RolKey;",
             if (rolKey.Length > 0 && TrySelectDropDown(ddlRolPerms, rolKey))
             {
                 LoadRolPerms();
+                TrySelectDropDown(ddlRolAlcances, rolKey);
+                LoadRolAlcances();
             }
             else
             {
                 ddlRolPerms.ClearSelection();
                 ClearChecks(cblPermsPorRol);
+
+                ddlRolAlcances.ClearSelection();
+                gvRolAlcances.DataSource = null;
+                gvRolAlcances.DataBind();
             }
         }
         private void SyncRolPermsDesdeRolesSeleccionadosDelUsuario()
@@ -395,7 +401,18 @@ ELSE
             ddlRolPerms.DataValueField = "RolKey";
             ddlRolPerms.DataBind();
 
+            ddlRolAlcances.DataSource = Q("SELECT RolKey, Nombre FROM dbo.WF_Rol WHERE Activo=1 ORDER BY Nombre;");
+            ddlRolAlcances.DataTextField = "Nombre";
+            ddlRolAlcances.DataValueField = "RolKey";
+            ddlRolAlcances.DataBind();
+
+            ddlPermisoAlcance.DataSource = Q("SELECT PermisoKey, Nombre FROM dbo.WF_Permiso WHERE Activo=1 ORDER BY Nombre;");
+            ddlPermisoAlcance.DataTextField = "Nombre";
+            ddlPermisoAlcance.DataValueField = "PermisoKey";
+            ddlPermisoAlcance.DataBind();
+
             BindCheckLists();
+            LoadRolAlcances();
         }
 
         private void BindCheckLists()
@@ -572,6 +589,240 @@ ELSE
 
             ShowMsg("Permisos override del usuario guardados.");
             LoadUserPermsOverride();
+        }
+
+        protected void ddlRolAlcances_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            LoadRolAlcances();
+            LimpiarRolAlcanceEditor(false);
+        }
+
+        protected void btnRecargarRolAlcance_Click(object sender, EventArgs e)
+        {
+            LoadRolAlcances();
+        }
+
+        protected void btnLimpiarRolAlcance_Click(object sender, EventArgs e)
+        {
+            LimpiarRolAlcanceEditor(false);
+        }
+
+        private void LimpiarRolAlcanceEditor(bool limpiarRol)
+        {
+            hfRolAlcanceId.Value = "";
+            if (limpiarRol && ddlRolAlcances.Items.Count > 0) ddlRolAlcances.SelectedIndex = 0;
+            if (ddlPermisoAlcance.Items.Count > 0) ddlPermisoAlcance.SelectedIndex = 0;
+            txtProcesoKeyAlcance.Text = "";
+            txtScopeKeyAlcance.Text = "";
+            chkVerTodoAlcance.Checked = false;
+        }
+
+        private void LoadRolAlcances()
+        {
+            var rolKey = (ddlRolAlcances.SelectedValue ?? "").Trim();
+
+            if (rolKey.Length == 0)
+            {
+                gvRolAlcances.DataSource = null;
+                gvRolAlcances.DataBind();
+                return;
+            }
+
+            gvRolAlcances.DataSource = Q(@"
+SELECT
+    Id,
+    RolKey,
+    PermisoKey,
+    ISNULL(ProcesoKey,'') AS ProcesoKey,
+    ISNULL(ScopeKey,'')   AS ScopeKey,
+    CASE WHEN VerTodo=1 THEN 'Sí' ELSE 'No' END AS VerTodo,
+    CASE WHEN Activo=1 THEN 'Sí' ELSE 'No' END AS Activo
+FROM dbo.WF_RolPermisoAlcance
+WHERE RolKey = @R
+ORDER BY Activo DESC, VerTodo DESC, PermisoKey, ProcesoKey, ScopeKey;",
+                new SqlParameter("@R", rolKey));
+
+            gvRolAlcances.DataBind();
+        }
+
+        protected void btnGuardarRolAlcance_Click(object sender, EventArgs e)
+        {
+            var rolKey = (ddlRolAlcances.SelectedValue ?? "").Trim();
+            var permisoKey = (ddlPermisoAlcance.SelectedValue ?? "").Trim();
+            var procesoKey = (txtProcesoKeyAlcance.Text ?? "").Trim();
+            var scopeKey = (txtScopeKeyAlcance.Text ?? "").Trim();
+            var verTodo = chkVerTodoAlcance.Checked;
+            var idTxt = (hfRolAlcanceId.Value ?? "").Trim();
+
+            if (verTodo)
+            {
+                procesoKey = "";
+                scopeKey = "";
+            }
+
+            var faltaRol = rolKey.Length == 0;
+            var faltaPermiso = permisoKey.Length == 0;
+            var faltaAlcance = !verTodo && procesoKey.Length == 0 && scopeKey.Length == 0;
+
+            if (faltaRol && faltaPermiso && faltaAlcance)
+            {
+                ShowMsg("Debe seleccionar el rol, el permiso y además marcar 'Aplica a todos' o completar Proceso o Sector / área.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaRol && faltaPermiso)
+            {
+                ShowMsg("Debe seleccionar el rol y el permiso antes de guardar.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaRol && faltaAlcance)
+            {
+                ShowMsg("Debe seleccionar el rol y además marcar 'Aplica a todos' o completar Proceso o Sector / área.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaPermiso && faltaAlcance)
+            {
+                ShowMsg("Debe seleccionar el permiso y además marcar 'Aplica a todos' o completar Proceso o Sector / área.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaRol)
+            {
+                ShowMsg("Debe seleccionar un rol antes de guardar.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaPermiso)
+            {
+                ShowMsg("Debe seleccionar el permiso que desea asignar al rol.", "alert alert-danger");
+                return;
+            }
+
+            if (faltaAlcance)
+            {
+                ShowMsg("Debe marcar 'Aplica a todos' o completar al menos Proceso o Sector / área.", "alert alert-danger");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(idTxt))
+            {
+                X(@"
+IF EXISTS
+(
+    SELECT 1
+    FROM dbo.WF_RolPermisoAlcance
+    WHERE RolKey=@RolKey
+      AND PermisoKey=@PermisoKey
+      AND ISNULL(ProcesoKey,'') = ISNULL(@ProcesoKey,'')
+      AND ISNULL(ScopeKey,'')   = ISNULL(@ScopeKey,'')
+      AND VerTodo=@VerTodo
+)
+BEGIN
+    UPDATE dbo.WF_RolPermisoAlcance
+       SET Activo = 1,
+           FechaMod = GETDATE(),
+           UsuarioMod = @Usuario
+     WHERE RolKey=@RolKey
+       AND PermisoKey=@PermisoKey
+       AND ISNULL(ProcesoKey,'') = ISNULL(@ProcesoKey,'')
+       AND ISNULL(ScopeKey,'')   = ISNULL(@ScopeKey,'')
+       AND VerTodo=@VerTodo;
+END
+ELSE
+BEGIN
+    INSERT INTO dbo.WF_RolPermisoAlcance
+    (
+        RolKey, PermisoKey, ProcesoKey, ScopeKey,
+        VerTodo, Activo, FechaAlta, UsuarioAlta
+    )
+    VALUES
+    (
+        @RolKey, @PermisoKey, @ProcesoKey, @ScopeKey,
+        @VerTodo, 1, GETDATE(), @Usuario
+    );
+END",
+                    new SqlParameter("@RolKey", rolKey),
+                    new SqlParameter("@PermisoKey", permisoKey),
+                    new SqlParameter("@ProcesoKey", (object)(procesoKey.Length == 0 ? (string)null : procesoKey) ?? DBNull.Value),
+                    new SqlParameter("@ScopeKey", (object)(scopeKey.Length == 0 ? (string)null : scopeKey) ?? DBNull.Value),
+                    new SqlParameter("@VerTodo", verTodo),
+                    new SqlParameter("@Usuario", User != null ? (object)(User.Identity.Name ?? "") : DBNull.Value));
+
+                ShowMsg("La regla del rol fue guardada correctamente.");
+            }
+            else
+            {
+                long id;
+                if (!long.TryParse(idTxt, out id))
+                {
+                    ShowMsg("No se pudo editar la regla seleccionada. Vuelva a cargar la pantalla e intente nuevamente.", "alert alert-danger");
+                    return;
+                }
+
+                X(@"
+UPDATE dbo.WF_RolPermisoAlcance
+   SET PermisoKey = @PermisoKey,
+       ProcesoKey = @ProcesoKey,
+       ScopeKey   = @ScopeKey,
+       VerTodo    = @VerTodo,
+       FechaMod   = GETDATE(),
+       UsuarioMod = @Usuario
+ WHERE Id = @Id;",
+                    new SqlParameter("@Id", id),
+                    new SqlParameter("@PermisoKey", permisoKey),
+                    new SqlParameter("@ProcesoKey", (object)(procesoKey.Length == 0 ? (string)null : procesoKey) ?? DBNull.Value),
+                    new SqlParameter("@ScopeKey", (object)(scopeKey.Length == 0 ? (string)null : scopeKey) ?? DBNull.Value),
+                    new SqlParameter("@VerTodo", verTodo),
+                    new SqlParameter("@Usuario", User != null ? (object)(User.Identity.Name ?? "") : DBNull.Value));
+
+                ShowMsg("La regla del rol fue actualizada correctamente.");
+            }
+
+            LoadRolAlcances();
+            LimpiarRolAlcanceEditor(false);
+        }
+
+        protected void gvRolAlcances_RowCommand(object sender, System.Web.UI.WebControls.GridViewCommandEventArgs e)
+        {
+            long id;
+            if (!long.TryParse(Convert.ToString(e.CommandArgument), out id)) return;
+
+            if (string.Equals(e.CommandName, "EditRolAlcance", StringComparison.OrdinalIgnoreCase))
+            {
+                var dt = Q(@"
+SELECT Id, RolKey, PermisoKey, ProcesoKey, ScopeKey, VerTodo
+FROM dbo.WF_RolPermisoAlcance
+WHERE Id=@Id;",
+                    new SqlParameter("@Id", id));
+
+                if (dt.Rows.Count == 1)
+                {
+                    var dr = dt.Rows[0];
+
+                    hfRolAlcanceId.Value = Convert.ToString(dr["Id"]);
+                    TrySelectDropDown(ddlRolAlcances, Convert.ToString(dr["RolKey"]));
+                    TrySelectDropDown(ddlPermisoAlcance, Convert.ToString(dr["PermisoKey"]));
+                    txtProcesoKeyAlcance.Text = Convert.ToString(dr["ProcesoKey"]);
+                    txtScopeKeyAlcance.Text = Convert.ToString(dr["ScopeKey"]);
+                    chkVerTodoAlcance.Checked = Convert.ToBoolean(dr["VerTodo"]);
+                }
+            }
+            else if (string.Equals(e.CommandName, "ToggleRolAlcance", StringComparison.OrdinalIgnoreCase))
+            {
+                X(@"
+UPDATE dbo.WF_RolPermisoAlcance
+   SET Activo = CASE WHEN Activo=1 THEN 0 ELSE 1 END,
+       FechaMod = GETDATE(),
+       UsuarioMod = @Usuario
+ WHERE Id=@Id;",
+                    new SqlParameter("@Id", id),
+                    new SqlParameter("@Usuario", User != null ? (object)(User.Identity.Name ?? "") : DBNull.Value));
+
+                LoadRolAlcances();
+                ShowMsg("La regla del rol fue activada / desactivada correctamente.");
+            }
         }
 
         private static void ClearChecks(System.Web.UI.WebControls.CheckBoxList cbl)

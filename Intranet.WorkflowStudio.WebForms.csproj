@@ -568,6 +568,7 @@
     <Compile Include="Denied.aspx.designer.cs">
       <DependentUpon>Denied.aspx</DependentUpon>
     </Compile>
+    <Compile Include="DocumentProcessing\FacturaElectronicaArExtractor.cs" />
     <Compile Include="DocumentProcessing\HDocLoad.cs" />
     <Compile Include="Login.aspx.cs">
       <DependentUpon>Login.aspx</DependentUpon>

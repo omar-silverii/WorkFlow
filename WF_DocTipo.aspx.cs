@@ -41,7 +41,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
             using (var cn = new SqlConnection(Cs()))
             using (var cmd = new SqlCommand(@"
-SELECT DocTipoId, Codigo, Nombre, ContextPrefix, PlantillaPath, RutaBase, EsActivo, CreatedAt, UpdatedAt, RulesJson
+SELECT DocTipoId, Codigo, Nombre, ContextPrefix, MotorExtraccion, PlantillaPath, RutaBase, EsActivo, CreatedAt, UpdatedAt, RulesJson
 FROM dbo.WF_DocTipo
 WHERE 1=1
   AND (@Q = '' OR Codigo LIKE '%' + @Q + '%' OR Nombre LIKE '%' + @Q + '%')
@@ -101,6 +101,7 @@ ORDER BY Codigo;", cn))
             var codigo = (txtCodigo.Text ?? "").Trim();
             var nombre = (txtNombre.Text ?? "").Trim();
             var prefix = (txtPrefix.Text ?? "").Trim();
+            var motorExtraccion = (ddlMotorExtraccion.SelectedValue ?? "REGLAS").Trim().ToUpperInvariant();
             var plantilla = (txtPlantilla.Text ?? "").Trim();
             var rutaBase = (txtRutaBase.Text ?? "").Trim();
             var activo = chkActivo.Checked;
@@ -110,6 +111,13 @@ ORDER BY Codigo;", cn))
             if (string.IsNullOrWhiteSpace(codigo) || string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(prefix))
             {
                 ShowMsg("Completá Código, Nombre y ContextPrefix.", isError: true);
+                ShowModal();
+                return;
+            }
+
+            if (motorExtraccion != "REGLAS" && motorExtraccion != "FACTURA_AR")
+            {
+                ShowMsg("Motor de extracción inválido.", isError: true);
                 ShowModal();
                 return;
             }
@@ -143,20 +151,22 @@ WHERE Codigo = @Codigo
                 {
                     using (var cmd = new SqlCommand(@"
 UPDATE dbo.WF_DocTipo
-SET Codigo        = @Codigo,
-    Nombre        = @Nombre,
-    ContextPrefix = @Prefix,
-    PlantillaPath = @PlantillaPath,
-    RutaBase      = @RutaBase,
-    EsActivo      = @Activo,
-    RulesJson     = @RulesJson,
-    UpdatedAt     = GETDATE()
+SET Codigo          = @Codigo,
+    Nombre          = @Nombre,
+    ContextPrefix   = @Prefix,
+    MotorExtraccion = @MotorExtraccion,
+    PlantillaPath   = @PlantillaPath,
+    RutaBase        = @RutaBase,
+    EsActivo        = @Activo,
+    RulesJson       = @RulesJson,
+    UpdatedAt       = GETDATE()
 WHERE DocTipoId = @Id;", cn))
                     {
                         cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
                         cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 50).Value = codigo;
                         cmd.Parameters.Add("@Nombre", SqlDbType.NVarChar, 200).Value = nombre;
                         cmd.Parameters.Add("@Prefix", SqlDbType.NVarChar, 30).Value = prefix;
+                        cmd.Parameters.Add("@MotorExtraccion", SqlDbType.NVarChar, 30).Value = motorExtraccion;
 
                         cmd.Parameters.Add("@PlantillaPath", SqlDbType.NVarChar, 500).Value =
                             (object)NullIfEmpty(plantilla) ?? DBNull.Value;
@@ -178,14 +188,15 @@ WHERE DocTipoId = @Id;", cn))
                 {
                     using (var cmd = new SqlCommand(@"
 INSERT INTO dbo.WF_DocTipo
-(Codigo, Nombre, ContextPrefix, PlantillaPath, RutaBase, EsActivo, CreatedAt, UpdatedAt, RulesJson)
+(Codigo, Nombre, ContextPrefix, MotorExtraccion, PlantillaPath, RutaBase, EsActivo, CreatedAt, UpdatedAt, RulesJson)
 VALUES
-(@Codigo, @Nombre, @Prefix, @PlantillaPath, @RutaBase, @Activo, GETDATE(), NULL, @RulesJson);
+(@Codigo, @Nombre, @Prefix, @MotorExtraccion, @PlantillaPath, @RutaBase, @Activo, GETDATE(), NULL, @RulesJson);
 SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                     {
                         cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 50).Value = codigo;
                         cmd.Parameters.Add("@Nombre", SqlDbType.NVarChar, 200).Value = nombre;
                         cmd.Parameters.Add("@Prefix", SqlDbType.NVarChar, 30).Value = prefix;
+                        cmd.Parameters.Add("@MotorExtraccion", SqlDbType.NVarChar, 30).Value = motorExtraccion;
 
                         cmd.Parameters.Add("@PlantillaPath", SqlDbType.NVarChar, 500).Value =
                             (object)NullIfEmpty(plantilla) ?? DBNull.Value;
@@ -216,7 +227,7 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
 
             using (var cn = new SqlConnection(Cs()))
             using (var cmd = new SqlCommand(@"
-SELECT DocTipoId, Codigo, Nombre, ContextPrefix, PlantillaPath, RutaBase, EsActivo, RulesJson
+SELECT DocTipoId, Codigo, Nombre, ContextPrefix, MotorExtraccion, PlantillaPath, RutaBase, EsActivo, RulesJson
 FROM dbo.WF_DocTipo
 WHERE DocTipoId = @Id;", cn))
             {
@@ -232,12 +243,18 @@ WHERE DocTipoId = @Id;", cn))
                     txtNombre.Text = dr.GetString(2);
                     txtPrefix.Text = dr.GetString(3);
 
-                    txtPlantilla.Text = dr.IsDBNull(4) ? "" : dr.GetString(4);
-                    txtRutaBase.Text = dr.IsDBNull(5) ? "" : dr.GetString(5);
+                    var motor = dr.IsDBNull(4) ? "REGLAS" : dr.GetString(4);
+                    if (ddlMotorExtraccion.Items.FindByValue(motor) != null)
+                        ddlMotorExtraccion.SelectedValue = motor;
+                    else
+                        ddlMotorExtraccion.SelectedValue = "REGLAS";
 
-                    chkActivo.Checked = !dr.IsDBNull(6) && dr.GetBoolean(6);
+                    txtPlantilla.Text = dr.IsDBNull(5) ? "" : dr.GetString(5);
+                    txtRutaBase.Text = dr.IsDBNull(6) ? "" : dr.GetString(6);
 
-                    txtRulesJson.Text = dr.IsDBNull(7) ? "" : dr.GetString(7);
+                    chkActivo.Checked = !dr.IsDBNull(7) && dr.GetBoolean(7);
+
+                    txtRulesJson.Text = dr.IsDBNull(8) ? "" : dr.GetString(8);
                 }
             }
         }
@@ -277,6 +294,7 @@ WHERE DocTipoId = @Id;", cn))
             txtCodigo.Text = "";
             txtNombre.Text = "";
             txtPrefix.Text = "";
+            ddlMotorExtraccion.SelectedValue = "REGLAS";
             txtPlantilla.Text = "";
             txtRutaBase.Text = "";
             txtRulesJson.Text = "";

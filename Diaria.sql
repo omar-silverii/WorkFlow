@@ -1,7 +1,7 @@
 select * from WF_Instancia where id = 	110422
-select * from WF_Instancia where id = 	110431
-select * from WF_InstanciaLog where WF_Instanciaid = 	110431
-select * from WF_Tarea  where WF_Instanciaid = 	110441 order by id asc
+select * from WF_Instancia where id = 	130431
+select * from WF_InstanciaLog where WF_Instanciaid = 	130431
+select * from WF_Tarea  where WF_Instanciaid = 	130449 order by id asc
 
 select * from WF_UsuarioRol
 select * from WF_UserPermiso where UserKey = 'OMARD\USUARIO1' And Activo = 1
@@ -15,7 +15,9 @@ delete WF_Tarea  where WF_Instanciaid = 	110440
 WF_Gerente_Tareas_Cerradas_Mis 'OMARD\OMARD'
 WF_Gerente_Tareas_Pendientes_MiAlcance 'OMARD\OMARD'
 
+select * from WF_InstanciaLog where WF_Instanciaid = 	120448
 */
+13.0.4259.0
 
 SELECT
     r.Id,

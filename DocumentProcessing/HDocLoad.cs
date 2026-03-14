@@ -121,20 +121,30 @@ namespace Intranet.WorkflowStudio.WebForms.DocumentProcessing
 
                 int docTipoId;
                 string prefix;
+                string motorExtraccion;
 
-                ResolveDocTipo(ctx, cnnName, docTipoCodigo, out docTipoId, out prefix);
+                ResolveDocTipo(ctx, cnnName, docTipoCodigo, out docTipoId, out prefix, out motorExtraccion);
 
                 ctx.Estado["wf.docTipoCodigo"] = docTipoCodigo;
                 ctx.Estado["wf.docTipoId"] = docTipoId;
                 ctx.Estado["wf.contextPrefix"] = prefix;
+                ctx.Estado["wf.motorExtraccion"] = motorExtraccion;
 
-                // 6) Cargar reglas y extraer -> biz.{prefix}.*
-                var rules = LoadRules(ctx, cnnName, docTipoId);
+                // 6) Extraer según motor
+                if (motorExtraccion == "FACTURA_AR")
+                {
+                    FacturaElectronicaArExtractor.Apply(ctx, prefix, text ?? "");
+                    ctx.Log("[doc.load] OK — docTipo=" + docTipoCodigo + " id=" + docTipoId + " prefix=" + prefix + " motor=FACTURA_AR");
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "ok" });
+                }
+                else
+                {
+                    var rules = LoadRules(ctx, cnnName, docTipoId);
+                    ApplyRules(ctx, prefix, text ?? "", rules);
 
-                ApplyRules(ctx, prefix, text ?? "", rules);
-
-                ctx.Log("[doc.load] OK — docTipo=" + docTipoCodigo + " id=" + docTipoId + " prefix=" + prefix + " reglas=" + rules.Count);
-                return Task.FromResult(new ResultadoEjecucion { Etiqueta = "ok" });
+                    ctx.Log("[doc.load] OK — docTipo=" + docTipoCodigo + " id=" + docTipoId + " prefix=" + prefix + " motor=REGLAS reglas=" + rules.Count);
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "ok" });
+                }
             }
             catch (Exception ex)
             {
@@ -145,17 +155,18 @@ namespace Intranet.WorkflowStudio.WebForms.DocumentProcessing
         // =========================
         // DB: Resolve DocTipo
         // =========================
-        private void ResolveDocTipo(ContextoEjecucion ctx, string cnnName, string codigo, out int docTipoId, out string prefix)
+        private void ResolveDocTipo(ContextoEjecucion ctx, string cnnName, string codigo, out int docTipoId, out string prefix, out string motorExtraccion)
         {
             docTipoId = 0;
             prefix = "";
+            motorExtraccion = "REGLAS";
 
             var cs = GetConnectionString(cnnName);
             using (var cn = new SqlConnection(cs))
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = @"
-SELECT TOP 1 DocTipoId, ContextPrefix
+SELECT TOP 1 DocTipoId, ContextPrefix, ISNULL(MotorExtraccion,'REGLAS') AS MotorExtraccion
 FROM WF_DocTipo
 WHERE Codigo = @Codigo AND EsActivo = 1";
                 cmd.Parameters.AddWithValue("@Codigo", codigo);
@@ -168,6 +179,9 @@ WHERE Codigo = @Codigo AND EsActivo = 1";
 
                     docTipoId = Convert.ToInt32(dr["DocTipoId"]);
                     prefix = Convert.ToString(dr["ContextPrefix"] ?? "").Trim();
+                    motorExtraccion = Convert.ToString(dr["MotorExtraccion"] ?? "REGLAS").Trim().ToUpperInvariant();
+                    if (string.IsNullOrWhiteSpace(motorExtraccion))
+                        motorExtraccion = "REGLAS";
                 }
             }
 
