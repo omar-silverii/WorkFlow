@@ -137,6 +137,12 @@ namespace Intranet.WorkflowStudio.WebForms.DocumentProcessing
                     ctx.Log("[doc.load] OK — docTipo=" + docTipoCodigo + " id=" + docTipoId + " prefix=" + prefix + " motor=FACTURA_AR");
                     return Task.FromResult(new ResultadoEjecucion { Etiqueta = "ok" });
                 }
+                else if (motorExtraccion == "NC_AR")
+                {
+                    NotaCreditoElectronicaArExtractor.Apply(ctx, prefix, text ?? "");
+                    ctx.Log("[doc.load] OK — docTipo=" + docTipoCodigo + " id=" + docTipoId + " prefix=" + prefix + " motor=NC_AR");
+                    return Task.FromResult(new ResultadoEjecucion { Etiqueta = "ok" });
+                }
                 else
                 {
                     var rules = LoadRules(ctx, cnnName, docTipoId);
@@ -533,7 +539,7 @@ ORDER BY Grupo, Orden, Id";
 
         // =========================
         // Extractors
-        
+
         private string ExtractPdf(byte[] bytes, ContextoEjecucion ctx)
         {
             try

@@ -115,7 +115,7 @@ ORDER BY Codigo;", cn))
                 return;
             }
 
-            if (motorExtraccion != "REGLAS" && motorExtraccion != "FACTURA_AR")
+            if (motorExtraccion != "REGLAS" && motorExtraccion != "FACTURA_AR" && motorExtraccion != "NC_AR")
             {
                 ShowMsg("Motor de extracción inválido.", isError: true);
                 ShowModal();

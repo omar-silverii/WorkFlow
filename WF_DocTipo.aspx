@@ -155,6 +155,7 @@
                                 <asp:DropDownList runat="server" ID="ddlMotorExtraccion" CssClass="form-select">
                                     <asp:ListItem Text="Reglas estándar" Value="REGLAS" />
                                     <asp:ListItem Text="Factura electrónica AR" Value="FACTURA_AR" />
+                                    <asp:ListItem Text="Nota de crédito electrónica AR" Value="NC_AR" />
                                 </asp:DropDownList>
                                 <div class="hint">Define cómo se procesa este tipo documental.</div>
                             </div>
@@ -245,3 +246,4 @@
 </form>
 </body>
 </html>
+

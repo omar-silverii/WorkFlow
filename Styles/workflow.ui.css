@@ -148,13 +148,20 @@ body {
     overflow: auto;
 }
 
-    /* el SVG de las aristas va debajo de los nodos */
+    /* Mundo interno del grafo: nodos y aristas viven en el mismo sistema de coordenadas. */
+    .canvas .canvas-world {
+        position: relative;
+        min-width: 100%;
+        min-height: 100%;
+    }
+
+    /* el SVG de las aristas va debajo de los nodos dentro del mismo mundo */
     .canvas .edges {
         position: absolute;
         top: 0;
         left: 0;
         pointer-events: none;
-        overflow: visible; /* ← clave: que pueda crecer más allá del viewport */
+        overflow: visible;
         z-index: 1;
     }
 
@@ -368,6 +375,7 @@ body {
 .connect-mode .node .port {
     opacity: .9;
 }
+
 .canvas .edges text {
     paint-order: stroke;
     stroke: #fff;

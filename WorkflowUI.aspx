@@ -72,16 +72,18 @@
 
         </div>
         <div id="canvas" class="canvas" tabindex="0" aria-label="Canvas de workflow">
-          <svg id="edgesSvg" class="edges" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"></polygon>
-              </marker>
-              <marker id="arrowSel" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"></polygon>
-              </marker>
-            </defs>
-          </svg>
+          <div id="canvasWorld" class="canvas-world">
+            <svg id="edgesSvg" class="edges">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"></polygon>
+                </marker>
+                <marker id="arrowSel" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"></polygon>
+                </marker>
+              </defs>
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -164,7 +166,7 @@
     <!-- JS de la IU -->
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
-    <script src="Scripts/workflow.ui.js?v=dev200"></script>
+    <script src="Scripts/workflow.ui.js?v=dev205"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>

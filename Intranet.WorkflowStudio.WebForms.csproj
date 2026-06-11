@@ -570,6 +570,7 @@
     </Compile>
     <Compile Include="DocumentProcessing\FacturaElectronicaArExtractor.cs" />
     <Compile Include="DocumentProcessing\HDocLoad.cs" />
+    <Compile Include="DocumentProcessing\NotaCreditoElectronicaArExtractor.cs" />
     <Compile Include="Login.aspx.cs">
       <DependentUpon>Login.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>

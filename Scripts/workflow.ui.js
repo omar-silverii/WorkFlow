@@ -7,6 +7,8 @@
 // - Clonado profundo de plantillas para que cada nodo tenga su propio params
 // - Recalcula idSeq tras rehidratación para evitar colisiones
 (function () {
+    window.__WF_UI_BUILD = 'aristas-dom-offset-dev205';
+    console.log('workflow.ui.js build:', window.__WF_UI_BUILD);
     // ====== acceso a catálogo / plantillas / íconos
     var DATA = window.WorkflowData || {};
     var CATALOG = DATA.CATALOG || [];
@@ -48,14 +50,64 @@
     function deepClone(o) { try { return JSON.parse(JSON.stringify(o || {})); } catch (e) { return o ? Object.assign({}, o) : {}; } }
 
     // ====== refs a elementos
-    var canvas, svg;
+    var canvas, world, svg;
 
     function canvasRect() { return canvas.getBoundingClientRect(); }
-    function nodeEl(id) { return canvas.querySelector('[data-node-id="' + id + '"]'); }
+    function nodeEl(id) { return (world || canvas).querySelector('[data-node-id="' + id + '"]'); }
+    function nodeById(id) {
+        return nodes.find(function (n) { return n.id === id; });
+    }
+
+    function nodePosition(n, el) {
+        // Fuente principal: posición REAL del DOM dentro de canvasWorld.
+        // No usar primero n.x/n.y porque puede quedar viejo después de scroll,
+        // resize del mundo interno o recargas parciales.
+        if (el) {
+            return {
+                x: (typeof el.offsetLeft === 'number' ? el.offsetLeft : (parseInt(el.style.left, 10) || 0)),
+                y: (typeof el.offsetTop === 'number' ? el.offsetTop : (parseInt(el.style.top, 10) || 0))
+            };
+        }
+
+        var x = (n && typeof n.x === 'number') ? n.x : null;
+        var y = (n && typeof n.y === 'number') ? n.y : null;
+
+        if ((x === null || y === null) && n && n.params && n.params.position) {
+            if (x === null && typeof n.params.position.x === 'number') x = n.params.position.x;
+            if (y === null && typeof n.params.position.y === 'number') y = n.params.position.y;
+        }
+
+        return { x: x || 0, y: y || 0 };
+    }
+
+    function syncNodeModelPosition(n, el) {
+        if (!n || !el) return;
+        var pos = nodePosition(n, el);
+        n.x = pos.x | 0;
+        n.y = pos.y | 0;
+        n.params = n.params || {};
+        n.params.position = { x: n.x, y: n.y };
+    }
+
     function nodeCenter(id) {
-        var el = nodeEl(id); if (!el) return null;
-        var r = el.getBoundingClientRect(); var c = canvasRect();
-        return { x: r.left - c.left + r.width / 2, y: r.top - c.top + r.height / 2, w: r.width, h: r.height };
+        var n = nodeById(id);
+        var el = nodeEl(id);
+        if (!n && !el) return null;
+
+        // Importante: las aristas viven en el mismo sistema de coordenadas
+        // que los nodos guardados en el grafo: position { x, y }.
+        // No usar getBoundingClientRect() para el anclaje, porque mezcla
+        // coordenadas de viewport con coordenadas del canvas cuando hay scroll.
+        var pos = nodePosition(n, el);
+        var w = el ? el.offsetWidth : 180;
+        var h = el ? el.offsetHeight : 70;
+
+        return {
+            x: pos.x + w / 2,
+            y: pos.y + h / 2,
+            w: w,
+            h: h
+        };
     }
 
     function ensureEdgeMarkers(svgEl) {
@@ -219,7 +271,7 @@
         });
         el.appendChild(ports);
 
-        canvas.appendChild(el);
+        (world || canvas).appendChild(el);
 
         el.addEventListener('mousedown', function (ev) {
             if (ev.button !== 0) return; // solo botón izquierdo
@@ -240,7 +292,15 @@
     }
 
     function startMove(ev, n, el) {
-        var sx = ev.clientX, sy = ev.clientY, bx = n.x, by = n.y;
+        // Sincronizar antes de mover: el DOM manda.
+        // Esto evita que el arrastre arranque desde una coordenada vieja del modelo.
+        syncNodeModelPosition(n, el);
+
+        var sx = ev.clientX;
+        var sy = ev.clientY;
+        var bx = n.x;
+        var by = n.y;
+
         dragState = { n: n, el: el, sx: sx, sy: sy, bx: bx, by: by };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', endMove);
@@ -271,7 +331,7 @@
 
     function clearAll() {
         nodes = []; edges = [];
-        canvas.querySelectorAll('.node').forEach(function (e) { e.remove(); });
+        (world || canvas).querySelectorAll('.node').forEach(function (e) { e.remove(); });
         drawEdges(); select(null);
     }
 
@@ -329,17 +389,31 @@
     }
 
     function resizeSvgToFitContent() {
-        var maxX = 0, maxY = 0;
+        var maxX = canvas ? canvas.clientWidth : 0;
+        var maxY = canvas ? canvas.clientHeight : 0;
 
-        nodes.forEach(n => {
-            var w = 300;  // ancho aprox nodo
-            var h = 150;  // alto aprox nodo
-            if (n.x + w > maxX) maxX = n.x + w;
-            if (n.y + h > maxY) maxY = n.y + h;
+        nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            var pos = nodePosition(n, el);
+            var w = el ? el.offsetWidth : 300;
+            var h = el ? el.offsetHeight : 150;
+
+            if (pos.x + w + 160 > maxX) maxX = pos.x + w + 160;
+            if (pos.y + h + 160 > maxY) maxY = pos.y + h + 160;
         });
+
+        maxX = Math.max(maxX, canvas ? canvas.clientWidth : 0);
+        maxY = Math.max(maxY, canvas ? canvas.clientHeight : 0);
+
+        if (world && world !== canvas) {
+            world.style.width = maxX + 'px';
+            world.style.height = maxY + 'px';
+        }
 
         svg.setAttribute("width", maxX);
         svg.setAttribute("height", maxY);
+        svg.style.width = maxX + 'px';
+        svg.style.height = maxY + 'px';
     }
 
     // ====== aristas
@@ -557,6 +631,9 @@
         };
 
         nodes.forEach(function (n) {
+            // Antes de guardar/exportar, tomar la posición real del DOM.
+            // Así el JSON no persiste coordenadas viejas.
+            syncNodeModelPosition(n, nodeEl(n.id));
             ensurePosition(n);
 
             var pars = Object.assign({}, n.params || {});
@@ -734,6 +811,10 @@
         // Asegurar refs a canvas/svg por si alguien llama WF_loadFromJson antes de init()
         if (!canvas) {
             canvas = $('canvas');
+            world = $('canvasWorld') || canvas;
+        }
+        if (!world) {
+            world = $('canvasWorld') || canvas;
         }
         if (!svg) {
             svg = $('edgesSvg');
@@ -755,9 +836,9 @@
 
             var par = n.Parameters || n.params || {};
             var hasPos = par &&
-                    par.position &&
-                    typeof par.position.x === 'number' &&
-                    typeof par.position.y === 'number';
+                par.position &&
+                typeof par.position.x === 'number' &&
+                typeof par.position.y === 'number';
             var x = hasPos ? par.position.x : (120 + (nodes.length * 40));
             var y = hasPos ? par.position.y : (120 + (nodes.length * 10));
 
@@ -792,7 +873,7 @@
         // === FIX: recalcular idSeq basado en nodos y edges cargados ===
         bumpIdSeqFromExisting();
         drawEdges();
-        
+
 
         // Nombre del workflow en la caja de texto, si viene en Meta
         try {
@@ -918,7 +999,7 @@
 
 
     function init() {
-        canvas = $('canvas'); svg = $('edgesSvg');
+        canvas = $('canvas'); world = $('canvasWorld') || canvas; svg = $('edgesSvg');
 
         ensureEdgeMarkers(svg);
 
@@ -948,7 +1029,9 @@
             var key = ev.dataTransfer.getData('text/plain') || ev.dataTransfer.getData('application/reactflow');
             if (!key) return;
             var meta = findCat(key); if (!meta) return;
-            var rect = canvasRect(); var x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+            var rect = canvasRect();
+            var x = ev.clientX - rect.left + canvas.scrollLeft;
+            var y = ev.clientY - rect.top + canvas.scrollTop;
             createNode(meta, x, y, meta.label);
         });
         canvas.addEventListener('click', function (ev) {
@@ -959,6 +1042,7 @@
             select(null);
         });
         window.addEventListener('resize', drawEdges);
+        canvas.addEventListener('scroll', drawEdges);
 
         // toolbar actions
         if ($('btnConectar')) $('btnConectar').addEventListener('click', function () {
