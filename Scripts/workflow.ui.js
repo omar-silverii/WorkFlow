@@ -7,7 +7,7 @@
 // - Clonado profundo de plantillas para que cada nodo tenga su propio params
 // - Recalcula idSeq tras rehidratación para evitar colisiones
 (function () {
-    window.__WF_UI_BUILD = 'aristas-dom-offset-dev205';
+    window.__WF_UI_BUILD = 'concepto-a-zoom-minimap-dev210';
     console.log('workflow.ui.js build:', window.__WF_UI_BUILD);
     // ====== acceso a catálogo / plantillas / íconos
     var DATA = window.WorkflowData || {};
@@ -51,6 +51,12 @@
 
     // ====== refs a elementos
     var canvas, world, svg;
+    var zoom = 1;
+    var ZOOM_MIN = 0.5;
+    var ZOOM_MAX = 1.8;
+    var ZOOM_STEP = 0.1;
+    var miniMapState = null;
+
 
     function canvasRect() { return canvas.getBoundingClientRect(); }
     function nodeEl(id) { return (world || canvas).querySelector('[data-node-id="' + id + '"]'); }
@@ -58,17 +64,12 @@
         return nodes.find(function (n) { return n.id === id; });
     }
 
-    function nodePosition(n, el) {
-        // Fuente principal: posición REAL del DOM dentro de canvasWorld.
-        // No usar primero n.x/n.y porque puede quedar viejo después de scroll,
-        // resize del mundo interno o recargas parciales.
-        if (el) {
-            return {
-                x: (typeof el.offsetLeft === 'number' ? el.offsetLeft : (parseInt(el.style.left, 10) || 0)),
-                y: (typeof el.offsetTop === 'number' ? el.offsetTop : (parseInt(el.style.top, 10) || 0))
-            };
-        }
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
+    function nodePosition(n, el) {
+        // Posición LÓGICA del nodo dentro del grafo.
+        // Con zoom activo, el DOM se dibuja escalado, por eso offsetLeft/Top
+        // deben dividirse por zoom cuando se usan como respaldo.
         var x = (n && typeof n.x === 'number') ? n.x : null;
         var y = (n && typeof n.y === 'number') ? n.y : null;
 
@@ -77,7 +78,37 @@
             if (y === null && typeof n.params.position.y === 'number') y = n.params.position.y;
         }
 
+        if ((x === null || y === null) && el) {
+            if (x === null) x = ((typeof el.offsetLeft === 'number' ? el.offsetLeft : (parseInt(el.style.left, 10) || 0)) / zoom);
+            if (y === null) y = ((typeof el.offsetTop === 'number' ? el.offsetTop : (parseInt(el.style.top, 10) || 0)) / zoom);
+        }
+
         return { x: x || 0, y: y || 0 };
+    }
+
+    function applyNodeVisualPosition(n, el) {
+        if (!n || !el) return;
+        el.style.left = Math.round((n.x || 0) * zoom) + 'px';
+        el.style.top = Math.round((n.y || 0) * zoom) + 'px';
+        el.style.transform = 'scale(' + zoom + ')';
+        el.style.transformOrigin = '0 0';
+    }
+
+    function applyAllNodeVisualPositions() {
+        nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            if (el) applyNodeVisualPosition(n, el);
+        });
+    }
+
+    function nodeLogicalCenter(id) {
+        var n = nodeById(id);
+        var el = nodeEl(id);
+        if (!n && !el) return null;
+        var pos = nodePosition(n, el);
+        var w = el ? el.offsetWidth : 180;
+        var h = el ? el.offsetHeight : 70;
+        return { x: pos.x + w / 2, y: pos.y + h / 2, w: w, h: h };
     }
 
     function syncNodeModelPosition(n, el) {
@@ -94,17 +125,21 @@
         var el = nodeEl(id);
         if (!n && !el) return null;
 
-        // Importante: las aristas viven en el mismo sistema de coordenadas
-        // que los nodos guardados en el grafo: position { x, y }.
-        // No usar getBoundingClientRect() para el anclaje, porque mezcla
-        // coordenadas de viewport con coordenadas del canvas cuando hay scroll.
+        // Coordenadas VISUALES dentro de canvasWorld, ya multiplicadas por zoom.
+        // Las aristas se dibujan en el mismo mundo visual que los nodos.
         var pos = nodePosition(n, el);
-        var w = el ? el.offsetWidth : 180;
-        var h = el ? el.offsetHeight : 70;
+        var w = (el ? el.offsetWidth : 180) * zoom;
+        var h = (el ? el.offsetHeight : 70) * zoom;
+        var x = pos.x * zoom;
+        var y = pos.y * zoom;
 
         return {
-            x: pos.x + w / 2,
-            y: pos.y + h / 2,
+            x: x + w / 2,
+            y: y + h / 2,
+            left: x,
+            top: y,
+            right: x + w,
+            bottom: y + h,
             w: w,
             h: h
         };
@@ -252,8 +287,7 @@
     function drawNode(n) {
         var el = createEl('div', 'node');
         el.id = n.id;
-        el.style.left = (n.x | 0) + 'px';
-        el.style.top = (n.y | 0) + 'px';
+        applyNodeVisualPosition(n, el);
         // === FIX: asegurar referencia correcta del nodo en DOM ===
         el.dataset.nodeId = n.id;
         var head = createEl('div', 'node__header');
@@ -307,7 +341,7 @@
     }
     function onMove(ev) {
         if (!dragState) return;
-        var dx = ev.clientX - dragState.sx, dy = ev.clientY - dragState.sy;
+        var dx = (ev.clientX - dragState.sx) / zoom, dy = (ev.clientY - dragState.sy) / zoom;
         var nx = dragState.bx + dx, ny = dragState.by + dy;
 
         // >>> snap
@@ -319,8 +353,7 @@
         dragState.n.x = nx; dragState.n.y = ny;
         dragState.n.params = dragState.n.params || {};
         dragState.n.params.position = { x: nx | 0, y: ny | 0 };
-        dragState.el.style.left = (nx | 0) + 'px';
-        dragState.el.style.top = (ny | 0) + 'px';
+        applyNodeVisualPosition(dragState.n, dragState.el);
         drawEdges();
     }
     function endMove() {
@@ -336,55 +369,48 @@
     }
 
     function edgeAnchors(fromRect, toRect) {
+        // Concepto A: cada nodo tiene 4 anclajes exactos:
+        // top, right, bottom, left. Las flechas salen/llegan SOLO desde esos puntos.
+        function chooseSide(a, b) {
+            var dx = b.x - a.x;
+            var dy = b.y - a.y;
 
-        function intersectRect(cx, cy, tx, ty, w, h) {
-
-            // Vector desde el centro origen hacia el destino
-            var dx = tx - cx;
-            var dy = ty - cy;
-
-            // Mitad del ancho/alto (rectángulo centrado)
-            var hw = w / 2;
-            var hh = h / 2;
-
-            // Calcular escalas necesarias para llegar al borde
-            var scaleX = dx !== 0 ? Math.abs(hw / dx) : Infinity;
-            var scaleY = dy !== 0 ? Math.abs(hh / dy) : Infinity;
-
-            // Usar el borde más cercano (el que se alcanza con la menor escala)
-            var scale = Math.min(scaleX, scaleY);
-
-            return {
-                x: cx + dx * scale,
-                y: cy + dy * scale
-            };
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                return dx >= 0 ? 'right' : 'left';
+            }
+            return dy >= 0 ? 'bottom' : 'top';
         }
 
-        // Punto exacto donde comienza la curva en el borde del nodo origen
-        var start = intersectRect(
-            fromRect.x,
-            fromRect.y,
-            toRect.x,
-            toRect.y,
-            fromRect.w,
-            fromRect.h
-        );
+        function pointOnSide(r, side) {
+            if (side === 'top') return { x: r.x, y: r.top, side: side };
+            if (side === 'bottom') return { x: r.x, y: r.bottom, side: side };
+            if (side === 'left') return { x: r.left, y: r.y, side: side };
+            return { x: r.right, y: r.y, side: 'right' };
+        }
 
-        // Punto exacto donde termina la curva en el borde del nodo destino
-        var end = intersectRect(
-            toRect.x,
-            toRect.y,
-            fromRect.x,
-            fromRect.y,
-            toRect.w,
-            toRect.h
-        );
+        function opposite(side) {
+            if (side === 'top') return 'bottom';
+            if (side === 'bottom') return 'top';
+            if (side === 'left') return 'right';
+            return 'left';
+        }
+
+        var fromSide = chooseSide(fromRect, toRect);
+        var toSide = opposite(chooseSide(fromRect, toRect));
+
+        // Si por la geometría del destino conviene otro lado más natural, usar el lado que mira al origen.
+        toSide = chooseSide(toRect, fromRect);
+
+        var start = pointOnSide(fromRect, fromSide);
+        var end = pointOnSide(toRect, toSide);
 
         return {
             sx: start.x,
             sy: start.y,
             tx: end.x,
-            ty: end.y
+            ty: end.y,
+            fromSide: start.side,
+            toSide: end.side
         };
     }
 
@@ -398,22 +424,22 @@
             var w = el ? el.offsetWidth : 300;
             var h = el ? el.offsetHeight : 150;
 
-            if (pos.x + w + 160 > maxX) maxX = pos.x + w + 160;
-            if (pos.y + h + 160 > maxY) maxY = pos.y + h + 160;
+            if ((pos.x + w + 160) * zoom > maxX) maxX = (pos.x + w + 160) * zoom;
+            if ((pos.y + h + 160) * zoom > maxY) maxY = (pos.y + h + 160) * zoom;
         });
 
         maxX = Math.max(maxX, canvas ? canvas.clientWidth : 0);
         maxY = Math.max(maxY, canvas ? canvas.clientHeight : 0);
 
         if (world && world !== canvas) {
-            world.style.width = maxX + 'px';
-            world.style.height = maxY + 'px';
+            world.style.width = Math.ceil(maxX) + 'px';
+            world.style.height = Math.ceil(maxY) + 'px';
         }
 
-        svg.setAttribute("width", maxX);
-        svg.setAttribute("height", maxY);
-        svg.style.width = maxX + 'px';
-        svg.style.height = maxY + 'px';
+        svg.setAttribute("width", Math.ceil(maxX));
+        svg.setAttribute("height", Math.ceil(maxY));
+        svg.style.width = Math.ceil(maxX) + 'px';
+        svg.style.height = Math.ceil(maxY) + 'px';
     }
 
     // ====== aristas
@@ -439,22 +465,22 @@
             // Anclaje preciso sobre el borde de cada nodo
             var a = edgeAnchors(from, to);
 
-            // Curvatura suave
-            var dx = (a.tx - a.sx) * 0.3;
-            var dy = (a.ty - a.sy) * 0.3;
-
-            var d;
-            if (a.mode === 'horizontal') {
-                d = 'M ' + a.sx + ' ' + a.sy +
-                    ' C ' + (a.sx + dx) + ' ' + a.sy + ', ' +
-                    (a.tx - dx) + ' ' + a.ty + ', ' +
-                    a.tx + ' ' + a.ty;
-            } else {
-                d = 'M ' + a.sx + ' ' + a.sy +
-                    ' C ' + a.sx + ' ' + (a.sy + dy) + ', ' +
-                    a.tx + ' ' + (a.ty - dy) + ', ' +
-                    a.tx + ' ' + a.ty;
+            // Curvatura suave saliendo desde el puerto elegido.
+            function tangent(side, len) {
+                if (side === 'right') return { x: len, y: 0 };
+                if (side === 'left') return { x: -len, y: 0 };
+                if (side === 'bottom') return { x: 0, y: len };
+                return { x: 0, y: -len };
             }
+
+            var dist = Math.max(48, Math.min(180, Math.abs(a.tx - a.sx) + Math.abs(a.ty - a.sy)) * 0.35);
+            var t1 = tangent(a.fromSide, dist);
+            var t2 = tangent(a.toSide, dist);
+
+            var d = 'M ' + a.sx + ' ' + a.sy +
+                ' C ' + (a.sx + t1.x) + ' ' + (a.sy + t1.y) + ', ' +
+                (a.tx + t2.x) + ' ' + (a.ty + t2.y) + ', ' +
+                a.tx + ' ' + a.ty;
 
             // Path
             var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -494,6 +520,8 @@
 
             svg.appendChild(label);
         });
+
+        renderMiniMap();
     }
 
 
@@ -741,6 +769,216 @@
         out.style.display = 'block';
     }
     window.showOutput = showOutput;
+
+
+    // ====== UI moderna: controles de canvas + minimapa liviano
+    function updateZoomLabel() {
+        var lbl = document.getElementById('wfZoomLabel');
+        if (lbl) lbl.textContent = Math.round(zoom * 100) + '%';
+    }
+
+    function setZoom(newZoom, keepCenter) {
+        if (!canvas) return;
+        var oldZoom = zoom;
+        newZoom = Math.round(clamp(newZoom, ZOOM_MIN, ZOOM_MAX) * 100) / 100;
+        if (Math.abs(newZoom - oldZoom) < 0.001) return;
+
+        var centerX = (canvas.scrollLeft + canvas.clientWidth / 2) / oldZoom;
+        var centerY = (canvas.scrollTop + canvas.clientHeight / 2) / oldZoom;
+
+        zoom = newZoom;
+        applyAllNodeVisualPositions();
+        updateZoomLabel();
+        drawEdges();
+
+        if (keepCenter !== false) {
+            canvas.scrollLeft = Math.max(0, centerX * zoom - canvas.clientWidth / 2);
+            canvas.scrollTop = Math.max(0, centerY * zoom - canvas.clientHeight / 2);
+        }
+
+        renderMiniMap();
+    }
+
+    function fitView() {
+        if (!canvas || !nodes.length) return;
+        var minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+        nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            var pos = nodePosition(n, el);
+            var w = el ? el.offsetWidth : 180;
+            var h = el ? el.offsetHeight : 70;
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x + w);
+            maxY = Math.max(maxY, pos.y + h);
+        });
+        if (!isFinite(minX) || !isFinite(minY)) return;
+
+        var pad = 120;
+        var graphW = Math.max(1, maxX - minX + pad * 2);
+        var graphH = Math.max(1, maxY - minY + pad * 2);
+        var z = Math.min(canvas.clientWidth / graphW, canvas.clientHeight / graphH);
+        z = clamp(z, ZOOM_MIN, 1.2);
+        zoom = Math.round(z * 100) / 100;
+        applyAllNodeVisualPositions();
+        updateZoomLabel();
+        drawEdges();
+        canvas.scrollLeft = Math.max(0, (minX - pad) * zoom);
+        canvas.scrollTop = Math.max(0, (minY - pad) * zoom);
+        renderMiniMap();
+    }
+
+    function ensureCanvasChrome() {
+        if (!canvas) return;
+
+        if (!document.getElementById('wfCanvasControls')) {
+            var controls = createEl('div', 'canvas-controls');
+            controls.id = 'wfCanvasControls';
+            controls.innerHTML =
+                '<button type="button" class="canvas-ctrl" id="wfZoomOut" title="Alejar">−</button>' +
+                '<span class="canvas-zoom" id="wfZoomLabel">100%</span>' +
+                '<button type="button" class="canvas-ctrl" id="wfZoomIn" title="Acercar">+</button>' +
+                '<button type="button" class="canvas-ctrl" id="wfFitView" title="Ajustar vista">⛶</button>';
+            canvas.appendChild(controls);
+
+            var zin = document.getElementById('wfZoomIn');
+            var zout = document.getElementById('wfZoomOut');
+            var fit = document.getElementById('wfFitView');
+
+            if (zin) zin.addEventListener('click', function () { setZoom(zoom + ZOOM_STEP, true); });
+            if (zout) zout.addEventListener('click', function () { setZoom(zoom - ZOOM_STEP, true); });
+            if (fit) fit.addEventListener('click', fitView);
+            updateZoomLabel();
+        }
+
+        if (!document.getElementById('wfMiniMap')) {
+            var mini = createEl('div', 'canvas-minimap');
+            mini.id = 'wfMiniMap';
+            mini.innerHTML = '<svg id="wfMiniMapSvg" viewBox="0 0 220 130" preserveAspectRatio="xMidYMid meet"></svg>';
+            canvas.appendChild(mini);
+
+            var miniSvg = document.getElementById('wfMiniMapSvg');
+            if (miniSvg) {
+                miniSvg.addEventListener('mousedown', startMiniMapPan);
+            }
+        }
+    }
+
+    function renderMiniMap() {
+        var miniSvg = document.getElementById('wfMiniMapSvg');
+        if (!miniSvg || !nodes.length) return;
+
+        var SVG_NS = 'http://www.w3.org/2000/svg';
+        while (miniSvg.firstChild) miniSvg.removeChild(miniSvg.firstChild);
+
+        var minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+        nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            var pos = nodePosition(n, el);
+            var w = el ? el.offsetWidth : 180;
+            var h = el ? el.offsetHeight : 70;
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x + w);
+            maxY = Math.max(maxY, pos.y + h);
+        });
+
+        if (!isFinite(minX) || !isFinite(minY)) return;
+        var pad = 24;
+        var graphW = Math.max(1, maxX - minX + pad * 2);
+        var graphH = Math.max(1, maxY - minY + pad * 2);
+        var sx = 220 / graphW;
+        var sy = 130 / graphH;
+        var sc = Math.min(sx, sy);
+        var ox = (220 - graphW * sc) / 2;
+        var oy = (130 - graphH * sc) / 2;
+
+        miniMapState = { minX: minX, minY: minY, pad: pad, sc: sc, ox: ox, oy: oy };
+
+        function px(x) { return ox + (x - minX + pad) * sc; }
+        function py(y) { return oy + (y - minY + pad) * sc; }
+
+        edges.forEach(function (e) {
+            var a = nodeLogicalCenter(e.from), b = nodeLogicalCenter(e.to);
+            if (!a || !b) return;
+            var line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', px(a.x));
+            line.setAttribute('y1', py(a.y));
+            line.setAttribute('x2', px(b.x));
+            line.setAttribute('y2', py(b.y));
+            line.setAttribute('class', 'minimap-edge');
+            miniSvg.appendChild(line);
+        });
+
+        nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            var pos = nodePosition(n, el);
+            var w = (el ? el.offsetWidth : 180) * sc;
+            var h = (el ? el.offsetHeight : 70) * sc;
+            var r = document.createElementNS(SVG_NS, 'rect');
+            r.setAttribute('x', px(pos.x));
+            r.setAttribute('y', py(pos.y));
+            r.setAttribute('width', Math.max(8, w));
+            r.setAttribute('height', Math.max(5, h));
+            r.setAttribute('rx', 3);
+            r.setAttribute('class', selected && selected.type === 'node' && selected.id === n.id ? 'minimap-node selected' : 'minimap-node');
+            miniSvg.appendChild(r);
+        });
+
+        if (canvas) {
+            var vp = document.createElementNS(SVG_NS, 'rect');
+            vp.setAttribute('x', px(canvas.scrollLeft / zoom));
+            vp.setAttribute('y', py(canvas.scrollTop / zoom));
+            vp.setAttribute('width', Math.max(10, (canvas.clientWidth / zoom) * sc));
+            vp.setAttribute('height', Math.max(8, (canvas.clientHeight / zoom) * sc));
+            vp.setAttribute('rx', 4);
+            vp.setAttribute('class', 'minimap-viewport');
+            miniSvg.appendChild(vp);
+        }
+    }
+
+    function miniMapEventToLogical(ev) {
+        var miniSvg = document.getElementById('wfMiniMapSvg');
+        if (!miniSvg || !miniMapState) return null;
+        var r = miniSvg.getBoundingClientRect();
+        if (!r.width || !r.height) return null;
+        var svgX = (ev.clientX - r.left) * 220 / r.width;
+        var svgY = (ev.clientY - r.top) * 130 / r.height;
+        return {
+            x: ((svgX - miniMapState.ox) / miniMapState.sc) + miniMapState.minX - miniMapState.pad,
+            y: ((svgY - miniMapState.oy) / miniMapState.sc) + miniMapState.minY - miniMapState.pad
+        };
+    }
+
+    function panCanvasToLogicalCenter(pt) {
+        if (!canvas || !pt) return;
+        canvas.scrollLeft = Math.max(0, pt.x * zoom - canvas.clientWidth / 2);
+        canvas.scrollTop = Math.max(0, pt.y * zoom - canvas.clientHeight / 2);
+        renderMiniMap();
+    }
+
+    var miniDrag = false;
+    function startMiniMapPan(ev) {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        miniDrag = true;
+        panCanvasToLogicalCenter(miniMapEventToLogical(ev));
+        document.addEventListener('mousemove', onMiniMapPan);
+        document.addEventListener('mouseup', endMiniMapPan);
+    }
+
+    function onMiniMapPan(ev) {
+        if (!miniDrag) return;
+        ev.preventDefault();
+        panCanvasToLogicalCenter(miniMapEventToLogical(ev));
+    }
+
+    function endMiniMapPan() {
+        miniDrag = false;
+        document.removeEventListener('mousemove', onMiniMapPan);
+        document.removeEventListener('mouseup', endMiniMapPan);
+    }
 
     // ====== init
     function bumpIdSeqFromExisting() {
@@ -1001,6 +1239,7 @@
     function init() {
         canvas = $('canvas'); world = $('canvasWorld') || canvas; svg = $('edgesSvg');
 
+        ensureCanvasChrome();
         ensureEdgeMarkers(svg);
 
         // Restaurar si el server mandó algo (usa posiciones si existen)
@@ -1030,8 +1269,8 @@
             if (!key) return;
             var meta = findCat(key); if (!meta) return;
             var rect = canvasRect();
-            var x = ev.clientX - rect.left + canvas.scrollLeft;
-            var y = ev.clientY - rect.top + canvas.scrollTop;
+            var x = (ev.clientX - rect.left + canvas.scrollLeft) / zoom;
+            var y = (ev.clientY - rect.top + canvas.scrollTop) / zoom;
             createNode(meta, x, y, meta.label);
         });
         canvas.addEventListener('click', function (ev) {
@@ -1041,8 +1280,8 @@
             if (ev.target && (ev.target.closest('.node') || ev.target.closest('#inspector'))) return;
             select(null);
         });
-        window.addEventListener('resize', drawEdges);
-        canvas.addEventListener('scroll', drawEdges);
+        window.addEventListener('resize', function () { drawEdges(); renderMiniMap(); });
+        canvas.addEventListener('scroll', function () { drawEdges(); renderMiniMap(); });
 
         // toolbar actions
         if ($('btnConectar')) $('btnConectar').addEventListener('click', function () {
@@ -1118,6 +1357,8 @@
         createNode: createNode,
         clearAll: clearAll,
         drawEdges: drawEdges,
+        setZoom: setZoom,
+        renderMiniMap: renderMiniMap,
         renderInspector: renderInspector,
         uid: uid
     };

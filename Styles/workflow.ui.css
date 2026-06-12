@@ -167,6 +167,7 @@ body {
 
     .canvas .node {
         position: absolute;
+        transform-origin: 0 0;
         z-index: 10; /* por encima del SVG */
         background: #fff;
         border: 1px solid #e2e8f0;
@@ -439,4 +440,693 @@ body {
 
 .toolbox__header {
     box-sizing: border-box;
+}
+
+
+/* ==========================================================
+   Concepto A - Moderno Claro (dev206)
+   Capa visual: clara, moderna, con 4 anclajes reales por nodo.
+   ========================================================== */
+:root {
+    --bg: #f6f8fc;
+    --panel: #ffffff;
+    --border: #e6ecf5;
+    --text: #0f172a;
+    --muted: #64748b;
+    --brand: #2563eb;
+    --brand-soft: #eff6ff;
+    --ok: #10b981;
+    --shadow-sm: 0 8px 22px rgba(15, 23, 42, .06);
+    --shadow-md: 0 16px 38px rgba(15, 23, 42, .10);
+}
+
+body {
+    background: radial-gradient(circle at top left, rgba(37, 99, 235, .05), transparent 32%), var(--bg);
+    color: var(--text);
+}
+
+.layout {
+    grid-template-columns: 280px minmax(0, 1fr) 320px;
+    height: calc(100vh - 132px);
+    min-height: 680px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--panel);
+    box-shadow: var(--shadow-sm);
+}
+
+.panel {
+    background: rgba(255,255,255,.96);
+    border-color: var(--border);
+}
+
+.canvas-wrap {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+}
+
+.canvas-toolbar {
+    min-height: 58px;
+    height: auto;
+    padding: 10px 14px;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(10px);
+}
+
+.btn {
+    border-color: #d9e4f6;
+    color: #334155;
+    min-height: 34px;
+    padding: 6px 14px;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15,23,42,.03);
+}
+
+    .btn:hover {
+        border-color: #b8ccf6;
+        background: #f8fbff;
+    }
+
+    .btn.active {
+        background: var(--brand);
+        color: #fff;
+        border-color: var(--brand);
+    }
+
+.wf-name {
+    height: 36px;
+    border-radius: 14px;
+    border-color: #d9e4f6;
+    font-weight: 600;
+}
+
+.wf-actions-box {
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.wf-userpill {
+    background: var(--brand-soft);
+    border-color: #bfdbfe;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.toolbox__header {
+    padding: 16px;
+}
+
+.toolbox__title {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.toolbox__search {
+    height: 36px;
+    border-color: #d9e4f6;
+    background: #fbfdff;
+}
+
+.toolbox__list {
+    height: calc(100% - 88px);
+    padding: 12px 14px 18px 14px;
+}
+
+.group__title {
+    margin: 14px 0 8px 2px;
+    font-weight: 700;
+    color: #8aa0bf;
+}
+
+.item {
+    border: 1px solid transparent;
+    border-radius: 14px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+}
+
+    .item:hover {
+        border-color: #dbeafe;
+        background: #f8fbff;
+        box-shadow: 0 6px 16px rgba(37,99,235,.06);
+    }
+
+.item__icon {
+    width: 30px;
+    height: 30px;
+}
+
+.item__label {
+    font-weight: 500;
+}
+
+.canvas {
+    background-color: #fbfdff;
+    background-image: radial-gradient(#d8e1ee 1px, transparent 1px);
+    background-size: 18px 18px;
+}
+
+    .canvas .canvas-world {
+        min-width: 1400px;
+        min-height: 900px;
+    }
+
+    .canvas .node {
+        min-width: 188px;
+        border: 1px solid #dfe8f5;
+        border-radius: 18px;
+        box-shadow: var(--shadow-sm);
+        transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+    }
+
+        .canvas .node:hover {
+            border-color: #bfdbfe;
+            box-shadow: var(--shadow-md);
+        }
+
+.node.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.15), var(--shadow-md);
+}
+
+.node__header {
+    padding: 12px 14px 6px 14px;
+}
+
+.node__icon {
+    width: 30px;
+    height: 30px;
+}
+
+.node__title {
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+.pill {
+    background: #eef6ff;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.node__body {
+    color: #8aa0bf;
+    font-size: 10.5px;
+    padding-bottom: 12px;
+}
+
+/* 4 anclajes únicos: arriba, derecha, abajo, izquierda */
+.node .port {
+    width: 11px;
+    height: 11px;
+    background: #fff;
+    border: 2px solid #7f94b3;
+    opacity: .72;
+    box-shadow: 0 0 0 3px #fff;
+    z-index: 20;
+}
+
+    .node .port.top {
+        top: -6px;
+    }
+
+    .node .port.right {
+        right: -6px;
+    }
+
+    .node .port.bottom {
+        bottom: -6px;
+    }
+
+    .node .port.left {
+        left: -6px;
+    }
+
+.node:hover .port,
+.node.selected .port,
+.connect-mode .node .port {
+    opacity: 1;
+    border-color: #2563eb;
+}
+
+.node.selected .port {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(37,99,235,.16);
+}
+
+.canvas .edges path {
+    stroke: #7589a7;
+    stroke-width: 2.1;
+}
+
+    .canvas .edges path.selected {
+        stroke: #2563eb;
+        stroke-width: 2.8;
+    }
+
+.canvas .edges text {
+    fill: #64748b;
+    font-weight: 700;
+}
+
+#inspector {
+    background: #fff;
+}
+
+.inspector__header {
+    padding: 18px 16px;
+}
+
+.inspector__title {
+    font-weight: 800;
+    color: #8aa0bf;
+}
+
+#inspectorTitle {
+    font-size: 14px;
+}
+
+#inspectorBody {
+    padding: 16px;
+}
+
+.input, .textarea, select.input {
+    min-height: 36px;
+    border-radius: 14px;
+    border-color: #d9e4f6;
+}
+
+.textarea {
+    min-height: 118px;
+}
+
+.canvas-controls {
+    position: sticky;
+    left: 16px;
+    bottom: 16px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin: 0 0 16px 16px;
+    background: rgba(255,255,255,.94);
+    border: 1px solid #dbe7f6;
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.canvas-ctrl,
+.canvas-zoom {
+    height: 38px;
+    min-width: 42px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-right: 1px solid #e6ecf5;
+    background: transparent;
+    color: #334155;
+    font-weight: 800;
+}
+
+.canvas-zoom {
+    min-width: 70px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.canvas-ctrl:last-child {
+    border-right: 0;
+}
+
+.canvas-ctrl:hover {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.canvas-minimap {
+    position: sticky;
+    left: calc(100% - 250px);
+    bottom: 16px;
+    width: 220px;
+    height: 130px;
+    z-index: 39;
+    margin: 0 16px 16px auto;
+    background: rgba(255,255,255,.92);
+    border: 1px solid #c7dbff;
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+    .canvas-minimap svg {
+        width: 100%;
+        height: 100%;
+    }
+
+.minimap-edge {
+    stroke: #b8c7da;
+    stroke-width: 1.3;
+}
+
+.minimap-node {
+    fill: #dbeafe;
+    stroke: #93c5fd;
+    stroke-width: 1;
+}
+
+    .minimap-node.selected {
+        fill: #93c5fd;
+        stroke: #2563eb;
+        stroke-width: 1.5;
+    }
+
+@media (max-width: 1200px) {
+    .layout {
+        grid-template-columns: 250px minmax(0, 1fr) 300px;
+    }
+}
+
+
+/* ===== Concepto A dev207: pulido visual sin tocar lógica ===== */
+.canvas-toolbar {
+    min-height: 48px;
+    height: auto;
+    gap: 10px;
+    padding: 8px 16px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(6px);
+}
+
+.btn {
+    min-height: 34px;
+    border-color: #d6e2f3;
+    color: #1e3558;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15,23,42,.03);
+}
+
+    .btn:hover {
+        border-color: #93c5fd;
+        background: #f8fbff;
+    }
+
+.canvas .node {
+    min-width: 188px;
+    border-color: #d9e5f4;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, .055);
+}
+
+    .canvas .node:hover {
+        transform: translateY(-1px);
+    }
+
+.node.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.14), 0 12px 30px rgba(37,99,235,.10);
+}
+
+/* Los 4 anclajes quedan visibles, pero más finos para no ensuciar el grafo. */
+.node .port {
+    width: 10px;
+    height: 10px;
+    border: 2px solid #8aa0bf;
+    opacity: .58;
+    box-shadow: 0 0 0 3px #fff;
+}
+
+.node:hover .port,
+.node.selected .port,
+.connect-mode .node .port {
+    opacity: 1;
+    border-color: #2563eb;
+}
+
+.connect-mode .node .port {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px rgba(37,99,235,.10);
+}
+
+.canvas .edges path {
+    stroke: #6f83a3;
+    stroke-width: 2;
+}
+
+.canvas .edges text {
+    font-size: 10px;
+    letter-spacing: .01em;
+    fill: #52657f;
+    stroke-width: 4;
+}
+
+.canvas-minimap {
+    background: rgba(255,255,255,.88);
+    border: 1px solid #cfe0f4;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+}
+
+.minimap-viewport {
+    fill: rgba(37,99,235,.08);
+    stroke: #2563eb;
+    stroke-width: 1.6;
+    pointer-events: none;
+}
+
+.canvas-controls {
+    background: rgba(255,255,255,.92);
+    border: 1px solid #d6e2f3;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+}
+
+.canvas-ctrl,
+.canvas-zoom {
+    color: #1e3558;
+    font-weight: 700;
+}
+
+/* ===== Concepto A dev208: correcciones de compactación y toolbar/canvas ===== */
+/* Volver la caja de herramientas a una densidad similar a la versión anterior. */
+.toolbox__header {
+    padding: 12px 14px;
+}
+
+.toolbox__title {
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.toolbox__search {
+    height: 32px;
+}
+
+.toolbox__list {
+    height: calc(100% - 68px);
+    padding: 8px 10px 12px 10px;
+}
+
+.group {
+    margin-bottom: 8px;
+}
+
+.group__title {
+    margin: 8px 0 5px 2px;
+    font-size: 10.5px;
+}
+
+.item {
+    border-radius: 12px;
+    padding: 5px 8px;
+    margin-bottom: 2px;
+    gap: 8px;
+}
+
+.item__icon {
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+    flex: 0 0 26px;
+}
+
+.item__label {
+    font-size: 12px;
+    line-height: 1.15;
+}
+
+/* Evitar que el canvas invada o parezca pisar la toolbar cuando el ancho se achica.
+   La toolbar queda en una sola línea con scroll horizontal propio si no entra. */
+.canvas-wrap {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.canvas-toolbar.wf-toolbar {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+}
+
+.canvas-toolbar .wf-name,
+.canvas-toolbar .wf-actions-box,
+.canvas-toolbar .btn,
+.canvas-toolbar .wf-userpill {
+    flex: 0 0 auto;
+}
+
+.canvas {
+    min-height: 0;
+    outline: none;
+    border-top: 1px solid var(--border);
+}
+
+    .canvas:focus,
+    .canvas:focus-visible {
+        outline: none;
+    }
+
+
+/* ===== Concepto A dev209: layout sin bandas grises + toolbox compacto + toolbar sin solaparse ===== */
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* El topbar queda arriba; el editor ocupa todo el alto restante sin margen gris superior/inferior. */
+.wf-editor-main {
+    height: calc(100vh - 64px);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+    .wf-editor-main > .layout {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+/* Menos aire vertical en la caja de herramientas: más nodos visibles sin tanto scroll. */
+.toolbox__header {
+    padding: 10px 12px;
+}
+
+.toolbox__title {
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.toolbox__search {
+    height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.toolbox__list {
+    height: calc(100% - 62px);
+    padding: 7px 8px 10px 8px;
+}
+
+.group {
+    margin-bottom: 6px;
+}
+
+.group__title {
+    margin: 7px 0 4px 2px;
+    font-size: 10px;
+    line-height: 1.1;
+}
+
+.item {
+    min-height: 30px;
+    padding: 3px 6px;
+    margin-bottom: 1px;
+    gap: 7px;
+    border-radius: 11px;
+}
+
+.item__icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    font-size: 12px;
+}
+
+.item__label {
+    font-size: 12px;
+    line-height: 1.1;
+}
+
+/* La toolbar del canvas queda siempre por encima y no se recorta cuando F12 achica el ancho. */
+.canvas-wrap {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.canvas-toolbar.wf-toolbar {
+    position: relative;
+    z-index: 20;
+    flex: 0 0 50px;
+    min-height: 50px;
+    height: 50px;
+    box-sizing: border-box;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+    .canvas-toolbar.wf-toolbar::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    .canvas-toolbar.wf-toolbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 999px;
+    }
+
+.canvas-toolbar .wf-name,
+.canvas-toolbar .wf-actions-box,
+.canvas-toolbar .btn,
+.canvas-toolbar .wf-userpill {
+    flex: 0 0 auto;
+}
+
+.canvas-toolbar .btn {
+    min-height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.canvas {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-top: 0;
+}
+
+
+/* ===== Concepto A dev210: zoom real + minimapa navegable ===== */
+.canvas-minimap svg {
+    cursor: pointer;
+}
+
+.minimap-viewport {
+    cursor: move;
+    pointer-events: all;
+}
+
+.canvas-ctrl:active {
+    transform: translateY(1px);
 }

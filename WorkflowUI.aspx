@@ -8,7 +8,7 @@
   <meta charset="utf-8" />
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
-   <link rel="stylesheet" href="Styles/workflow.ui.css" />
+   <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
 
   <style>
      body { background: #f6f7fb; }
@@ -26,7 +26,7 @@
          <!-- Topbar coherente -->
    <ws:Topbar runat="server" ID="Topbar1" />
 
-   <main class="container-fluid px-3 px-md-4 py-4">
+   <main class="container-fluid px-3 px-md-4 py-0 wf-editor-main">
       <asp:ScriptManager ID="sm1" runat="server" EnablePageMethods="true" />
       <asp:HiddenField ID="hfWorkflow" runat="server" ClientIDMode="Static" ValidateRequestMode="Disabled" />
       <asp:HiddenField ID="hfDefId" runat="server" ClientIDMode="Static" />
@@ -166,7 +166,7 @@
     <!-- JS de la IU -->
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
-    <script src="Scripts/workflow.ui.js?v=dev205"></script>
+    <script src="Scripts/workflow.ui.js?v=dev210"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
