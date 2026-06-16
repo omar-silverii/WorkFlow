@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=dev002" />
 
   <style>
      body { background: #f6f7fb; }
@@ -94,6 +95,21 @@
           <div id="inspectorTitle" class="inspector__entity">Seleccioná un nodo o una arista</div>
           <div id="inspectorSub" class="inspector__sub"></div>
         </div>
+
+        <div class="wf-ai-panel" id="wfAiPanel">
+          <div class="wf-ai-kicker">Asistente IA</div>
+          <div class="wf-ai-title">Constructor guiado de workflows</div>
+          <textarea id="wfAiPrompt"
+                    class="wf-ai-textarea"
+                    placeholder="Ejemplo: Quiero cargar una nota de crédito y si supera 300000 mandarla a Dirección."></textarea>
+          <div class="wf-ai-actions">
+            <button type="button" class="btn" id="wfAiRun">Interpretar</button>
+            <button type="button" class="btn" id="wfAiClear">Limpiar</button>
+          </div>
+          <div id="wfAiStatus" class="wf-ai-status"></div>
+          <div id="wfAiResult" class="wf-ai-result"></div>
+        </div>
+
         <div id="inspectorBody"></div>
       </div>
     </div>
@@ -167,6 +183,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=dev002"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>

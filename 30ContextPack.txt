@@ -1,0 +1,638 @@
+# CONTEXTPACK — Workflow Studio
+
+## Cierre de sesión — UI moderna estable + nueva línea Asistente IA offline
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* no inventar código
+* no asumir que el código quedó como en el chat
+* si hay duda, manda siempre el ZIP real
+* no reemplazar archivos completos sin haber revisado el archivo real actual
+* no cambiar arquitectura sin necesidad
+* no reescribir cosas que ya funcionan
+* aplicar cambios mínimos y profesionales
+* preferir formato:
+  `DONDE DICE → REEMPLAZAR POR`
+* si falta una pieza, pedirla
+* si algo no cierra, decirlo
+* no reabrir temas cerrados salvo bug real
+* no tocar líneas estables sin necesidad
+
+## 2. Estado general del proyecto
+
+Workflow Studio ya está funcionando en servidores reales de la empresa.
+
+El proyecto sigue siendo:
+
+* ASP.NET WebForms
+* .NET Framework 4.8
+* C#
+* SQL Server
+* una sola base
+* una sola conexión principal `DefaultConnection`
+* motor propio de workflows
+* grafos visuales persistidos en SQL
+* nodos ejecutados por handlers `IManejadorNodo`
+* uso de `ctx.Estado` como estado principal
+* claves técnicas `wf.*`
+* claves de negocio `biz.*`
+
+## 3. Migración SQL
+
+La migración desde SQL Server Express 16.x hacia SQL Server 2016 ya quedó resuelta mediante scripts:
+
+* Schema only
+* Data only
+
+No reabrir esta línea salvo problema real nuevo.
+
+## 4. FACTURA_ELECTRONICA_AR
+
+La línea `FACTURA_ELECTRONICA_AR` ya estaba validada previamente.
+
+Estado:
+
+* DocTipo: `FACTURA_ELECTRONICA_AR`
+* ContextPrefix: `factura`
+* MotorExtraccion: `FACTURA_AR`
+* Extractor: `FacturaElectronicaArExtractor.cs`
+* Validado con factura real tipo C
+* Cabecera, emisor, receptor, CAE, importes e ítems funcionando
+
+No tocar salvo:
+
+* bug real
+* nuevo comprobante real
+* ampliación de casuística necesaria
+
+## 5. NOTA_CREDITO_ELECTRONICA_AR / NC_AR
+
+En esta sesión se incorporó y validó el nuevo DocTipo para nota de crédito electrónica argentina.
+
+Decisión funcional:
+
+```text
+Codigo = NOTA_CREDITO_ELECTRONICA_AR
+Nombre = Nota de crédito electrónica AFIP
+ContextPrefix = notaCredito
+MotorExtraccion = NC_AR
+```
+
+Se creó extractor propio:
+
+```text
+DocumentProcessing/NotaCreditoElectronicaArExtractor.cs
+```
+
+Se decidió separar motor y DocTipo porque las notas de crédito son comprobantes propios y no conviene mezclar toda la casuística dentro de `FACTURA_AR`.
+
+### Decisiones de datos
+
+Los importes se guardan positivos tal como vienen en el PDF.
+
+Además se agregan campos de comportamiento:
+
+```text
+biz.notaCredito.esNotaCredito = true
+biz.notaCredito.signo = -1
+biz.notaCredito.tipoMovimiento = CREDITO
+```
+
+Se agregan datos del comprobante asociado:
+
+```text
+biz.notaCredito.comprobanteAsociado.tipo
+biz.notaCredito.comprobanteAsociado.numero
+biz.notaCredito.comprobanteAsociado.letra
+biz.notaCredito.comprobanteAsociado.puntoVenta
+biz.notaCredito.comprobanteAsociado.numeroComprobante
+```
+
+### Script SQL
+
+Al correr el alta del nuevo DocTipo apareció error:
+
+```text
+CHECK constraint CK_WF_DocTipo_MotorExtraccion
+```
+
+Causa:
+
+La columna `MotorExtraccion` ya existía, pero el constraint solo permitía valores anteriores, por ejemplo:
+
+```text
+REGLAS
+FACTURA_AR
+```
+
+Solución aplicada/recomendada:
+
+```sql
+ALTER TABLE dbo.WF_DocTipo
+DROP CONSTRAINT CK_WF_DocTipo_MotorExtraccion;
+GO
+
+ALTER TABLE dbo.WF_DocTipo WITH CHECK
+ADD CONSTRAINT CK_WF_DocTipo_MotorExtraccion
+CHECK (MotorExtraccion IN ('REGLAS', 'FACTURA_AR', 'NC_AR'));
+GO
+
+ALTER TABLE dbo.WF_DocTipo
+CHECK CONSTRAINT CK_WF_DocTipo_MotorExtraccion;
+GO
+```
+
+Luego se pudo dar de alta el DocTipo con `NC_AR`.
+
+### Prueba real
+
+PDF probado:
+
+```text
+C:\Temp\NC_00002_00000001.pdf
+```
+
+Importante:
+
+En el editor visual, el campo `path` de `doc.load` debe cargarse limpio así:
+
+```text
+C:\Temp\NC_00002_00000001.pdf
+```
+
+No debe pegarse JSON ni `"path":`.
+
+Si se pega JSON dentro del campo, `doc.load` intenta abrir literalmente ese texto y falla.
+
+### Resultado validado
+
+Instancia validada:
+
+```text
+150466
+```
+
+Datos confirmados:
+
+```text
+wf.motorExtraccion = NC_AR
+biz.notaCredito.validacionBasicaOk = true
+biz.notaCredito.itemsCount = 1
+```
+
+Campos correctos:
+
+```text
+biz.notaCredito.numero = 00002-00000001
+biz.notaCredito.fecha = 02/01/2020
+biz.notaCredito.codigoAfip = 203
+biz.notaCredito.cae = 70010265448347
+biz.notaCredito.caeVencimiento = 02/01/2020
+biz.notaCredito.total = 412247.0
+biz.notaCredito.comprobanteAsociado.numero = 00002-00000015
+```
+
+Ítem extraído correctamente:
+
+```json
+{
+  "descripcion": "Anula factura por servicio de soporte y mantenimiento Cold400 y EDMS Windows año 2020",
+  "cantidad": 1.0,
+  "unidadMedida": "unidades",
+  "precioUnitario": 340700.0,
+  "bonificacionPorcentaje": 0.0,
+  "subtotal": 340700.0,
+  "alicuotaIva": "21%",
+  "subtotalConIva": 412247.0
+}
+```
+
+La primera versión del extractor no detectaba ítems porque PdfPig separaba la palabra `unidades` en otra línea. Se corrigió y quedó validado.
+
+Estado:
+
+```text
+NOTA_CREDITO_ELECTRONICA_AR + NC_AR validado correctamente con PDF real.
+```
+
+No tocar salvo nuevo bug o nuevo formato real.
+
+## 6. UI WorkflowUI — línea Concepto A Moderno Claro
+
+Se trabajó fuerte sobre la UI/canvas de `WorkflowUI`.
+
+Archivos principales:
+
+```text
+WorkflowUI.aspx
+Styles/workflow.ui.css
+Scripts/workflow.ui.js
+```
+
+### 6.1 Bug inicial de aristas
+
+Problema:
+
+Con grafos grandes, al hacer scroll y mover nodos, las flechas se desanclaban.
+
+Síntomas:
+
+* mover `End` desacomodaba muchas flechas
+* mover `Start` las reacomodaba
+* había mezcla de coordenadas visuales, scroll y modelo
+
+Se corrigió y quedó estable con:
+
+```javascript
+window.__WF_UI_BUILD = 'aristas-dom-offset-dev205'
+```
+
+Script esperado:
+
+```text
+Scripts/workflow.ui.js?v=dev205
+```
+
+Estado:
+
+```text
+dev205 validado
+```
+
+No seguir tocando aristas salvo bug real.
+
+### 6.2 Concepto visual elegido
+
+Se generaron imágenes de referencia y Omar eligió:
+
+```text
+Concepto A - Moderno Claro
+```
+
+Decisiones visuales:
+
+* diseño claro
+* moderno
+* profesional
+* sin tema oscuro
+* sin swimlanes fijos de COMPRAS / OPERACIONES / ADM_FIN
+* canvas genérico para cualquier workflow
+* nodos limpios
+* minimapa
+* controles de zoom
+* inspector derecho
+* caja de herramientas compacta
+
+Se descartó separar visualmente por sectores fijos porque podría confundir cuando el workflow no sea de compras.
+
+### 6.3 Cuatro anclajes por nodo
+
+Omar pidió explícitamente que los nodos tengan 4 puntos de conexión, no 8.
+
+Decisión:
+
+Cada nodo debe tener exactamente:
+
+```text
+1 anclaje arriba
+1 anclaje derecha
+1 anclaje abajo
+1 anclaje izquierda
+```
+
+No usar puntos en las esquinas.
+
+Las flechas deben salir y llegar desde esos puntos.
+
+Versión validada:
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-4-anclajes-dev206'
+```
+
+Estado:
+
+```text
+dev206 validado
+4 anclajes OK
+aristas ancladas OK
+scroll + mover nodos OK
+minimapa visible OK
+```
+
+### 6.4 Pulido visual
+
+Se aplicó pulido visual posterior.
+
+Versión:
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-pulido-visual-dev207'
+```
+
+Luego se ajustó compactación y layout.
+
+### 6.5 Caja de herramientas y layout
+
+Omar detectó:
+
+* caja de herramientas demasiado aireada
+* obligaba a hacer demasiado scroll
+* con F12 abierto la toolbar/canvas se superponía o recortaba
+* había bandas grises arriba y abajo del editor
+
+Se corrigió con:
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-ajuste-layout-dev209'
+```
+
+Script esperado:
+
+```text
+Scripts/workflow.ui.js?v=dev209
+```
+
+Estado dev209 validado:
+
+```text
+4 anclajes por nodo funcionando
+aristas se mantienen al mover/scroll
+minimapa visible
+caja de herramientas compacta nuevamente
+layout sin banda gris superior/inferior
+toolbar/canvas no se superponen con F12 abierto
+```
+
+No tocar esta base salvo pulido pedido o bug real.
+
+### 6.6 Zoom y minimapa navegable
+
+Omar pidió:
+
+* que funcione el zoom
+* que el rectángulo visible del minimapa se pueda mover con mouse
+* que al moverlo se mueva el canvas
+
+Se implementó sobre base estable.
+
+Versión:
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-zoom-minimap-dev210'
+```
+
+Script esperado:
+
+```text
+Scripts/workflow.ui.js?v=dev210
+```
+
+Resultado:
+
+```text
+dev210 funcionó de una
+zoom + / - funcionando
+movimiento de nodos compatible con zoom
+aristas ancladas con zoom
+minimapa navegable con mouse
+fit/centrar funcionando
+```
+
+Omar quedó muy conforme.
+
+### 6.7 Mini bug pendiente dev210
+
+Bug no urgente:
+
+Si el usuario cambia zoom, por ejemplo al 50%, y guarda el workflow, al guardar/recargar vuelve visualmente a 100%.
+
+Observación:
+
+* el grafo y las posiciones están bien
+* lo que no se persiste es el estado visual del zoom
+* no es urgente
+
+Pendiente futuro:
+
+Decidir si el zoom se guarda:
+
+```text
+por definición
+por usuario
+en localStorage
+en Meta del workflow
+```
+
+Por ahora dejar anotado para futuros ContextPack.
+
+## 7. Nueva línea grande — Asistente IA
+
+Omar planteó una preocupación muy importante:
+
+Después de estar más de un mes sin tocar el proyecto, al volver al editor se sintió paralizado para crear grafos. No sabía por dónde empezar ni qué grafo hacía qué cosa.
+
+Conclusión:
+
+El problema no es técnico sino de experiencia de creación.
+
+El usuario final podría sentir:
+
+```text
+Esto es muy complicado, no lo quiero usar.
+```
+
+Se conversó primero sobre plantillas y asistente guiado, pero Omar aclaró que NO quiere una solución simple del tipo:
+
+```text
+Aprobación simple → grafo terminado
+```
+
+Quiere algo más interactivo.
+
+### 7.1 Idea deseada
+
+Crear una experiencia donde el usuario vaya diciendo lo que quiere hacer y el sistema lo ayude progresivamente.
+
+Ejemplos:
+
+```text
+Quiero validar.
+Quiero enviar a fulano o a tal rol.
+Quiero mandar un correo.
+Quiero guardar en base.
+Quiero cargar una factura.
+Quiero pedir aprobación si supera cierto importe.
+```
+
+Y el sistema debería:
+
+* interpretar la intención
+* proponer nodos
+* pedir datos faltantes
+* mostrar usuarios/roles válidos
+* dibujar nodos en el canvas
+* conectarlos progresivamente
+* validar lo generado
+* enseñar mientras construye
+
+Omar quiere algo más cercano a un copiloto/asistente de construcción de workflows que a plantillas cerradas.
+
+### 7.2 Decisión de nombre
+
+Nombre elegido:
+
+```text
+Asistente IA
+```
+
+### 7.3 Decisión estratégica
+
+Omar propuso pensar en grande: Workflow Studio con asistencia de IA sería mucho más vendible.
+
+Se acordó animarse a una línea grande, pero con arquitectura seria.
+
+Principio central:
+
+```text
+La IA interpreta y propone.
+Workflow Studio valida y aplica.
+```
+
+La IA no debe tocar SQL, código C# ni modificar archivos directamente.
+
+Debe devolver una estructura controlada que el sistema valida.
+
+### 7.4 Decisión crítica: sin internet / intranet
+
+Omar aclaró algo fundamental:
+
+```text
+No podemos salir a internet.
+Debe pensarse desde el inicio para intranet.
+```
+
+Por lo tanto:
+
+* no diseñar la primera versión dependiendo de OpenAI API externa
+* no hacer algo que funcione en desarrollo pero falle al pasar a intranet
+* pensar desde el arranque en un Asistente IA offline/local o intranet-compatible
+* aceptar que cueste más, pero hacerlo con el escenario real de uso
+
+Esta decisión es clave y debe respetarse.
+
+### 7.5 Arquitectura conceptual deseada
+
+Flujo conceptual:
+
+```text
+Usuario escribe intención
+        ↓
+Asistente IA local/intranet interpreta
+        ↓
+Devuelve plan estructurado
+        ↓
+Validador interno revisa coherencia
+        ↓
+Compilador de acciones transforma plan en nodos/aristas
+        ↓
+Canvas dibuja el grafo
+        ↓
+Usuario confirma/corrige/sigue agregando
+```
+
+### 7.6 La IA no debe inventar
+
+El Asistente IA solo puede trabajar con el conocimiento del producto:
+
+* nodos existentes
+* parámetros válidos
+* DocTipos activos
+* roles disponibles
+* usuarios disponibles
+* variables disponibles
+* outputs conocidos
+* reglas de conexión
+* handlers implementados
+* convenciones `wf.*`, `biz.*`, `input.*`
+
+Si el usuario pide algo inexistente, el asistente debe decirlo y ofrecer una alternativa posible con nodos reales.
+
+### 7.7 Primera línea de diseño futuro
+
+Antes de código, diseñar un documento:
+
+```text
+Diseño del Asistente IA de Workflow Studio v1
+```
+
+Debe definir:
+
+* qué puede pedir el usuario
+* qué acciones puede devolver el asistente
+* qué nodos puede crear
+* qué validaciones internas se aplican
+* cómo se representa la respuesta
+* cómo se pide información faltante
+* cómo se aplica al canvas
+* cómo se revierte/cancela una propuesta
+* cómo se explica lo que creó
+* cómo funciona sin internet
+
+### 7.8 Posible primera implementación futura
+
+No implementar todavía sin analizar.
+
+Idea de módulos posibles:
+
+```text
+WF_AI_Assistant.aspx
+Api/WF_AiBuilder.ashx
+Servicios locales para catálogo de nodos
+Catálogo de intenciones
+Catálogo de acciones permitidas
+Validador de acciones
+Aplicador de acciones al canvas
+```
+
+Pero primero hay que revisar ZIP real y diseñar bien.
+
+## 8. Temas que NO deben reabrirse ahora
+
+No reabrir salvo pedido explícito:
+
+* RBAC por alcance
+* migración SQL ya resuelta
+* FACTURA_AR si no hay bug
+* NC_AR si no hay nuevo comprobante o bug
+* aristas/canvas dev210 si no aparece bug real
+
+## 9. Estado emocional/proyecto
+
+La sesión cerró con mucho entusiasmo.
+
+Omar está muy conforme con:
+
+* NC_AR funcionando
+* UI Concepto A Moderna Claro estable
+* zoom y minimapa funcional
+* idea de Asistente IA
+
+Pero se decidió cerrar por cansancio porque ya eran las 3 AM.
+
+Próximo día:
+
+* Omar va a subir los cambios a GitHub
+* va a generar ZIP actualizado
+* va a pasar este ContextPack y un prompt de arranque
+* se retomará con calma
+
+Criterio al retomar:
+
+```text
+Grande, profesional, valiente, pero sin romper lo que funciona.
+```
