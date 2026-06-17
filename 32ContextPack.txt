@@ -1,0 +1,813 @@
+# CONTEXTPACK — Workflow Studio / Asistente IA / fix8C + fix9 + nodo email.send
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó como en el chat.
+* No reemplazar archivos completos sin revisar el archivo real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Hacer cambios mínimos y profesionales.
+* Preferir formato `DONDE DICE → REEMPLAZAR POR`.
+* Si falta una pieza, pedirla.
+* Si algo no cierra, decirlo.
+* No reabrir temas cerrados salvo bug real.
+* No tocar líneas estables sin necesidad.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo necesidad real.
+* No tocar FACTURA_AR, NC_AR, extractores ni motor de ejecución salvo bug real.
+
+## 2. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una sola conexión principal `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Uso de `ctx.Estado` como estado principal.
+* Claves técnicas `wf.*`.
+* Claves de negocio `biz.*`.
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+## 3. Líneas estables que NO se deben tocar ahora
+
+No tocar salvo bug real:
+
+* `FACTURA_ELECTRONICA_AR`
+* `FACTURA_AR`
+* `NOTA_CREDITO_ELECTRONICA_AR`
+* `NC_AR`
+* Extractores documentales ya validados.
+* Motor de ejecución.
+* WorkflowUI dev210.
+* Canvas.
+* Aristas.
+* Zoom.
+* Minimap.
+
+## 4. Estado UI WorkflowUI
+
+Base estable:
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-zoom-minimap-dev210'
+```
+
+Estado validado previamente:
+
+* 4 anclajes por nodo.
+* Aristas estables.
+* Scroll OK.
+* Mover nodos OK.
+* Zoom funcionando.
+* Minimap visible y navegable.
+* Fit/centrar funcionando.
+* Caja de herramientas compacta.
+* Layout estable con F12 abierto.
+
+En fix9 se tocó `workflow.ui.js` solo para exponer una API pública controlada:
+
+```javascript
+window.__WF_UI.applyAiPlan(...)
+```
+
+No se modificó el algoritmo estable de aristas, zoom ni minimapa.
+
+## 5. Decisión Asistente IA
+
+Se descartó definitivamente Ollama / llama3.1.
+
+La línea correcta del producto quedó:
+
+```text
+Asistente IA local con ML.NET + CSV + modelo externo entrenado
+```
+
+Principio central:
+
+```text
+La IA interpreta.
+Workflow Studio valida.
+Workflow Studio aplica.
+```
+
+La IA no genera código, no toca SQL directamente y no modifica archivos. Propone acciones, valida contra catálogos reales y luego aplica al canvas mediante lógica controlada.
+
+## 6. Arquitectura actual del Asistente IA
+
+Hay dos partes separadas.
+
+### 6.1 Proyecto WebForms
+
+Workflow Studio WebForms solo consume el modelo entrenado.
+
+Ruta esperada del modelo:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+Configuración esperada en `Web.config`:
+
+```xml
+<add key="WF_AI_PROVIDER" value="mlnet" />
+<add key="WF_AI_MLNET_MODEL_PATH" value="App_Data/WF_AI/workflow_intent_model.zip" />
+<add key="WF_AI_MLNET_MIN_CONFIDENCE" value="0.25" />
+```
+
+No debe volver la configuración de Ollama.
+
+### 6.2 Proyecto entrenador separado
+
+Proyecto separado:
+
+```text
+WorkflowStudio.AITrainer
+```
+
+Responsabilidad:
+
+* Leer CSV.
+* Entrenar modelo.
+* Generar `workflow_intent_model.zip`.
+* Permitir prueba rápida de frases.
+* Copiar modelo al WebForms si se usa `--install-to`.
+
+Estructura esperada:
+
+```text
+WorkflowStudio.AITrainer
+│
+├── Data
+│   └── workflow_intents.csv
+│
+├── ModelOutput
+│   └── workflow_intent_model.zip
+│
+├── Program.cs
+└── WorkflowStudio.AITrainer.csproj
+```
+
+Workflow Studio NO debe entrenar en runtime.
+
+El entrenador vive afuera. Workflow Studio solo consume el modelo.
+
+## 7. Archivos principales del Asistente IA en WebForms
+
+Archivos relevantes:
+
+```text
+Api/WF_AiAssistant.ashx
+Api/WF_AiAssistant.ashx.cs
+
+App_Code/Ai/WfAiAssistantModels.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+App_Code/Ai/WfAiMlnetProvider.cs
+App_Code/Ai/WfAiPlanValidator.cs
+
+Scripts/workflow.ai.assistant.js
+Styles/workflow.ai.assistant.css
+```
+
+Se eliminó la línea anterior de proveedor local/Ollama:
+
+```text
+App_Code/Ai/WfAiLocalModelProvider.cs
+```
+
+No debe usarse ni compilarse.
+
+## 8. fix8C — Branch Planner / Branch Connector validado
+
+Durante esta sesión se validó `fix8C`.
+
+Quedó estable:
+
+* Propuestas con `util.start`.
+* Propuestas con `util.end`.
+* Conexiones propuestas antes de aplicar al canvas.
+* Ramas SI/NO correctas.
+* Reconocimiento de “caso contrario”.
+* Reconocimiento de “de lo contrario”.
+* Reconocimiento de “si no lo supera”.
+* Reconocimiento de “si no supera ese importe”.
+* Importes como `$ 200.000` interpretados como `200000`.
+* Orden no lineal de frases.
+* Reutilización de un mismo rol/tarea cuando dos ramas van al mismo destino.
+* Condiciones incompletas conservadas con datos faltantes.
+* Negaciones tipo “no debe ir a Dirección, debe ir a Compras”.
+* Roles reales resueltos desde catálogo, por ejemplo `LEGALES`.
+
+Caso `LEGALES` quedó correcto porque existe en `WF_Rol`:
+
+```text
+RolKey: LEGALES
+Nombre: Legales / Jurídico
+Activo: 1
+```
+
+No era invención de la IA.
+
+## 9. Frase principal validada
+
+Frase:
+
+```text
+Quiero cargar una NC, validar que tenga CAE, si no tiene CAE mandarla a Compras para corregir, si tiene CAE y supera 200000 mandarla a Dirección, si no supera 200000 mandarla a Administración, registrar un log y finalizar el flujo.
+```
+
+Resultado esperado y validado:
+
+```text
+1. util.start · Inicio
+2. doc.load · Cargar nota de crédito
+3. control.if · Validar CAE informado
+4. human.task · Corregir en Compras
+5. control.if · Total mayor a 200000
+6. human.task · Aprobación Dirección
+7. human.task · Enviar a Administración
+8. util.logger · Registrar evento
+9. util.end · Fin
+```
+
+Plan de ramas validado:
+
+```text
+CAE informado
+SI: evaluar total
+NO: human.task:COMPRAS
+
+Total mayor a 200000
+SI: human.task:DIR_GENERAL
+NO: human.task:ADM_FIN
+```
+
+Conexiones propuestas validadas:
+
+```text
+Inicio → Cargar nota de crédito
+Cargar nota de crédito → Validar CAE informado
+Validar CAE informado [SI] → Total mayor a 200000
+Validar CAE informado [NO] → Corregir en Compras
+Total mayor a 200000 [SI] → Aprobación Dirección
+Total mayor a 200000 [NO] → Enviar a Administración
+Corregir en Compras → Registrar evento
+Aprobación Dirección → Registrar evento
+Enviar a Administración → Registrar evento
+Registrar evento → Fin
+```
+
+## 10. fix9 — Aplicar propuesta al canvas
+
+Se implementó y validó `fix9`.
+
+Funcionalidad agregada:
+
+* Botón “Aplicar al canvas”.
+* Convierte `actions` + `proposedConnections` en grafo real.
+* Dibuja nodos en el canvas.
+* Dibuja aristas en el canvas.
+* Convierte SI/NO a `true`/`false` para el motor.
+* Si hay grafo previo, pide confirmación antes de reemplazar.
+* No permite aplicar si hay datos faltantes.
+* Luego de aplicar, se revisa el grafo y recién ahí se guarda en SQL.
+
+Comportamiento aprobado por Omar:
+
+* Al aplicar al canvas, el Asistente IA se oculta para no mezclar el inspector.
+* Puede volver a abrirse manualmente.
+* Al volver a abrirse, conserva/muestra la frase anterior.
+* Ese comportamiento le gusta a Omar y debe mantenerse.
+
+No eliminar esta posibilidad ni ocultarlo definitivamente.
+
+## 11. Ajuste visual inspector IF
+
+Se detectó que en nodos `control.if` el checkbox de “Modo técnico” se veía como un recuadro blanco confuso.
+
+Se preparó ajuste mínimo en:
+
+```text
+Scripts/Inspectors/inspector.if.js
+```
+
+Objetivo:
+
+* No eliminar modo técnico.
+* Solo mostrarlo de forma clara.
+* El modo simple sigue siendo el recomendado para la IA:
+
+  * Campo
+  * Operador
+  * Valor
+
+Ejemplo validado:
+
+```text
+Campo: biz.notaCredito.total
+Operador: Mayor (>)
+Valor: 200000
+```
+
+## 12. JSON generado por IA validado
+
+El JSON exportado fue coherente:
+
+* `StartNodeId = n1`.
+* `n1 = util.start`.
+* `n9 = util.end`.
+* `doc.load` con:
+
+  * `docTipoCodigo = NOTA_CREDITO_ELECTRONICA_AR`
+  * `path = ${input.filePath}`
+  * `mode = auto`
+* `control.if` CAE:
+
+  * `field = biz.notaCredito.cae`
+  * `op = not_empty`
+* `control.if` total:
+
+  * `field = biz.notaCredito.total`
+  * `op = >`
+  * `value = 200000`
+* Aristas IF:
+
+  * `Condition = true`
+  * `Condition = false`
+* Aristas normales:
+
+  * `Condition = always`
+
+## 13. Definición e instancias validadas
+
+Definición validada:
+
+```text
+Id definición: 8137
+Nombre: Primer Grafo con IA
+```
+
+### 13.1 Instancia 150467 — Rama Dirección
+
+Entrada:
+
+```json
+{
+  "filePath": "C:\\Temp\\NC_00002_00000001.pdf"
+}
+```
+
+Resultado:
+
+* `doc.load` cargó NC.
+* `NOTA_CREDITO_ELECTRONICA_AR`.
+* Motor extracción: `NC_AR`.
+* CAE extraído correctamente.
+* Total extraído: `412247`.
+* IF CAE: `true`.
+* IF total `> 200000`: `true`.
+* Se creó tarea humana `n6`.
+* Tarea: `90262`.
+* Rol: `DIR_GENERAL`.
+* Estado instancia: `EnCurso`.
+* Al aprobar/reanudar:
+
+  * Arrancó en `n8`.
+  * Ejecutó `util.logger`.
+  * Llegó a `util.end`.
+  * Instancia finalizada.
+
+Logs clave:
+
+```text
+[If] biz.notaCredito.cae not_empty => True
+[If] biz.notaCredito.total > 200000 => True
+[human.task] tarea creada para instancia 150467 (nodo n6), tareaId=90262
+[Motor] reanudando desde tareaId=90262, nodo=n6 → arrancando en nodo n8
+[Logger NUEVO] [Info] Paso agregado por Asistente IA
+[End]
+```
+
+### 13.2 Instancia 150468 — Rama Administración
+
+Se forzó el IF de total cambiando temporalmente:
+
+```text
+Total mayor a 200000
+```
+
+por:
+
+```text
+Total mayor a 500000
+```
+
+Con la misma NC, total `412247`, resultado:
+
+* IF CAE: `true`.
+* IF total `> 500000`: `false`.
+* Fue a `n7`.
+* Tarea: `90263`.
+* Rol: `ADM_FIN`.
+* Luego se aprobó/reanudó.
+* Fue a logger.
+* Finalizó.
+
+Logs clave:
+
+```text
+[If] biz.notaCredito.cae not_empty => True
+[If] biz.notaCredito.total > 500000 => False
+[human.task] tarea creada para instancia 150468 (nodo n7), tareaId=90263
+```
+
+### 13.3 Instancia 150469 — Rama Compras / CAE falso
+
+Se forzó temporalmente el IF de CAE cambiando el campo:
+
+```text
+biz.notaCredito.cae
+```
+
+por:
+
+```text
+biz.notaCredito.cae_prueba_faltante
+```
+
+Resultado:
+
+* IF CAE: `false`.
+* Fue a `n4`.
+* Tarea: `90264`.
+* Rol: `COMPRAS`.
+* Luego se aprobó/reanudó.
+* Fue a logger.
+* Finalizó.
+
+Logs clave:
+
+```text
+[If] biz.notaCredito.cae_prueba_faltante not_empty => False
+[human.task] tarea creada para instancia 150469 (nodo n4), tareaId=90264
+```
+
+Conclusión validada:
+
+```text
+✔ CAE true + total true → Dirección
+✔ CAE true + total false → Administración
+✔ CAE false → Compras
+```
+
+Cadena completa validada:
+
+```text
+Asistente IA
+→ propuesta
+→ aplicar al canvas
+→ JSON
+→ guardar en SQL
+→ ejecutar motor
+→ doc.load
+→ NC_AR
+→ control.if
+→ human.task
+→ reanudación
+→ logger
+→ end
+```
+
+Este es un hito estable.
+
+## 14. Nota funcional sobre CAE faltante
+
+Omar preguntó si Compras puede agregar CAE en la vida real.
+
+Conclusión:
+
+* Compras no debería “agregar” CAE manualmente.
+* El CAE es autorización del comprobante electrónico.
+* Si falta CAE, la tarea de Compras debería representar corrección documental, no carga manual de CAE.
+
+Texto recomendado para el futuro:
+
+```text
+El comprobante no tiene CAE informado. Revisar el documento y solicitar al proveedor un comprobante electrónico válido/autorizado, o adjuntar el comprobante correcto antes de continuar.
+```
+
+La rama correcta sigue siendo:
+
+```text
+CAE faltante → Compras
+```
+
+pero con sentido funcional:
+
+```text
+Revisar comprobante sin CAE / solicitar documento válido
+```
+
+## 15. Nodo email.send — Investigación inicial
+
+Omar pidió revisar un tema pendiente histórico: el nodo de correo nunca había funcionado.
+
+Se revisó el ZIP real y se encontró:
+
+Handler real usado por motor:
+
+```text
+App_Code/Handlers/HEmailSend.cs
+```
+
+También existe:
+
+```text
+App_Code/Handlers/ManejadorEmailSend.cs
+```
+
+pero por `WorkflowRuntime.cs`, el motor registra:
+
+```text
+new HEmailSend()
+```
+
+Por lo tanto, el importante ahora es:
+
+```text
+HEmailSend.cs
+```
+
+Inspector encontrado:
+
+```text
+Scripts/Inspectors/inspector.email.send.js
+```
+
+Configuración `Web.config` encontrada:
+
+```xml
+<system.net>
+  <mailSettings>
+    <smtp deliveryMethod="Network">
+      <network host="smtp.gmail.com"
+               port="587"
+               enableSsl="false"
+               userName="%WF_SMTP_USER%"
+               password="%WF_SMTP_PASS%" />
+    </smtp>
+  </mailSettings>
+</system.net>
+```
+
+Problemas detectados:
+
+* Para Gmail, `enableSsl="false"` está mal.
+* Gmail requiere autenticación segura.
+* `%WF_SMTP_USER%` y `%WF_SMTP_PASS%` en `system.net/mailSettings` probablemente no son reemplazados automáticamente por .NET Framework.
+* El log de `email.send` mostró `port=25`, posiblemente por parámetro default del nodo o log engañoso, aunque el envío real con `useWebConfig` debería tomar `mailSettings`.
+
+## 16. Prueba directa del nodo email.send
+
+Se probó un grafo chico con JSON directo que sí contenía `email.send`.
+
+Resultado:
+
+* El grafo ejecutó.
+* El nodo `email.send` se ejecutó.
+* El motor no falló por inexistencia del nodo.
+* El error fue SMTP.
+
+Log clave:
+
+```text
+[email.send] modo=real, host=(web.config), port=25, to=[omar.silverii@edi-sa.com]
+[email.send/error] SmtpException: El servidor SMTP requiere una conexión segura o el cliente no se autenticó.
+```
+
+Conclusión:
+
+```text
+✔ email.send existe.
+✔ HEmailSend se ejecuta.
+✔ El grafo llegó al nodo correo.
+✔ Intentó enviar en modo real.
+❌ Falló por configuración SMTP / autenticación / SSL.
+```
+
+El problema no es el motor ni el canvas. El problema actual está en autenticación/configuración SMTP.
+
+## 17. Gmail / Google Workspace
+
+Omar usa Gmail/Google Workspace de la empresa `edi-sa.com`.
+
+Para usar Gmail con `SmtpClient`, no se debe usar la contraseña normal de Gmail.
+
+Configuración esperada para Gmail:
+
+```xml
+<system.net>
+  <mailSettings>
+    <smtp deliveryMethod="Network" from="omar.silverii@edi-sa.com">
+      <network
+        host="smtp.gmail.com"
+        port="587"
+        enableSsl="true"
+        userName="omar.silverii@edi-sa.com"
+        password="CONTRASEÑA_DE_APLICACION_DE_GOOGLE" />
+    </smtp>
+  </mailSettings>
+</system.net>
+```
+
+Pero Omar intentó activar verificación en 2 pasos y la cuenta mostró:
+
+```text
+This verification method can’t be used as a second step because 2-Step Verification is disabled for your account.
+Contact your admin for help.
+```
+
+Conclusión:
+
+* La cuenta está administrada por Google Workspace.
+* Omar no puede activar 2FA por su cuenta.
+* Sin 2FA no puede generar contraseña de aplicación.
+* Sin contraseña de aplicación, Gmail no va a aceptar SMTP con password normal.
+* Para producción, lo correcto sería pedir al administrador:
+
+  * habilitar 2FA y contraseña de aplicación para una cuenta técnica, o
+  * configurar SMTP Relay de Google Workspace, o
+  * usar un relay SMTP interno autorizado.
+
+Opción recomendada para producción:
+
+```text
+Servidor Workflow Studio → SMTP relay empresa → Gmail/Google Workspace
+```
+
+Cuenta técnica sugerida:
+
+```text
+workflow@edi-sa.com
+notificaciones@edi-sa.com
+```
+
+## 18. Diferencia detectada: “mandar a usuario” vs “mandar correo”
+
+Se probó la frase de IA para crear un flujo de correo.
+
+Con JSON directo, se creó correctamente:
+
+```text
+email.send
+```
+
+Pero con frase natural, el Asistente IA interpretó mal:
+
+```text
+mandar un mail a Omar
+```
+
+como:
+
+```text
+human.task → Enviar a OMARD\OMARD
+```
+
+En vez de:
+
+```text
+email.send → omar.silverii@edi-sa.com
+```
+
+Conclusión importante:
+
+Hay que separar semánticamente:
+
+```text
+Enviar a usuario / rol / sector → human.task
+Enviar correo / mail / email / notificación por email → email.send
+```
+
+Este es un pendiente del Asistente IA.
+
+No corregir todavía sin revisar ZIP real.
+
+## 19. Pendientes inmediatos para próxima sesión
+
+### Pendiente A — Cerrar línea email.send
+
+Revisar sobre ZIP real:
+
+```text
+App_Code/Handlers/HEmailSend.cs
+Scripts/Inspectors/inspector.email.send.js
+WorkflowRuntime.cs
+Web.config
+```
+
+Objetivos:
+
+1. Confirmar cómo `HEmailSend` lee configuración SMTP.
+2. Confirmar cómo decide `useWebConfig`.
+3. Confirmar si usa `SmtpClient()` o parámetros manuales.
+4. Mejorar log para mostrar configuración efectiva sin exponer password.
+5. Asegurar que en error setee correctamente:
+
+   * `email.lastError`
+   * `email.sent = false`
+   * alguna clave útil para logs/debug.
+6. No tocar motor salvo necesidad real.
+7. No tocar Asistente IA hasta que el nodo email funcione con JSON directo.
+
+### Pendiente B — Resolver infraestructura SMTP real
+
+Opciones:
+
+1. Pedir a admin Google Workspace habilitar 2FA + App Password para cuenta técnica.
+2. Pedir SMTP Relay.
+3. Usar cuenta Gmail personal solo para prueba, no producción.
+4. Configurar SMTP interno si la empresa tiene relay.
+
+### Pendiente C — Luego corregir Asistente IA para correo
+
+Una vez que email.send funcione:
+
+Corregir IA para que frases como:
+
+```text
+enviar un correo a omar.silverii@edi-sa.com
+mandar mail a omar.silverii@edi-sa.com
+notificar por email a omar.silverii@edi-sa.com
+```
+
+generen:
+
+```text
+email.send
+```
+
+y no:
+
+```text
+human.task
+```
+
+Deben quedar claros estos criterios:
+
+```text
+"mandar a Compras" → human.task
+"mandar a Dirección" → human.task
+"mandar un correo a Omar" → email.send
+"enviar email a omar.silverii@edi-sa.com" → email.send
+"notificar por correo al proveedor" → email.send
+```
+
+## 20. Estado final de la sesión
+
+Hito principal logrado:
+
+```text
+Asistente IA construyó, aplicó y ejecutó workflows reales completos.
+```
+
+Validado:
+
+```text
+✔ fix8C estable
+✔ Branch Planner estable
+✔ Branch Connector estable
+✔ fix9 aplica al canvas
+✔ JSON exportado correcto
+✔ Guardado SQL correcto
+✔ Motor ejecuta grafo IA
+✔ Tres ramas principales validadas
+✔ human.task + reanudación + logger + end OK
+```
+
+Pendiente abierto:
+
+```text
+email.send funciona a nivel motor pero falla por SMTP.
+Asistente IA confunde “mandar correo” con “mandar tarea a usuario”.
+```
+
+No pasar a nuevas mejoras grandes sin ZIP real actualizado.
+
+Próximo foco recomendado:
+
+```text
+1. Revisar y cerrar email.send con JSON/grafo directo.
+2. Resolver SMTP real.
+3. Recién después ajustar IA para correo/email/mail.
+```

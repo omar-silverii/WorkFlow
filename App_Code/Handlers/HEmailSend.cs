@@ -85,13 +85,18 @@ namespace Intranet.WorkflowStudio.WebForms
             var toList = GetStringList(p, "to");
             var ccList = GetStringList(p, "cc");
 
-            // Log de parámetros
-            string hostInfo = string.IsNullOrWhiteSpace(host) ? "(web.config)" : host;
-            ctx.Log($"[email.send] modo={modo}, host={hostInfo}, port={port}, to=[{string.Join(";", toList)}]");
+            bool useWebConfig = GetBool(p, "useWebConfig", defaultValue: string.IsNullOrWhiteSpace(host));
+
+            SetEmailBaseState(ctx, toList, subject);
+
+            // Log de parámetros sin exponer password.
+            string smtpLogInfo = BuildSmtpLogInfo(host, port, enableSsl, user, useWebConfig);
+            ctx.Log($"[email.send] modo={modo}, {smtpLogInfo}, to=[{string.Join(";", toList)}]");
 
             // Validaciones mínimas
             if (toList.Count == 0)
             {
+                SetEmailError(ctx, "Parámetro 'to' vacío.");
                 ctx.Log("[email.send/error] Parámetro 'to' vacío.");
                 return Task.FromResult(new ResultadoEjecucion
                 {
@@ -109,6 +114,10 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 ctx.Log("[email.send/simulado] Body:");
                 ctx.Log(body ?? string.Empty);
+
+                ctx.Estado["email.simulated"] = true;
+                ctx.Estado["email.sent"] = false;
+                ctx.Estado["email.lastError"] = string.Empty;
 
                 return Task.FromResult(new ResultadoEjecucion
                 {
@@ -138,12 +147,14 @@ namespace Intranet.WorkflowStudio.WebForms
                     msg.Body = body ?? string.Empty;
                     msg.IsBodyHtml = isHtml;
 
-                    bool useWebConfig = GetBool(p, "useWebConfig", defaultValue: false);
+                    ctx.Estado["email.simulated"] = false;
+
                     using (var client = CreateSmtpClient(host, port, user, password, enableSsl, useWebConfig))
                     {
                         ct.ThrowIfCancellationRequested();
                         client.Send(msg);   // sync, .NET 4.0 safe
 
+                        SetEmailSuccess(ctx);
                         ctx.Log("[email.send] Correo enviado correctamente.");
                     }
                 }
@@ -155,12 +166,45 @@ namespace Intranet.WorkflowStudio.WebForms
             }
             catch (Exception ex)
             {
-                ctx.Log("[email.send/error] " + ex.GetType().Name + ": " + ex.Message);
+                string error = ex.GetType().Name + ": " + ex.Message;
+                SetEmailError(ctx, error);
+                ctx.Log("[email.send/error] " + error);
                 return Task.FromResult(new ResultadoEjecucion
                 {
                     Etiqueta = "error"
                 });
             }
+        }
+
+        // ===== Helpers de estado / diagnóstico =====
+
+        private static void SetEmailBaseState(ContextoEjecucion ctx, List<string> toList, string subject)
+        {
+            ctx.Estado["email.sent"] = false;
+            ctx.Estado["email.lastError"] = string.Empty;
+            ctx.Estado["email.lastTo"] = string.Join(";", toList);
+            ctx.Estado["email.lastSubject"] = subject ?? string.Empty;
+        }
+
+        private static void SetEmailSuccess(ContextoEjecucion ctx)
+        {
+            ctx.Estado["email.sent"] = true;
+            ctx.Estado["email.lastError"] = string.Empty;
+        }
+
+        private static void SetEmailError(ContextoEjecucion ctx, string message)
+        {
+            ctx.Estado["email.sent"] = false;
+            ctx.Estado["email.lastError"] = message ?? string.Empty;
+        }
+
+        private static string BuildSmtpLogInfo(string host, int port, bool enableSsl, string user, bool useWebConfig)
+        {
+            if (useWebConfig || string.IsNullOrWhiteSpace(host))
+                return "host=(web.config), port=(web.config), ssl=(web.config), user=(web.config)";
+
+            string userInfo = string.IsNullOrWhiteSpace(user) ? "(default)" : "(configurado)";
+            return $"host={host}, port={port}, ssl={enableSsl}, user={userInfo}";
         }
 
         // ===== Helpers SMTP =====
@@ -242,7 +286,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 var csv = Convert.ToString(v);
                 if (!string.IsNullOrWhiteSpace(csv))
                 {
-                    foreach (var s in csv.Split(','))
+                    foreach (var s in csv.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
                     {
                         var t = s.Trim();
                         if (!string.IsNullOrWhiteSpace(t))

@@ -30,7 +30,7 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "doc.load", Label = "Documento: Cargar archivo", Params = new List<string> { "path", "mode", "docTipoCodigo", "outputPrefix" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.if", Label = "Condición (If)", Params = new List<string> { "field", "op", "value", "expression", "transform" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "human.task", Label = "Tarea humana", Params = new List<string> { "rol", "usuarioAsignado", "titulo", "descripcion", "scopeKey", "deadlineMinutes", "estadoNegocioPendiente" } });
-            catalog.Nodes.Add(new WfAiNodeInfo { Type = "email.send", Label = "Correo: Enviar", Params = new List<string> { "to", "cc", "bcc", "subject", "body" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "email.send", Label = "Correo: Enviar", Params = new List<string> { "from", "to", "cc", "bcc", "subject", "body", "html", "modo", "useWebConfig", "isHtml" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.logger", Label = "Logger", Params = new List<string> { "message", "level" } });
         }
 

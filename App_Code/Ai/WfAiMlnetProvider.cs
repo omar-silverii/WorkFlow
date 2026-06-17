@@ -131,9 +131,24 @@ namespace Intranet.WorkflowStudio.WebForms
             string role = ResolveRole(norm, catalog);
             string userKey = ResolveUser(norm, catalog);
             string amount = ExtractAmount(norm);
+            List<EmailRequest> emailRequests = AnalyzeEmailRequests(userText, norm, catalog);
+            EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
+            string preBranchRole = ExtractPreBranchHumanTaskRole(norm, catalog);
+            if (!string.IsNullOrWhiteSpace(preBranchRole))
+            {
+                role = preBranchRole;
+                userKey = "";
+            }
+            else if (emailRequest.WantsEmail && UserMentionAppearsOnlyInEmailContext(norm, userKey))
+            {
+                userKey = "";
+            }
+
             bool wantsCaeValidation = ContainsToken(norm, "cae") || ContainsToken(norm, "cai");
             bool wantsDocument = docTipo.Length > 0 || HasIntent(predictions, "CARGAR_DOCUMENTO") || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", " nc ");
             bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || ContainsAny(norm, "enviar a", "mandar a", "derivar a", "pasar a", "aprobar", "revision");
+            if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(norm))
+                wantsHumanTask = false;
             bool wantsLogger = HasIntent(predictions, "REGISTRAR_LOG") || ContainsAny(norm, "log", "registrar", "dejar constancia");
             bool wantsEnd = HasIntent(predictions, "FINALIZAR_FLUJO") || ContainsAny(norm, "finalizar", "terminar", "fin del flujo");
 
@@ -171,6 +186,16 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["question"] = "¿Qué tipo de documento querés cargar?"
                     });
                 }
+            }
+
+            if (emailRequests.Count > 0)
+                AddEmailRequestAction(actions, missing, emailRequests[0], emailRequests.Count > 1 ? 1 : 0);
+
+            bool preBranchTaskCreated = false;
+            if (!string.IsNullOrWhiteSpace(preBranchRole))
+            {
+                actions.Add(AddNode("human.task", HumanTaskTitle(preBranchRole, ""), HumanTaskParams(preBranchRole, HumanTaskTitle(preBranchRole, ""), "Revisión previa generada por el Asistente IA.")));
+                preBranchTaskCreated = true;
             }
 
             if (wantsCaeValidation)
@@ -260,7 +285,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
             }
 
-            if (wantsHumanTask && !branchTasksCreated)
+            for (int i = 1; i < emailRequests.Count; i++)
+                AddEmailRequestAction(actions, missing, emailRequests[i], i + 1);
+
+            if (wantsHumanTask && !branchTasksCreated && !preBranchTaskCreated)
             {
                 var p = new JObject
                 {
@@ -321,10 +349,12 @@ namespace Intranet.WorkflowStudio.WebForms
             warnings.Add("Proveedor ML.NET: interpretación local usando modelo entrenado externo. Todavía no se aplica al canvas automáticamente.");
             if (branches.HasBranchInfo)
                 warnings.Add("Branch Connector v1: se generaron conexiones propuestas para revisión. Todavía no se aplican al canvas automáticamente.");
+            if (emailRequest.WantsEmail)
+                warnings.Add("email.send: se genera nodo de correo, no tarea humana. El envío real depende de la configuración SMTP/Web.config.");
 
             return new JObject
             {
-                ["assistantVersion"] = "1.7-mlnet-branch-planner-fix8c",
+                ["assistantVersion"] = "1.9-mlnet-email-mixed-flow-fix11",
                 ["intent"] = "build_workflow",
                 ["confidence"] = AggregateConfidence(predictions),
                 ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches),
@@ -344,6 +374,10 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["rol"] = role,
                         ["usuarioAsignado"] = userKey,
                         ["importe"] = amount,
+                        ["emailRequested"] = emailRequest.WantsEmail,
+                        ["emailCount"] = emailRequests.Count,
+                        ["emailTo"] = JArray.FromObject(emailRequest.To),
+                        ["emailSubject"] = emailRequest.Subject,
                         ["caeFalseRole"] = branches.CaeFalseRole,
                         ["totalTrueRole"] = branches.TotalTrueRole,
                         ["totalFalseRole"] = branches.TotalFalseRole
@@ -373,6 +407,23 @@ namespace Intranet.WorkflowStudio.WebForms
             JObject node = AddNode("human.task", title, HumanTaskParams(role, title, description));
             actions.Add(node);
             return node;
+        }
+
+        private static void AddEmailRequestAction(JArray actions, JArray missing, EmailRequest request, int ordinal)
+        {
+            if (actions == null || request == null || !request.WantsEmail) return;
+
+            string label = ordinal > 1 ? "Enviar correo " + ordinal.ToString(CultureInfo.InvariantCulture) : "Enviar correo";
+            actions.Add(AddNode("email.send", label, EmailParams(request)));
+
+            if (request.To.Count == 0 && missing != null)
+            {
+                missing.Add(new JObject
+                {
+                    ["key"] = ordinal > 1 ? "email.to." + ordinal.ToString(CultureInfo.InvariantCulture) : "email.to",
+                    ["question"] = EmailMissingRecipientQuestion(request)
+                });
+            }
         }
 
         private static void EnsureWorkflowBoundaries(JArray actions)
@@ -409,34 +460,23 @@ namespace Intranet.WorkflowStudio.WebForms
             var result = new JArray();
             if (actions == null || actions.Count == 0) return result;
 
-            JObject start = FirstAction(actions, "util.start");
-            JObject docLoad = FirstAction(actions, "doc.load");
             JObject caeIf = FindActionByLabel(actions, "control.if", "Validar CAE informado");
             JObject totalIf = FindActionLabelStarts(actions, "control.if", "Total mayor a ");
             JObject logger = FirstAction(actions, "util.logger");
             JObject end = FirstAction(actions, "util.end");
+            JObject firstCondition = caeIf ?? totalIf;
 
-            if (caeIf == null && totalIf == null)
+            if (firstCondition == null)
             {
                 AddSequentialConnections(result, actions);
                 return result;
             }
 
-            if (start != null)
-            {
-                JObject firstTarget = docLoad ?? caeIf ?? totalIf ?? FirstActionAfter(actions, start);
-                AddConnection(result, start, firstTarget, "");
-            }
-
-            if (docLoad != null)
-            {
-                JObject firstTarget = caeIf ?? totalIf ?? FirstActionAfter(actions, docLoad);
-                AddConnection(result, docLoad, firstTarget, "");
-            }
+            AddSequentialConnectionsUntil(result, actions, firstCondition);
 
             if (caeIf != null)
             {
-                JObject trueTarget = totalIf ?? logger ?? end;
+                JObject trueTarget = totalIf ?? FirstActionAfter(actions, caeIf) ?? logger ?? end;
                 JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath"));
 
                 AddConnection(result, caeIf, trueTarget, "SI");
@@ -452,20 +492,95 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddConnection(result, totalIf, falseTarget, "NO");
             }
 
-            JObject mergeTarget = logger ?? end;
+            List<JObject> branchTerminals = FindBranchTerminalActions(actions, branchPlan);
+            JObject mergeTarget = FirstActionAfterLast(actions, branchTerminals) ?? logger ?? end;
             if (mergeTarget != null)
             {
-                foreach (JObject branchTarget in FindBranchTerminalActions(actions, branchPlan))
+                foreach (JObject branchTarget in branchTerminals)
                     AddConnection(result, branchTarget, mergeTarget, "");
-            }
 
-            if (logger != null && end != null)
-                AddConnection(result, logger, end, "");
+                AddSequentialConnectionsFrom(result, actions, mergeTarget);
+            }
 
             if (result.Count == 0)
                 AddSequentialConnections(result, actions);
 
             return result;
+        }
+
+        private static void AddSequentialConnectionsUntil(JArray result, JArray actions, JObject stopAtInclusive)
+        {
+            JObject previous = null;
+            foreach (JToken token in actions)
+            {
+                JObject current = token as JObject;
+                if (current == null || !IsAddNode(current)) continue;
+
+                if (previous != null)
+                    AddConnection(result, previous, current, "");
+
+                if (object.ReferenceEquals(current, stopAtInclusive))
+                    return;
+
+                previous = current;
+            }
+        }
+
+        private static void AddSequentialConnectionsFrom(JArray result, JArray actions, JObject startAt)
+        {
+            if (actions == null || startAt == null) return;
+
+            bool found = false;
+            JObject previous = null;
+            foreach (JToken token in actions)
+            {
+                JObject current = token as JObject;
+                if (current == null || !IsAddNode(current)) continue;
+
+                if (!found)
+                {
+                    if (object.ReferenceEquals(current, startAt))
+                    {
+                        found = true;
+                        previous = current;
+                    }
+                    continue;
+                }
+
+                AddConnection(result, previous, current, "");
+                previous = current;
+            }
+        }
+
+        private static JObject FirstActionAfterLast(JArray actions, List<JObject> markers)
+        {
+            if (actions == null || markers == null || markers.Count == 0) return null;
+
+            int lastIndex = -1;
+            for (int i = 0; i < actions.Count; i++)
+            {
+                JObject current = actions[i] as JObject;
+                if (current == null || !IsAddNode(current)) continue;
+
+                foreach (JObject marker in markers)
+                {
+                    if (object.ReferenceEquals(current, marker))
+                    {
+                        if (i > lastIndex) lastIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (lastIndex < 0) return null;
+            for (int i = lastIndex + 1; i < actions.Count; i++)
+            {
+                JObject current = actions[i] as JObject;
+                if (current == null || !IsAddNode(current)) continue;
+                return current;
+            }
+
+            return null;
         }
 
         private static void AddSequentialConnections(JArray result, JArray actions)
@@ -698,13 +813,264 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrWhiteSpace(branches.TotalFalseRole)) parts.Add("si no supera el total derivar a " + branches.TotalFalseRole);
             }
 
-            if (!string.IsNullOrWhiteSpace(role) && (branches == null || !branches.HasBranchInfo)) parts.Add("derivación al rol " + role);
-            if (!string.IsNullOrWhiteSpace(userKey)) parts.Add("derivación al usuario " + userKey);
+            if (FirstAction(actions, "email.send") != null) parts.Add("envío de correo");
+            if (!string.IsNullOrWhiteSpace(role) && (branches == null || !branches.HasBranchInfo) && FirstAction(actions, "human.task") != null) parts.Add("derivación al rol " + role);
+            if (!string.IsNullOrWhiteSpace(userKey) && FirstAction(actions, "human.task") != null) parts.Add("derivación al usuario " + userKey);
 
             if (parts.Count == 0)
                 return "Recibí la intención y preparé una propuesta inicial para revisar.";
 
             return "Preparé una propuesta con " + string.Join(", ", parts.ToArray()) + ".";
+        }
+
+        private static EmailRequest AnalyzeEmailRequest(string originalText, string normalizedText, WfAiCatalog catalog)
+        {
+            List<EmailRequest> requests = AnalyzeEmailRequests(originalText, normalizedText, catalog);
+            return requests.Count > 0 ? requests[0] : new EmailRequest();
+        }
+
+        private static List<EmailRequest> AnalyzeEmailRequests(string originalText, string normalizedText, WfAiCatalog catalog)
+        {
+            var list = ExtractStructuredEmailRequests(originalText);
+            if (list.Count > 0) return list;
+
+            var r = new EmailRequest();
+            r.WantsEmail = WantsEmail(originalText, normalizedText);
+            if (!r.WantsEmail) return list;
+
+            foreach (string addr in ExtractEmailAddresses(originalText))
+            {
+                if (!ContainsIgnoreCase(r.To, addr))
+                    r.To.Add(addr);
+            }
+
+            r.RecipientHint = ExtractEmailRecipientHint(originalText, normalizedText, catalog);
+            r.Subject = ExtractEmailSubject(originalText);
+            r.Body = ExtractEmailBody(originalText);
+            FillEmailDefaults(r);
+            list.Add(r);
+            return list;
+        }
+
+        private static List<EmailRequest> ExtractStructuredEmailRequests(string originalText)
+        {
+            var list = new List<EmailRequest>();
+            if (string.IsNullOrWhiteSpace(originalText)) return list;
+
+            string pattern = @"\b(?:enviar|mandar|notificar)\s+(?:otro\s+|otra\s+|un\s+|una\s+)?(?:correo|mail|email|e-mail)\s+(?:a|para)\s+(?<to>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\s+(?:con\s+)?(?:asunto|subject)\s+(?<subject>.+?)\s+(?:y\s+)?(?:cuerpo|body|mensaje)\s+(?<body>.+?)(?=(?:,|\.)\s*\b(?:luego|despues|después|mandar|enviar|derivar|pasar|validar|si|registrar|finalizar|terminar)\b|[\r\n]|$)";
+            var matches = Regex.Matches(originalText, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            foreach (Match m in matches)
+            {
+                var r = new EmailRequest();
+                r.WantsEmail = true;
+                string to = (m.Groups["to"].Value ?? "").Trim().TrimEnd('.', ',', ';', ':', ')', ']');
+                if (to.Length > 0) r.To.Add(to);
+                r.Subject = CleanExtractedSentence(m.Groups["subject"].Value);
+                r.Body = CleanExtractedSentence(m.Groups["body"].Value);
+                FillEmailDefaults(r);
+                list.Add(r);
+            }
+
+            return list;
+        }
+
+        private static void FillEmailDefaults(EmailRequest r)
+        {
+            if (r == null) return;
+            if (string.IsNullOrWhiteSpace(r.Subject))
+                r.Subject = "Notificación Workflow Studio";
+
+            if (string.IsNullOrWhiteSpace(r.Body))
+                r.Body = "Correo generado por Workflow Studio.";
+        }
+
+        private static JObject EmailParams(EmailRequest request)
+        {
+            var p = new JObject
+            {
+                ["to"] = JArray.FromObject(request.To),
+                ["subject"] = request.Subject ?? "",
+                ["body"] = request.Body ?? "",
+                ["modo"] = "real",
+                ["useWebConfig"] = true,
+                ["isHtml"] = false
+            };
+            return p;
+        }
+
+        private static string EmailMissingRecipientQuestion(EmailRequest request)
+        {
+            string hint = (request == null ? "" : request.RecipientHint ?? "").Trim();
+            if (hint.Length > 0)
+                return "Detecté que querés enviar un correo a " + hint + ", pero no tengo una dirección de email. Indicá el email destino.";
+            return "Detecté que querés enviar un correo, pero falta la dirección de email destino.";
+        }
+
+        private static bool WantsEmail(string originalText, string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+            if (ExtractEmailAddresses(originalText).Count > 0) return true;
+
+            return ContainsAny(t,
+                "correo", "mail", "email", "e mail", "notificar por correo", "notificacion por correo",
+                "enviar correo", "enviar un correo", "mandar correo", "mandar un correo",
+                "enviar mail", "enviar un mail", "mandar mail", "mandar un mail",
+                "enviar email", "mandar email");
+        }
+
+        private static bool HasExplicitHumanTaskSignal(string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+
+            if (ContainsAny(t,
+                "tarea", "tarea humana", "asignar tarea", "crear tarea",
+                "derivar a", "pasar a", "enviar a compras", "mandar a compras",
+                "enviar a direccion", "mandar a direccion", "enviar a gerencia", "mandar a gerencia",
+                "enviar a administracion", "mandar a administracion", "enviar a operaciones", "mandar a operaciones",
+                "aprobar", "aprobacion", "autorizar", "autorizacion", "revision", "revisar"))
+                return true;
+
+            return false;
+        }
+
+        private static bool UserMentionAppearsOnlyInEmailContext(string normalizedText, string userKey)
+        {
+            if (string.IsNullOrWhiteSpace(userKey)) return false;
+            string t = Normalize(normalizedText);
+
+            if (!ContainsAny(t, "correo", "mail", "email", "e mail")) return false;
+            if (ContainsAny(t, "tarea a", "usuario", "asignar a", "derivar a usuario", "mandar la tarea", "enviar la tarea")) return false;
+
+            return true;
+        }
+
+        private static string ExtractPreBranchHumanTaskRole(string normalizedText, WfAiCatalog catalog)
+        {
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return "";
+
+            int cut = FirstIndexOfAny(t,
+                " validar si ", " si el total ", " si total ", " si supera ", " si no supera ",
+                " cuando ", " total mayor ", " supera ");
+            string head = cut >= 0 ? t.Substring(0, cut) : t;
+
+            string[] markers = new[]
+            {
+                "mandar la tarea a", "enviar la tarea a", "derivar la tarea a", "pasar la tarea a",
+                "mandar tarea a", "enviar tarea a", "derivar tarea a", "pasar tarea a",
+                "asignar tarea a", "crear tarea a"
+            };
+
+            foreach (string m in markers)
+            {
+                int idx = head.LastIndexOf(" " + m + " ", StringComparison.OrdinalIgnoreCase);
+                if (idx < 0 && head.StartsWith(m + " ", StringComparison.OrdinalIgnoreCase)) idx = -1;
+                if (idx < 0) continue;
+
+                string tail = idx == -1 ? head.Substring(m.Length).Trim() : head.Substring(idx + m.Length + 2).Trim();
+                string role = ResolveRole(tail, catalog);
+                if (!string.IsNullOrWhiteSpace(role)) return role;
+            }
+
+            return "";
+        }
+
+        private static int FirstIndexOfAny(string text, params string[] values)
+        {
+            if (string.IsNullOrWhiteSpace(text) || values == null) return -1;
+            int best = -1;
+            foreach (string v in values)
+            {
+                if (string.IsNullOrWhiteSpace(v)) continue;
+                int idx = text.IndexOf(v, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+            }
+            return best;
+        }
+
+        private static List<string> ExtractEmailAddresses(string text)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return list;
+
+            var matches = Regex.Matches(text, @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
+            foreach (Match m in matches)
+            {
+                string v = (m.Value ?? "").Trim().TrimEnd('.', ',', ';', ':', ')', ']');
+                if (v.Length > 0 && !ContainsIgnoreCase(list, v))
+                    list.Add(v);
+            }
+            return list;
+        }
+
+        private static bool ContainsIgnoreCase(List<string> list, string value)
+        {
+            if (list == null || value == null) return false;
+            foreach (string item in list)
+            {
+                if (string.Equals(item, value, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private static string ExtractEmailSubject(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            var m = Regex.Match(text,
+                @"\b(?:asunto|subject)\b\s*[:\-]?\s*(?<v>.+?)(?=(?:\s+y\s+)?\b(?:cuerpo|body|mensaje|luego|despues|después|registrar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!m.Success) return "";
+            return CleanExtractedSentence(m.Groups["v"].Value);
+        }
+
+        private static string ExtractEmailBody(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            var m = Regex.Match(text,
+                @"\b(?:cuerpo|body|mensaje)\b\s*[:\-]?\s*(?<v>.+?)(?=(?:,|\.)?\s*\b(?:luego|despues|después|registrar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!m.Success) return "";
+            return CleanExtractedSentence(m.Groups["v"].Value);
+        }
+
+        private static string ExtractEmailRecipientHint(string originalText, string normalizedText, WfAiCatalog catalog)
+        {
+            string t = Normalize(normalizedText);
+
+            if (catalog != null && catalog.Users != null)
+            {
+                foreach (var u in catalog.Users)
+                {
+                    if (u == null) continue;
+                    string displayName = (u.DisplayName ?? "").Trim();
+                    string userKey = (u.UserKey ?? "").Trim();
+
+                    if (displayName.Length > 0 && ContainsPhrase(t, displayName)) return displayName;
+                    if (userKey.Length > 0 && ContainsPhrase(t, userKey)) return userKey;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+            var m = Regex.Match(originalText,
+                @"\b(?:correo|mail|email|e-mail)\b\s+(?:a|para)\s+(?<v>.+?)(?=\s+\b(?:con\s+asunto|asunto|subject|con\s+cuerpo|cuerpo|body|mensaje|luego|despues|después|registrar|finalizar|terminar)\b|,|\.|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!m.Success) return "";
+            return CleanExtractedSentence(m.Groups["v"].Value);
+        }
+
+        private static string CleanExtractedSentence(string value)
+        {
+            value = (value ?? "").Trim();
+            value = Regex.Replace(value, @"\s+", " ").Trim();
+            value = value.Trim(' ', ',', ';', ':', '-', '.');
+            if (value.StartsWith("con ", StringComparison.OrdinalIgnoreCase))
+                value = value.Substring(4).Trim();
+            return value;
         }
 
         private static string DocLoadLabel(string docTipo)
@@ -932,7 +1298,7 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             string t = Normalize(normalizedText);
 
-            Match m = Regex.Match(t, @"(?:sector|area)\s+(?<name>[a-z0-9_]+)", RegexOptions.IgnoreCase);
+            Match m = Regex.Match(t, @"\b(?:sector|area)\s+(?<name>[a-z0-9_]+)", RegexOptions.IgnoreCase);
             if (m.Success)
             {
                 string candidate = NormalizeUnknownRoleName(m.Groups["name"].Value);
@@ -955,7 +1321,7 @@ namespace Intranet.WorkflowStudio.WebForms
             if (ContainsAny(v, "si", "no", "que", "cuando", "para", "corregir", "validar", "finalizar", "terminar", "registrar"))
                 return "";
 
-            if (v.Length == 1) return v.ToUpperInvariant();
+            if (v.Length <= 1) return "";
             return char.ToUpperInvariant(v[0]) + v.Substring(1).ToLowerInvariant();
         }
 
@@ -1355,6 +1721,24 @@ namespace Intranet.WorkflowStudio.WebForms
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out n)) return n;
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.CurrentCulture, out n)) return n;
             return fallback;
+        }
+
+        private class EmailRequest
+        {
+            public bool WantsEmail { get; set; }
+            public List<string> To { get; private set; }
+            public string RecipientHint { get; set; }
+            public string Subject { get; set; }
+            public string Body { get; set; }
+
+            public EmailRequest()
+            {
+                WantsEmail = false;
+                To = new List<string>();
+                RecipientHint = "";
+                Subject = "";
+                Body = "";
+            }
         }
 
         private class BranchAnalysis

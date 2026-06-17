@@ -1,0 +1,389 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Asistente IA + email.send
+
+Voy a pasarte:
+
+1. Este ContextPack.
+2. El ZIP actualizado del proyecto Workflow Studio WebForms.
+3. Si corresponde, el ZIP del proyecto entrenador `WorkflowStudio.AITrainer`.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP antes de proponer cambios.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Preferir formato `DONDE DICE → REEMPLAZAR POR`.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo necesidad real.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+
+## Estado importante
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+Se validó un hito importante:
+
+```text
+Asistente IA → canvas → JSON → SQL → motor → human.task → reanudación → logger → end
+```
+
+No tocar lo estable.
+
+## Estado Asistente IA
+
+Se descartó Ollama / llama3.1.
+
+El Asistente IA usa:
+
+```text
+ML.NET + CSV + modelo externo entrenado
+```
+
+Arquitectura:
+
+```text
+WorkflowStudio.AITrainer
+        ↓ entrena CSV
+        ↓ genera workflow_intent_model.zip
+
+Workflow Studio WebForms
+        ↓ consume modelo
+        ↓ interpreta intención
+        ↓ valida
+        ↓ muestra propuesta
+        ↓ aplica al canvas
+```
+
+Workflow Studio NO debe entrenar en runtime.
+
+El entrenador es proyecto separado.
+
+Ruta esperada del modelo en WebForms:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+## Estado validado fix8C
+
+`fix8C` quedó validado.
+
+Debe mantenerse:
+
+* `util.start` y `util.end` en las propuestas.
+* Branch Planner correcto.
+* Branch Connector correcto.
+* Conexiones propuestas visibles.
+* SI/NO correctos.
+* “caso contrario”.
+* “si no lo supera”.
+* “si no supera ese importe”.
+* `$ 200.000` interpretado como `200000`.
+* Negaciones tipo “no debe ir a Dirección, debe ir a Compras”.
+* Condiciones incompletas con datos faltantes.
+* Roles reales desde catálogo SQL.
+* `LEGALES` es válido porque existe en `WF_Rol`.
+
+## Estado validado fix9
+
+`fix9` quedó validado.
+
+Se aplicó una propuesta al canvas y funcionó.
+
+Definición:
+
+```text
+8137 · Primer Grafo con IA
+```
+
+Frase base:
+
+```text
+Quiero cargar una NC, validar que tenga CAE, si no tiene CAE mandarla a Compras para corregir, si tiene CAE y supera 200000 mandarla a Dirección, si no supera 200000 mandarla a Administración, registrar un log y finalizar el flujo.
+```
+
+Se validaron tres ramas:
+
+```text
+150467:
+CAE true + total > 200000 true → DIR_GENERAL → Logger → End
+
+150468:
+CAE true + total > 500000 false → ADM_FIN → Logger → End
+
+150469:
+CAE false forzado con biz.notaCredito.cae_prueba_faltante → COMPRAS → Logger → End
+```
+
+Mantener comportamiento aprobado:
+
+```text
+Al aplicar al canvas, el Asistente IA se oculta.
+Puede volver a abrirse manualmente.
+Al reabrirse conserva/muestra la frase anterior.
+Ese comportamiento le gusta a Omar y no debe eliminarse.
+```
+
+## No tocar ahora
+
+No tocar salvo bug real:
+
+```text
+WorkflowUI dev210
+canvas
+aristas
+zoom
+minimapa
+FACTURA_AR
+NC_AR
+extractores documentales
+motor de ejecución
+```
+
+## Tema pendiente inmediato
+
+Revisar `email.send`.
+
+Omar pidió armar/probar un grafo chico que solo mande un correo a:
+
+```text
+omar.silverii@edi-sa.com
+```
+
+El nodo históricamente nunca funcionó.
+
+Ya se descubrió:
+
+1. Con JSON directo, el grafo sí creó `email.send`.
+2. El handler se ejecutó.
+3. El error fue SMTP/autenticación/SSL, no motor ni canvas.
+
+Log observado:
+
+```text
+[email.send] modo=real, host=(web.config), port=25, to=[omar.silverii@edi-sa.com]
+[email.send/error] SmtpException: El servidor SMTP requiere una conexión segura o el cliente no se autenticó.
+```
+
+Conclusión:
+
+```text
+email.send existe y se ejecuta.
+El problema actual es configuración SMTP / autenticación / SSL.
+```
+
+## Archivos a revisar en ZIP real
+
+Primero revisar estos archivos reales:
+
+```text
+App_Code/Handlers/HEmailSend.cs
+App_Code/Handlers/ManejadorEmailSend.cs
+Scripts/Inspectors/inspector.email.send.js
+WorkflowRuntime.cs
+Web.config
+```
+
+Recordar:
+
+* El handler registrado por el motor parece ser `HEmailSend`, no `ManejadorEmailSend`.
+* Confirmarlo en `WorkflowRuntime.cs`.
+* No modificar nada hasta revisar código real.
+
+## Estado Web.config SMTP detectado
+
+Configuración actual:
+
+```xml
+<system.net>
+  <mailSettings>
+    <smtp deliveryMethod="Network">
+      <network host="smtp.gmail.com"
+               port="587"
+               enableSsl="false"
+               userName="%WF_SMTP_USER%"
+               password="%WF_SMTP_PASS%" />
+    </smtp>
+  </mailSettings>
+</system.net>
+```
+
+Problemas:
+
+* Para Gmail debería ser `enableSsl="true"`.
+* `%WF_SMTP_USER%` y `%WF_SMTP_PASS%` probablemente no son reemplazados automáticamente por .NET Framework dentro de `system.net/mailSettings`.
+* Omar usa cuenta Google Workspace `edi-sa.com`.
+* No puede activar verificación en 2 pasos porque Google muestra que debe contactar al administrador.
+* Sin 2FA no puede crear contraseña de aplicación.
+* Sin contraseña de aplicación, Gmail no aceptará SMTP con password normal.
+
+## Opciones reales para resolver SMTP
+
+Opción profesional recomendada:
+
+```text
+SMTP Relay de Google Workspace o relay interno autorizado.
+```
+
+Flujo ideal:
+
+```text
+Servidor Workflow Studio → SMTP relay empresa → Gmail/Google Workspace
+```
+
+Alternativas:
+
+1. Pedir al administrador habilitar 2FA + App Password para una cuenta técnica.
+2. Pedir SMTP Relay.
+3. Usar cuenta Gmail personal solo para prueba, no producción.
+4. Configurar relay interno si existe.
+
+Cuenta técnica sugerida:
+
+```text
+workflow@edi-sa.com
+notificaciones@edi-sa.com
+```
+
+## Diferencia IA pendiente: usuario vs correo
+
+Con frase natural, el Asistente IA interpretó mal:
+
+```text
+mandar un mail a Omar
+```
+
+como:
+
+```text
+human.task → Enviar a OMARD\OMARD
+```
+
+Pero debería ser:
+
+```text
+email.send → omar.silverii@edi-sa.com
+```
+
+Hay que separar semánticamente:
+
+```text
+Enviar a usuario / rol / sector → human.task
+Enviar correo / mail / email / notificación por email → email.send
+```
+
+Ejemplos esperados:
+
+```text
+"mandar a Compras" → human.task
+"mandar a Dirección" → human.task
+"mandar un correo a Omar" → email.send
+"enviar email a omar.silverii@edi-sa.com" → email.send
+"notificar por correo al proveedor" → email.send
+```
+
+Pero no corregir esto antes de cerrar `email.send` con JSON/grafo directo.
+
+## Orden recomendado para próxima sesión
+
+### Paso A — Diagnóstico email.send
+
+Con ZIP real:
+
+1. Revisar `HEmailSend.cs`.
+2. Revisar cómo toma `useWebConfig`.
+3. Revisar si usa `new SmtpClient()` o parámetros del nodo.
+4. Revisar por qué loguea `port=25`.
+5. Revisar si guarda bien:
+
+   * `email.lastError`
+   * `email.sent`
+   * `email.lastTo`
+   * `email.lastSubject`
+6. Mejorar logs sin exponer password.
+7. No tocar Asistente IA todavía.
+
+### Paso B — Configuración SMTP
+
+Definir con Omar si va a usar:
+
+* App Password.
+* SMTP Relay.
+* Relay interno.
+* Cuenta técnica.
+
+No poner contraseñas reales en el chat.
+
+### Paso C — Probar grafo directo email.send
+
+Primero validar que el nodo `email.send` mande correo usando JSON/canvas directo.
+
+Solo cuando eso funcione:
+
+### Paso D — Corregir Asistente IA para correo
+
+Modificar IA para que frases de correo generen `email.send` y no `human.task`.
+
+## Objetivo de la próxima sesión
+
+Cerrar profesionalmente el nodo `email.send`.
+
+Después, integrar al Asistente IA:
+
+```text
+Quiero iniciar un flujo, enviar un email a omar.silverii@edi-sa.com con asunto Prueba Workflow Studio y cuerpo Correo de prueba enviado desde Workflow Studio, luego registrar un log y finalizar.
+```
+
+Resultado deseado:
+
+```text
+Inicio
+→ email.send
+→ logger
+→ end
+```
+
+No:
+
+```text
+Inicio
+→ human.task OMARD\OMARD
+→ logger
+→ end
+```
+
+## Criterio final
+
+Pensar en grande.
+
+Hacerlo profesional.
+
+No romper lo estable.
+
+Primero cerrar nodo real.
+
+Después IA.
+
+Después pruebas completas.
