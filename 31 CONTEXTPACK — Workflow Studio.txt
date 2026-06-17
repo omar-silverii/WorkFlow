@@ -1,0 +1,600 @@
+# CONTEXTPACK — Workflow Studio
+
+## Asistente IA ML.NET + CSV — cierre de sesión
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias
+
+ no inventar código
+ no asumir que el código quedó como en el chat
+ no reemplazar archivos completos sin revisar el archivo real actual
+ no cambiar arquitectura sin necesidad
+ no reescribir cosas que ya funcionan
+ cambios mínimos y profesionales
+ preferir formato `DONDE DICE → REEMPLAZAR POR`
+ si falta una pieza, pedirla
+ si algo no cierra, decirlo
+ no reabrir temas cerrados salvo bug real
+ no tocar líneas estables sin necesidad
+
+## 2. Estado general del proyecto
+
+Workflow Studio sigue siendo
+
+ ASP.NET WebForms
+ .NET Framework 4.8
+ C#
+ SQL Server
+ una sola base
+ una sola conexión principal `DefaultConnection`
+ motor propio de workflows
+ grafos visuales persistidos en SQL
+ nodos ejecutados por handlers `IManejadorNodo`
+ uso de `ctx.Estado` como estado principal
+ claves técnicas `wf.`
+ claves de negocio `biz.`
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+No reabrir temas estables salvo bug real.
+
+## 3. Líneas que NO se deben tocar ahora
+
+No tocar salvo bug real
+
+ `FACTURA_ELECTRONICA_AR`
+ `FACTURA_AR`
+ `NOTA_CREDITO_ELECTRONICA_AR`
+ `NC_AR`
+ extractores documentales ya validados
+ motor de ejecución
+ WorkflowUI dev210
+ canvas
+ aristas
+ zoom
+ minimapa
+
+## 4. Estado UI WorkflowUI
+
+Base estable
+
+```javascript
+window.__WF_UI_BUILD = 'concepto-a-zoom-minimap-dev210'
+```
+
+Script esperado
+
+```text
+Scriptsworkflow.ui.jsv=dev210
+```
+
+Estado validado
+
+ 4 anclajes por nodo
+ aristas estables
+ scroll OK
+ mover nodos OK
+ zoom funcionando
+ minimapa visible y navegable
+ fitcentrar funcionando
+ caja de herramientas compacta
+ layout estable con F12 abierto
+
+No tocar esta base salvo bug real o cambio pedido.
+
+## 5. Decisión Asistente IA
+
+Se descartó definitivamente el camino Ollama  llama3.1.
+
+Motivos
+
+ pesado
+ lento
+ ocupa mucho disco
+ innecesario para este caso
+ Omar no quiere dejarlo ni como respaldo
+
+Ollama y `llama3.18b` fueron eliminados de la PC.
+
+La línea correcta quedó
+
+```text
+Asistente IA local con ML.NET + CSV + modelo externo entrenado
+```
+
+Principio central
+
+```text
+La IA interpreta.
+Workflow Studio valida.
+Workflow Studio aplica.
+```
+
+La IA no genera código, no toca SQL, no modifica archivos y no aplica directamente al canvas.
+
+## 6. Arquitectura final acordada
+
+Hay dos programas separados.
+
+### 6.1 Proyecto WebForms
+
+Workflow Studio WebForms solo consume el modelo entrenado.
+
+Ruta esperada del modelo
+
+```text
+App_DataWF_AIworkflow_intent_model.zip
+```
+
+Configuración esperada en `Web.config`
+
+```xml
+add key=WF_AI_PROVIDER value=mlnet 
+add key=WF_AI_MLNET_MODEL_PATH value=App_DataWF_AIworkflow_intent_model.zip 
+add key=WF_AI_MLNET_MIN_CONFIDENCE value=0.25 
+```
+
+No debe quedar configuración de Ollama
+
+```xml
+add key=WF_AI_PROVIDER value=ollama 
+add key=WF_AI_LOCAL_ENDPOINT value=httplocalhost11434apichat 
+add key=WF_AI_MODEL value=llama3.18b 
+```
+
+### 6.2 Proyecto entrenador separado
+
+Proyecto separado
+
+```text
+WorkflowStudio.AITrainer
+```
+
+Responsabilidad
+
+ leer CSV
+ entrenar modelo
+ generar `workflow_intent_model.zip`
+ permitir prueba rápida de frases
+ copiar modelo al WebForms si se usa `--install-to`
+
+Estructura esperada
+
+```text
+WorkflowStudio.AITrainer
+│
+├── Data
+│   └── workflow_intents.csv
+│
+├── ModelOutput
+│   └── workflow_intent_model.zip
+│
+├── Program.cs
+└── WorkflowStudio.AITrainer.csproj
+```
+
+Comando normal
+
+```powershell
+dotnet run
+```
+
+Comando para entrenar e instalar directo
+
+```powershell
+dotnet run -- --install-to CRutaIntranet.WorkflowStudio.WebFormsApp_DataWF_AIworkflow_intent_model.zip
+```
+
+El entrenador quedó validado.
+
+Prueba validada
+
+```text
+quiero cargar una NC y mandarla a compras
+```
+
+Resultado esperado
+
+```text
+Frase completa
+Intent CREAR_TAREA_ROL
+
+Segmentos
+- quiero cargar una nc = CARGAR_DOCUMENTO
+- mandarla a compras = CREAR_TAREA_ROL
+```
+
+## 7. Dependencias ML.NET en WebForms
+
+Se tuvo que agregar `Microsoft.ML` al proyecto WebForms.
+
+También apareció el error
+
+```text
+The type 'Attribute' is defined in an assembly that is not referenced.
+You must add a reference to assembly 'netstandard'
+```
+
+Corrección aplicadarecomendada en `Web.config` dentro de `compilation`
+
+```xml
+assemblies
+  add assembly=netstandard, Version=2.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51 
+assemblies
+```
+
+También apareció el error
+
+```text
+No se puede cargar el archivo DLL 'CpuMathNative'
+```
+
+Corrección aplicada
+
+copiar
+
+```text
+CpuMathNative.dll
+```
+
+desde
+
+```text
+packagesMicrosoft.ML.CpuMath.4.0.2runtimeswin-x64native
+```
+
+hacia
+
+```text
+Intranet.WorkflowStudio.WebFormsbin
+```
+
+Si IIS Express corriera en 32 bits, habría que usar `win-x86`, pero la corrección con `win-x64` permitió avanzar.
+
+## 8. Archivos principales del Asistente IA en WebForms
+
+Archivos incorporadosmodificados en la línea del Asistente IA
+
+```text
+ApiWF_AiAssistant.ashx
+ApiWF_AiAssistant.ashx.cs
+
+App_CodeAiWfAiAssistantModels.cs
+App_CodeAiWfAiCatalogProvider.cs
+App_CodeAiWfAiMlnetProvider.cs
+App_CodeAiWfAiPlanValidator.cs
+
+Scriptsworkflow.ai.assistant.js
+Stylesworkflow.ai.assistant.css
+```
+
+Se eliminó la línea vieja relacionada con proveedor localOllama
+
+```text
+App_CodeAiWfAiLocalModelProvider.cs
+```
+
+Ya no debe usarse ni compilarse.
+
+## 9. Fixes realizados durante esta etapa
+
+### fix3 — Resolver runtime
+
+Objetivo
+
+Resolver palabras del usuario contra datos reales del sistema.
+
+Validado
+
+```text
+NC → NOTA_CREDITO_ELECTRONICA_AR
+compras → COMPRAS
+dirección → DIR_GENERAL
+administración → ADM_FIN
+operaciones → OPERACIONES
+it  sistemas  informática → IT
+```
+
+También se agregó soporte para resolver usuarios desde `WF_User` cuando el texto coincida con `UserKey` o `DisplayName`.
+
+### fix4 — Corrección de importe
+
+Problema
+
+```text
+si supera 200000
+```
+
+se interpretaba como
+
+```text
+200
+```
+
+Corrección
+
+Ahora interpreta correctamente
+
+```text
+200000
+```
+
+Formatos contemplados
+
+```text
+200000
+200.000
+200,000
+$200000
+$ 200.000
+200000,50
+200.000,50
+```
+
+Validado
+
+```text
+Total mayor a 200000
+```
+
+### fix5 — Branch Planner
+
+Objetivo
+
+Detectar ramas lógicas en frases complejas.
+
+Ejemplo interpretado
+
+```text
+si no tiene CAE → Compras
+si supera 200000 → Dirección
+si no supera 200000 → Administración
+```
+
+Se agregó en JSON técnico
+
+```json
+branchPlan {
+  planner runtime-branch-planner-v1,
+  hasBranches true,
+  branches []
+}
+```
+
+También se agregó visualmente la sección
+
+```text
+Plan de ramas
+```
+
+### fix6 — Scroll panel Asistente IA
+
+Problema
+
+Las respuestas largas no entraban en el panel derecho.
+
+Corrección
+
+Se agregó scroll propio al resultado del Asistente IA.
+
+Ahora se pueden ver
+
+ propuesta
+ acciones propuestas
+ plan de ramas
+ datos faltantes
+ advertencias
+ JSON técnico
+
+Archivos tocados
+
+```text
+Stylesworkflow.ai.assistant.css
+WorkflowUI.aspx
+```
+
+Se actualizó versión de recursos
+
+```text
+Stylesworkflow.ai.assistant.cssv=dev002
+Scriptsworkflow.ai.assistant.jsv=dev002
+```
+
+### fix7 — Resolver global de DocTipo y campos
+
+Problema
+
+En frases largas, aunque el usuario decía `NC`, el sistema podía seguir preguntando
+
+```text
+¿Qué tipo de documento querés cargar
+No pude determinar el campo CAE porque falta confirmar el DocTipo.
+No pude determinar el campo total porque falta confirmar el DocTipo.
+```
+
+Corrección
+
+Ahora el DocTipo se busca globalmente en todo el texto completo, contemplando puntuación
+
+```text
+NC,
+NC.
+factura,
+nota de crédito,
+```
+
+Resultado validado
+
+```text
+NC → NOTA_CREDITO_ELECTRONICA_AR
+contextPrefix → notaCredito
+CAE → biz.notaCredito.cae
+total → biz.notaCredito.total
+```
+
+Versión interna
+
+```text
+1.4-mlnet-docfield-resolver
+```
+
+## 10. Frase compleja validada
+
+Frase probada
+
+```text
+Quiero cargar una NC, validar que tenga CAE, si no tiene CAE mandarla a Compras para corregir, si tiene CAE y supera 200000 mandarla a Dirección, si no supera 200000 mandarla a Administración, registrar un log y finalizar el flujo.
+```
+
+Resultado esperado y observado
+
+```text
+1. ADD_NODE · doc.load · Cargar nota de crédito
+2. ADD_NODE · control.if · Validar CAE informado
+3. ADD_NODE · human.task · Corregir en Compras
+4. ADD_NODE · control.if · Total mayor a 200000
+5. ADD_NODE · human.task · Aprobación Dirección
+6. ADD_NODE · human.task · Enviar a Administración
+7. ADD_NODE · util.logger · Registrar evento
+8. ADD_NODE · util.end · Fin
+```
+
+Plan de ramas observado
+
+```text
+CAE informado
+SI evaluar total
+NO human.taskCOMPRAS
+
+Total mayor a 200000
+SI human.taskDIR_GENERAL
+NO human.taskADM_FIN
+```
+
+Esto quedó conceptualmente bien.
+
+## 11. Estado actual
+
+Estado del Asistente IA
+
+```text
+ML.NET + modelo externo OK
+Proyecto entrenador separado OK
+Modelo externo cargado por Workflow Studio OK
+Segmentación OK
+NC → NOTA_CREDITO_ELECTRONICA_AR OK
+compras → COMPRAS OK
+dirección → DIR_GENERAL OK
+administración → ADM_FIN OK
+importe 200000 OK
+Branch Planner inicial OK
+Scroll panel IA OK
+DocTipo global en frase larga OK
+```
+
+Todavía NO aplica automáticamente al canvas.
+
+La advertencia actual es correcta
+
+```text
+Todavía no se aplica al canvas automáticamente.
+```
+
+## 12. Próximo paso recomendado
+
+Próximo fix
+
+```text
+fix8 — Branch Connector  Generador de conexiones
+```
+
+Objetivo
+
+A partir del `branchPlan`, generar acciones de conexión.
+
+Hoy el Asistente propone nodos, pero todavía falta traducir el plan lógico a conexiones reales.
+
+Debe producir algo como
+
+```text
+CONNECT_NODES doc.load → Validar CAE
+
+CONNECT_NODES Validar CAE [SI] → Total mayor a 200000
+CONNECT_NODES Validar CAE [NO] → Corregir en Compras
+
+CONNECT_NODES Total mayor a 200000 [SI] → Aprobación Dirección
+CONNECT_NODES Total mayor a 200000 [NO] → Administración
+
+CONNECT_NODES Compras → Logger
+CONNECT_NODES Dirección → Logger
+CONNECT_NODES Administración → Logger
+CONNECT_NODES Logger → Fin
+```
+
+La idea es primero mostrar las conexiones propuestas en pantalla, todavía sin aplicarlas al canvas.
+
+Después de validar esto, recién avanzar al siguiente paso
+
+```text
+fix9 — Aplicar propuesta al canvas
+```
+
+## 13. Qué debe pasar Omar mañana
+
+Omar va a guardar el proyecto y subirlo a GitHub.
+
+Para la próxima sesión debe pasar
+
+1. ZIP completo actualizado del proyecto Workflow Studio WebForms.
+2. Proyecto entrenador separado `WorkflowStudio.AITrainer`, preferentemente también en ZIP o dentro de una carpeta aparte.
+3. Si el entrenador no cambió, igual conviene pasarlo para validar versión del CSV y del modelo.
+4. El archivo generado `workflow_intent_model.zip` debe estar copiado en
+
+```text
+App_DataWF_AIworkflow_intent_model.zip
+```
+
+Importante
+
+El proyecto entrenador no debe publicarse dentro del WebFormsIIS. Es herramienta externa de desarrollo.
+
+## 14. Criterio para continuar
+
+No empezar aplicando al canvas.
+
+Primero
+
+```text
+fix8 — generar conexiones propuestas desde branchPlan
+```
+
+Después revisar visualmente
+
+```text
+nodos propuestos
+conexiones propuestas
+ramas SINO
+datos faltantes
+advertencias
+JSON técnico
+```
+
+Solo si eso queda correcto
+
+```text
+fix9 — aplicar nodos y conexiones al canvas
+```
+
+Criterio final
+
+```text
+Pensar en grande.
+Hacerlo profesional.
+No romper lo estable.
+Primero plan lógico.
+Después conexiones.
+Después canvas.
+```

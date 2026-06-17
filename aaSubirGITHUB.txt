@@ -10,7 +10,7 @@ git push origin main   # lo sube a GitHub
 
 dotnet run
 Install-Package Microsoft.ML -Version 4.0.2
-
+C:\Users\omard\source\repos   estan los fuentes
 
 http://localhost:55556/Api/Ping.ashx
 http://localhost:55556/Login.aspx

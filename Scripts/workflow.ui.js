@@ -364,6 +364,10 @@
 
     function clearAll() {
         nodes = []; edges = [];
+        if (window.__WF_UI) {
+            window.__WF_UI.nodes = nodes;
+            window.__WF_UI.edges = edges;
+        }
         (world || canvas).querySelectorAll('.node').forEach(function (e) { e.remove(); });
         drawEdges(); select(null);
     }
@@ -980,6 +984,202 @@
         document.removeEventListener('mouseup', endMiniMapPan);
     }
 
+
+    // ====== Asistente IA: aplicar propuesta al canvas (fix9)
+    function normalizeAiText(v) {
+        return String(v == null ? '' : v).trim().toLowerCase();
+    }
+
+    function aiActionKey(type, label) {
+        return normalizeAiText(type) + '|' + normalizeAiText(label);
+    }
+
+    function aiEdgeCondition(value) {
+        var v = normalizeAiText(value);
+        if (!v || v === 'always') return 'always';
+        if (v === 'si' || v === 'sí' || v === 'true') return 'true';
+        if (v === 'no' || v === 'false') return 'false';
+        return value;
+    }
+
+    function buildAiPlanWorkflow(plan) {
+        plan = plan || {};
+        var actions = Array.isArray(plan.actions) ? plan.actions : [];
+        var connections = Array.isArray(plan.proposedConnections) ? plan.proposedConnections : [];
+
+        var addActions = actions.filter(function (a) {
+            return a && String(a.action || '').toUpperCase() === 'ADD_NODE' && a.nodeType;
+        });
+
+        if (!addActions.length) return null;
+
+        var wf = {
+            StartNodeId: null,
+            Nodes: {},
+            Edges: [],
+            Meta: window.__WF_META || null
+        };
+
+        var actionIds = [];
+        var byLabel = {};
+        var byTypeLabel = {};
+
+        addActions.forEach(function (a, i) {
+            var id = 'n' + (i + 1);
+            var type = String(a.nodeType || '').trim();
+            var meta = findCat(type) || { key: type, label: type, tint: '#94a3b8', icon: 'box' };
+            var label = String(a.label || meta.label || type).trim();
+
+            actionIds.push(id);
+            byLabel[normalizeAiText(label)] = id;
+            byTypeLabel[aiActionKey(type, label)] = id;
+
+            if (type === 'util.start' && !wf.StartNodeId) wf.StartNodeId = id;
+        });
+
+        if (!wf.StartNodeId && actionIds.length) wf.StartNodeId = actionIds[0];
+
+        function findNodeId(label, type) {
+            var key = aiActionKey(type || '', label || '');
+            if (type && byTypeLabel[key]) return byTypeLabel[key];
+            return byLabel[normalizeAiText(label)];
+        }
+
+        var graphEdges = [];
+        connections.forEach(function (c) {
+            if (!c) return;
+            var fromId = findNodeId(c.from, c.fromNodeType);
+            var toId = findNodeId(c.to, c.toNodeType);
+            if (!fromId || !toId || fromId === toId) return;
+            graphEdges.push({ from: fromId, to: toId, condition: aiEdgeCondition(c.condition) });
+        });
+
+        if (!graphEdges.length) {
+            for (var i = 0; i < actionIds.length - 1; i++) {
+                graphEdges.push({ from: actionIds[i], to: actionIds[i + 1], condition: 'always' });
+            }
+        }
+
+        var layer = {};
+        actionIds.forEach(function (id, idx) { layer[id] = idx; });
+        if (wf.StartNodeId) layer[wf.StartNodeId] = 0;
+
+        var changed = true;
+        for (var pass = 0; pass < actionIds.length + 3 && changed; pass++) {
+            changed = false;
+            graphEdges.forEach(function (e) {
+                var next = (layer[e.from] || 0) + 1;
+                if ((layer[e.to] || 0) < next) {
+                    layer[e.to] = next;
+                    changed = true;
+                }
+            });
+        }
+
+        var baseX = 120, baseY = 180, dx = 270, dy = 150;
+        var branchLaneCount = {};
+        function incomingFor(id) {
+            for (var i = 0; i < graphEdges.length; i++) {
+                if (graphEdges[i].to === id) return graphEdges[i];
+            }
+            return null;
+        }
+
+        addActions.forEach(function (a, i) {
+            var id = actionIds[i];
+            var type = String(a.nodeType || '').trim();
+            var meta = findCat(type) || { key: type, label: type, tint: '#94a3b8', icon: 'box' };
+            var label = String(a.label || meta.label || type).trim();
+            var params = deepClone(a.params || {});
+            var inc = incomingFor(id);
+
+            var x = baseX + ((layer[id] || i) * dx);
+            var y = baseY;
+
+            if (type === 'human.task' && inc) {
+                if (inc.condition === 'true') y = baseY - dy;
+                else if (inc.condition === 'false') y = baseY + dy;
+                else y = baseY + dy;
+
+                var laneKey = String(layer[id] || i) + '|' + y;
+                branchLaneCount[laneKey] = (branchLaneCount[laneKey] || 0) + 1;
+                if (branchLaneCount[laneKey] > 1) {
+                    y += (branchLaneCount[laneKey] - 1) * 90;
+                }
+            }
+
+            params.position = { x: x | 0, y: y | 0 };
+
+            wf.Nodes[id] = {
+                Id: id,
+                Type: type,
+                Label: label,
+                Parameters: params
+            };
+        });
+
+        var usedEdges = {};
+        var edgeSeq = 1;
+        graphEdges.forEach(function (e) {
+            var cond = e.condition || 'always';
+            var dedupeKey = e.from + '|' + e.to + '|' + cond;
+            if (usedEdges[dedupeKey]) return;
+            usedEdges[dedupeKey] = true;
+
+            wf.Edges.push({
+                Id: 'e' + (edgeSeq++),
+                From: e.from,
+                To: e.to,
+                Condition: cond
+            });
+        });
+
+        return wf;
+    }
+
+    function applyAiPlanToCanvas(plan, options) {
+        options = options || {};
+        plan = plan || {};
+
+        var missing = Array.isArray(plan.missingData) ? plan.missingData : [];
+        if (missing.length && !options.forceIncomplete) {
+            return {
+                ok: false,
+                message: 'La propuesta tiene datos faltantes. Completalos antes de aplicarla al canvas.'
+            };
+        }
+
+        var wf = buildAiPlanWorkflow(plan);
+        if (!wf) {
+            return {
+                ok: false,
+                message: 'No hay acciones suficientes para aplicar al canvas.'
+            };
+        }
+
+        if (nodes.length > 0 && !options.replaceExisting) {
+            var ok = window.confirm('Esto reemplazará el grafo actual del canvas por la propuesta del Asistente IA. ¿Querés continuar?');
+            if (!ok) {
+                return { ok: false, cancelled: true, message: 'Aplicación cancelada.' };
+            }
+        }
+
+        WF_applyGraphFromObject(wf);
+        if (window.__WF_UI) {
+            window.__WF_UI.nodes = nodes;
+            window.__WF_UI.edges = edges;
+        }
+
+        try { fitView(); } catch (e) { }
+        try { drawEdges(); } catch (e2) { }
+        try { renderMiniMap(); } catch (e3) { }
+
+        return {
+            ok: true,
+            message: 'Propuesta aplicada al canvas. Revisá nodos, aristas y parámetros antes de guardar.'
+        };
+    }
+
     // ====== init
     function bumpIdSeqFromExisting() {
         var maxN = 0, maxE = 0;
@@ -1360,7 +1560,8 @@
         setZoom: setZoom,
         renderMiniMap: renderMiniMap,
         renderInspector: renderInspector,
-        uid: uid
+        uid: uid,
+        applyAiPlan: applyAiPlanToCanvas
     };
     try {
         window.dispatchEvent(new Event('wf-ui-ready'));

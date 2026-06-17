@@ -107,10 +107,39 @@
         // =========================
         // Modo técnico
         // =========================
-        const chkAdv = el("input", "input");
+        const chkAdv = el("input");
         chkAdv.type = "checkbox";
         chkAdv.checked = !!p.expression;
-        const sAdvToggle = section("Modo técnico (solo admins)", chkAdv);
+        chkAdv.style.width = "auto";
+        chkAdv.style.height = "auto";
+        chkAdv.style.margin = "0 8px 0 0";
+        chkAdv.style.flex = "0 0 auto";
+
+        const advWrap = el("label");
+        advWrap.style.display = "flex";
+        advWrap.style.alignItems = "center";
+        advWrap.style.gap = "6px";
+        advWrap.style.cursor = "pointer";
+        advWrap.style.fontSize = "13px";
+        advWrap.style.color = "#334155";
+
+        const advText = el("span");
+        advText.textContent = "Usar expresión técnica avanzada";
+
+        advWrap.appendChild(chkAdv);
+        advWrap.appendChild(advText);
+
+        const advHelp = el("div");
+        advHelp.textContent = "Solo para condiciones que no puedan representarse con campo, operador y valor.";
+        advHelp.style.marginTop = "4px";
+        advHelp.style.fontSize = "12px";
+        advHelp.style.color = "#64748b";
+
+        const advBox = el("div");
+        advBox.appendChild(advWrap);
+        advBox.appendChild(advHelp);
+
+        const sAdvToggle = section("Avanzado", advBox);
 
         const inpExpr = el("textarea", "input");
         inpExpr.value = p.expression || "";

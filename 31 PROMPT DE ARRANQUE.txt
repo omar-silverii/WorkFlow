@@ -1,0 +1,232 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Asistente IA
+
+Voy a pasarte:
+
+1. este ContextPack
+2. el ZIP actualizado del proyecto Workflow Studio WebForms
+3. si corresponde, el ZIP del proyecto entrenador `WorkflowStudio.AITrainer`
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP antes de proponer cambios.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* no inventar nada
+* no cambiar arquitectura sin necesidad
+* no reescribir cosas que ya funcionan
+* cambios mínimos y precisos
+* siempre sobre código real del ZIP
+* no mandar “archivo completo” si no verificaste el archivo real actual
+* no asumir que el código quedó exactamente como en el chat
+* preferir formato `DONDE DICE → REEMPLAZAR POR`
+* si algo no cierra, decilo
+* si falta una pieza, pedila
+* no mezclar teoría larga con código si estamos corrigiendo algo puntual
+* proponer siempre la mejor versión de entrada
+* no volver atrás sobre temas ya cerrados
+* cuando algo ya funciona, no discutirlo otra vez salvo bug real
+
+## Estado importante
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+No tocar:
+
+* WorkflowUI dev210
+* canvas
+* aristas
+* zoom
+* minimapa
+* FACTURA_AR
+* NC_AR
+* extractores documentales
+* motor de ejecución
+
+salvo bug real.
+
+## Estado Asistente IA
+
+Se descartó Ollama / llama3.1.
+
+El Asistente IA ahora usa:
+
+```text
+ML.NET + CSV + modelo externo entrenado
+```
+
+Arquitectura:
+
+```text
+WorkflowStudio.AITrainer
+        ↓ entrena CSV
+        ↓ genera workflow_intent_model.zip
+
+Workflow Studio WebForms
+        ↓ consume modelo
+        ↓ interpreta intención
+        ↓ valida
+        ↓ muestra propuesta
+```
+
+Workflow Studio NO debe entrenar en runtime.
+
+El entrenador es proyecto separado.
+
+Ruta esperada del modelo en WebForms:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+## Estado validado
+
+Frase validada:
+
+```text
+Quiero cargar una NC, validar que tenga CAE, si no tiene CAE mandarla a Compras para corregir, si tiene CAE y supera 200000 mandarla a Dirección, si no supera 200000 mandarla a Administración, registrar un log y finalizar el flujo.
+```
+
+Resultado actual correcto:
+
+```text
+1. ADD_NODE · doc.load · Cargar nota de crédito
+2. ADD_NODE · control.if · Validar CAE informado
+3. ADD_NODE · human.task · Corregir en Compras
+4. ADD_NODE · control.if · Total mayor a 200000
+5. ADD_NODE · human.task · Aprobación Dirección
+6. ADD_NODE · human.task · Enviar a Administración
+7. ADD_NODE · util.logger · Registrar evento
+8. ADD_NODE · util.end · Fin
+```
+
+Plan de ramas correcto:
+
+```text
+CAE informado
+SI: evaluar total
+NO: human.task:COMPRAS
+
+Total mayor a 200000
+SI: human.task:DIR_GENERAL
+NO: human.task:ADM_FIN
+```
+
+## Próximo trabajo
+
+No empezar aplicando al canvas.
+
+El próximo paso es:
+
+```text
+fix8 — Branch Connector / Generador de conexiones
+```
+
+Objetivo:
+
+A partir del `branchPlan`, generar conexiones propuestas.
+
+Ejemplo esperado:
+
+```text
+doc.load → Validar CAE
+
+Validar CAE [SI] → Total mayor a 200000
+Validar CAE [NO] → Corregir en Compras
+
+Total mayor a 200000 [SI] → Aprobación Dirección
+Total mayor a 200000 [NO] → Administración
+
+Compras → Logger
+Dirección → Logger
+Administración → Logger
+
+Logger → Fin
+```
+
+Primero solo mostrarlo en pantalla como propuesta.
+
+No aplicar todavía al canvas.
+
+## Entregable esperado de la próxima sesión
+
+Implementar `fix8` sobre el código real del ZIP:
+
+* leer `branchPlan`
+* generar conexiones propuestas
+* mostrar sección “Conexiones propuestas”
+* mantener validación OK
+* mantener advertencia de que todavía no se aplica al canvas automáticamente
+
+Después de probar y validar conexiones:
+
+```text
+fix9 — Aplicar propuesta al canvas
+```
+
+pero no avanzar a eso sin validar primero `fix8`.
+
+## Sobre el proyecto entrenador
+
+El entrenador debe mantenerse separado.
+
+Si se entrega ZIP del entrenador, revisar:
+
+```text
+WorkflowStudio.AITrainer
+Data/workflow_intents.csv
+Program.cs
+ModelOutput/workflow_intent_model.zip
+```
+
+Si el CSV no cambió, no hace falta reentrenar.
+
+Si el CSV cambió:
+
+```powershell
+dotnet run
+```
+
+y luego copiar:
+
+```text
+ModelOutput\workflow_intent_model.zip
+```
+
+a:
+
+```text
+Intranet.WorkflowStudio.WebForms\App_Data\WF_AI\workflow_intent_model.zip
+```
+
+Criterio:
+
+```text
+El entrenador vive afuera.
+Workflow Studio solo consume el modelo.
+```
+
+## Recordatorio final
+
+Estamos construyendo un producto serio y vendible.
+
+Criterio:
+
+```text
+Pensar en grande.
+Hacerlo profesional.
+No romper lo estable.
+Primero plan lógico.
+Después conexiones.
+Después canvas.
+```

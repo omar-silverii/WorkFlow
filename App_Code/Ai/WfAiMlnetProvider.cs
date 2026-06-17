@@ -131,7 +131,7 @@ namespace Intranet.WorkflowStudio.WebForms
             string role = ResolveRole(norm, catalog);
             string userKey = ResolveUser(norm, catalog);
             string amount = ExtractAmount(norm);
-            bool wantsCaeValidation = ContainsAny(norm, "cae", "cai");
+            bool wantsCaeValidation = ContainsToken(norm, "cae") || ContainsToken(norm, "cai");
             bool wantsDocument = docTipo.Length > 0 || HasIntent(predictions, "CARGAR_DOCUMENTO") || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", " nc ");
             bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || ContainsAny(norm, "enviar a", "mandar a", "derivar a", "pasar a", "aprobar", "revision");
             bool wantsLogger = HasIntent(predictions, "REGISTRAR_LOG") || ContainsAny(norm, "log", "registrar", "dejar constancia");
@@ -143,6 +143,16 @@ namespace Intranet.WorkflowStudio.WebForms
             var actions = new JArray();
             var missing = new JArray();
             var warnings = new JArray();
+            string unknownRoleMention = DetectUnknownRoleMention(norm, catalog);
+
+            if (!string.IsNullOrWhiteSpace(unknownRoleMention))
+            {
+                missing.Add(new JObject
+                {
+                    ["key"] = "rolNoEncontrado",
+                    ["question"] = "No encontré el rol o sector \"" + unknownRoleMention + "\" en el catálogo real. Seleccioná un rol válido."
+                });
+            }
 
             if (wantsDocument)
             {
@@ -183,10 +193,10 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 if (!string.IsNullOrWhiteSpace(branches.CaeFalseRole))
                 {
-                    actions.Add(AddNode("human.task", "Corregir en " + RoleFriendlyName(branches.CaeFalseRole), HumanTaskParams(branches.CaeFalseRole, "Corregir en " + RoleFriendlyName(branches.CaeFalseRole), "Rama negativa de CAE generada por el Asistente IA.")));
+                    EnsureHumanTaskAction(actions, branches.CaeFalseRole, "Corregir en " + RoleFriendlyName(branches.CaeFalseRole), "Rama negativa de CAE generada por el Asistente IA.");
                     branchTasksCreated = true;
                 }
-                else if (ContainsAny(norm, "si no tiene cae", "si falta cae", "sin cae", "no tiene cae", "falta cae"))
+                else
                 {
                     missing.Add(new JObject
                     {
@@ -223,13 +233,21 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 if (!string.IsNullOrWhiteSpace(trueRole))
                 {
-                    actions.Add(AddNode("human.task", HumanTaskTitle(trueRole, ""), HumanTaskParams(trueRole, HumanTaskTitle(trueRole, ""), "Rama positiva de importe generada por el Asistente IA.")));
+                    EnsureHumanTaskAction(actions, trueRole, HumanTaskTitle(trueRole, ""), "Rama positiva de importe generada por el Asistente IA.");
                     branchTasksCreated = true;
+                }
+                else
+                {
+                    missing.Add(new JObject
+                    {
+                        ["key"] = "onTruePath",
+                        ["question"] = "¿Qué querés hacer si el total supera " + amount + "?"
+                    });
                 }
 
                 if (!string.IsNullOrWhiteSpace(falseRole))
                 {
-                    actions.Add(AddNode("human.task", HumanTaskTitle(falseRole, ""), HumanTaskParams(falseRole, HumanTaskTitle(falseRole, ""), "Rama negativa de importe generada por el Asistente IA.")));
+                    EnsureHumanTaskAction(actions, falseRole, HumanTaskTitle(falseRole, ""), "Rama negativa de importe generada por el Asistente IA.");
                     branchTasksCreated = true;
                 }
                 else
@@ -295,20 +313,26 @@ namespace Intranet.WorkflowStudio.WebForms
                 });
             }
 
+            EnsureWorkflowBoundaries(actions);
+
+            JObject branchPlan = BuildBranchPlan(wantsCaeValidation, amount, branches);
+            JArray proposedConnections = BuildProposedConnections(actions, branchPlan);
+
             warnings.Add("Proveedor ML.NET: interpretación local usando modelo entrenado externo. Todavía no se aplica al canvas automáticamente.");
             if (branches.HasBranchInfo)
-                warnings.Add("Branch Planner v1: se detectaron ramas lógicas. La propuesta todavía no dibuja conexiones automáticamente en el canvas.");
+                warnings.Add("Branch Connector v1: se generaron conexiones propuestas para revisión. Todavía no se aplican al canvas automáticamente.");
 
             return new JObject
             {
-                ["assistantVersion"] = "1.4-mlnet-docfield-resolver",
+                ["assistantVersion"] = "1.7-mlnet-branch-planner-fix8c",
                 ["intent"] = "build_workflow",
                 ["confidence"] = AggregateConfidence(predictions),
                 ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches),
                 ["actions"] = actions,
                 ["missingData"] = missing,
                 ["warnings"] = warnings,
-                ["branchPlan"] = BuildBranchPlan(wantsCaeValidation, amount, branches),
+                ["branchPlan"] = branchPlan,
+                ["proposedConnections"] = proposedConnections,
                 ["mlnet"] = new JObject
                 {
                     ["modelLoadedAtUtc"] = _modelLoadedAtUtc.ToString("s") + "Z",
@@ -337,6 +361,328 @@ namespace Intranet.WorkflowStudio.WebForms
                 ["label"] = label,
                 ["params"] = parameters ?? new JObject()
             };
+        }
+
+        private static JObject EnsureHumanTaskAction(JArray actions, string role, string title, string description)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return null;
+
+            JObject existing = FindHumanTaskByRole(actions, role);
+            if (existing != null) return existing;
+
+            JObject node = AddNode("human.task", title, HumanTaskParams(role, title, description));
+            actions.Add(node);
+            return node;
+        }
+
+        private static void EnsureWorkflowBoundaries(JArray actions)
+        {
+            if (!HasConcreteWorkflowNode(actions)) return;
+
+            if (FirstAction(actions, "util.start") == null)
+                actions.Insert(0, AddNode("util.start", "Inicio", new JObject()));
+
+            if (FirstAction(actions, "util.end") == null)
+                actions.Add(AddNode("util.end", "Fin", new JObject()));
+        }
+
+        private static bool HasConcreteWorkflowNode(JArray actions)
+        {
+            if (actions == null) return false;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+
+                string type = ActionNodeType(a);
+                if (!string.Equals(type, "util.start", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(type, "util.end", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static JArray BuildProposedConnections(JArray actions, JObject branchPlan)
+        {
+            var result = new JArray();
+            if (actions == null || actions.Count == 0) return result;
+
+            JObject start = FirstAction(actions, "util.start");
+            JObject docLoad = FirstAction(actions, "doc.load");
+            JObject caeIf = FindActionByLabel(actions, "control.if", "Validar CAE informado");
+            JObject totalIf = FindActionLabelStarts(actions, "control.if", "Total mayor a ");
+            JObject logger = FirstAction(actions, "util.logger");
+            JObject end = FirstAction(actions, "util.end");
+
+            if (caeIf == null && totalIf == null)
+            {
+                AddSequentialConnections(result, actions);
+                return result;
+            }
+
+            if (start != null)
+            {
+                JObject firstTarget = docLoad ?? caeIf ?? totalIf ?? FirstActionAfter(actions, start);
+                AddConnection(result, start, firstTarget, "");
+            }
+
+            if (docLoad != null)
+            {
+                JObject firstTarget = caeIf ?? totalIf ?? FirstActionAfter(actions, docLoad);
+                AddConnection(result, docLoad, firstTarget, "");
+            }
+
+            if (caeIf != null)
+            {
+                JObject trueTarget = totalIf ?? logger ?? end;
+                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath"));
+
+                AddConnection(result, caeIf, trueTarget, "SI");
+                AddConnection(result, caeIf, falseTarget, "NO");
+            }
+
+            if (totalIf != null)
+            {
+                JObject trueTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "truePath"));
+                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "falsePath"));
+
+                AddConnection(result, totalIf, trueTarget, "SI");
+                AddConnection(result, totalIf, falseTarget, "NO");
+            }
+
+            JObject mergeTarget = logger ?? end;
+            if (mergeTarget != null)
+            {
+                foreach (JObject branchTarget in FindBranchTerminalActions(actions, branchPlan))
+                    AddConnection(result, branchTarget, mergeTarget, "");
+            }
+
+            if (logger != null && end != null)
+                AddConnection(result, logger, end, "");
+
+            if (result.Count == 0)
+                AddSequentialConnections(result, actions);
+
+            return result;
+        }
+
+        private static void AddSequentialConnections(JArray result, JArray actions)
+        {
+            JObject previous = null;
+            foreach (JToken token in actions)
+            {
+                JObject current = token as JObject;
+                if (current == null) continue;
+                if (!IsAddNode(current)) continue;
+
+                if (previous != null)
+                    AddConnection(result, previous, current, "");
+
+                previous = current;
+            }
+        }
+
+        private static List<JObject> FindBranchTerminalActions(JArray actions, JObject branchPlan)
+        {
+            var list = new List<JObject>();
+            AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath")));
+            AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "total", "truePath")));
+            AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "total", "falsePath")));
+            return list;
+        }
+
+        private static void AddUniqueAction(List<JObject> list, JObject action)
+        {
+            if (list == null || action == null) return;
+
+            foreach (JObject item in list)
+            {
+                if (object.ReferenceEquals(item, action)) return;
+                if (string.Equals(ActionLabel(item), ActionLabel(action), StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(ActionNodeType(item), ActionNodeType(action), StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+
+            list.Add(action);
+        }
+
+        private static string GetBranchPath(JObject branchPlan, string fieldKind, string pathName)
+        {
+            if (branchPlan == null) return "";
+
+            var branches = branchPlan["branches"] as JArray;
+            if (branches == null) return "";
+
+            foreach (JToken token in branches)
+            {
+                JObject b = token as JObject;
+                if (b == null) continue;
+
+                string kind = Convert.ToString(b["fieldKind"] ?? "").Trim();
+                if (!string.Equals(kind, fieldKind, StringComparison.OrdinalIgnoreCase)) continue;
+
+                return Convert.ToString(b[pathName] ?? "").Trim();
+            }
+
+            return "";
+        }
+
+        private static JObject FindActionForPath(JArray actions, string path)
+        {
+            path = (path ?? "").Trim();
+            if (path.Length == 0) return null;
+
+            if (path.Equals("evaluar total", StringComparison.OrdinalIgnoreCase))
+                return FindActionLabelStarts(actions, "control.if", "Total mayor a ");
+
+            if (path.Equals("continuar", StringComparison.OrdinalIgnoreCase))
+                return FirstAction(actions, "util.logger") ?? FirstAction(actions, "util.end");
+
+            if (path.StartsWith("human.task:", StringComparison.OrdinalIgnoreCase))
+            {
+                string role = path.Substring("human.task:".Length).Trim();
+                return FindHumanTaskByRole(actions, role);
+            }
+
+            return FindActionByLabel(actions, null, path);
+        }
+
+        private static JObject FindHumanTaskByRole(JArray actions, string role)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return null;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "human.task", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JObject p = a["params"] as JObject;
+                string r = p == null ? "" : Convert.ToString(p["rol"] ?? "").Trim();
+                if (string.Equals(r, role, StringComparison.OrdinalIgnoreCase))
+                    return a;
+            }
+
+            return null;
+        }
+
+        private static JObject FirstAction(JArray actions, string nodeType)
+        {
+            if (actions == null) return null;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (string.Equals(ActionNodeType(a), nodeType, StringComparison.OrdinalIgnoreCase))
+                    return a;
+            }
+
+            return null;
+        }
+
+        private static JObject FirstActionAfter(JArray actions, JObject previous)
+        {
+            if (actions == null || previous == null) return null;
+
+            bool foundPrevious = false;
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+
+                if (foundPrevious) return a;
+                if (object.ReferenceEquals(a, previous)) foundPrevious = true;
+            }
+
+            return null;
+        }
+
+        private static JObject FindActionByLabel(JArray actions, string nodeType, string label)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(label)) return null;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.IsNullOrWhiteSpace(nodeType) && !string.Equals(ActionNodeType(a), nodeType, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(ActionLabel(a), label, StringComparison.OrdinalIgnoreCase)) return a;
+            }
+
+            return null;
+        }
+
+        private static JObject FindActionLabelStarts(JArray actions, string nodeType, string labelPrefix)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(labelPrefix)) return null;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), nodeType, StringComparison.OrdinalIgnoreCase)) continue;
+                if (ActionLabel(a).StartsWith(labelPrefix, StringComparison.OrdinalIgnoreCase)) return a;
+            }
+
+            return null;
+        }
+
+        private static void AddConnection(JArray result, JObject fromAction, JObject toAction, string condition)
+        {
+            if (result == null || fromAction == null || toAction == null) return;
+
+            string from = ActionLabel(fromAction);
+            string to = ActionLabel(toAction);
+            string fromType = ActionNodeType(fromAction);
+            string toType = ActionNodeType(toAction);
+            condition = (condition ?? "").Trim();
+
+            if (from.Length == 0 || to.Length == 0) return;
+            if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(fromType, toType, StringComparison.OrdinalIgnoreCase)) return;
+
+            foreach (JToken token in result)
+            {
+                JObject c = token as JObject;
+                if (c == null) continue;
+
+                if (string.Equals(Convert.ToString(c["from"] ?? ""), from, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(c["to"] ?? ""), to, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(c["condition"] ?? ""), condition, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+
+            var item = new JObject
+            {
+                ["action"] = "CONNECT_NODES",
+                ["from"] = from,
+                ["to"] = to,
+                ["fromNodeType"] = fromType,
+                ["toNodeType"] = toType
+            };
+
+            if (condition.Length > 0)
+                item["condition"] = condition;
+
+            result.Add(item);
+        }
+
+        private static bool IsAddNode(JObject action)
+        {
+            return string.Equals(Convert.ToString(action["action"] ?? "").Trim(), "ADD_NODE", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ActionNodeType(JObject action)
+        {
+            return Convert.ToString(action == null ? "" : action["nodeType"] ?? "").Trim();
+        }
+
+        private static string ActionLabel(JObject action)
+        {
+            return Convert.ToString(action == null ? "" : action["label"] ?? "").Trim();
         }
 
         private static string BuildMessage(JArray actions, string docTipo, string role, string userKey, string amount, BranchAnalysis branches)
@@ -406,33 +752,211 @@ namespace Intranet.WorkflowStudio.WebForms
         private static BranchAnalysis AnalyzeBranches(string normalizedText, WfAiCatalog catalog, string amount)
         {
             var b = new BranchAnalysis();
+            string pendingBranch = "";
+            string lastConditionKind = "";
 
             foreach (string clause in SplitClausesForBranches(normalizedText))
             {
                 string c = Normalize(clause);
-                string r = ResolveRole(c, catalog);
-                if (string.IsNullOrWhiteSpace(r)) continue;
+                if (string.IsNullOrWhiteSpace(c)) continue;
 
-                bool mentionsCae = ContainsAny(c, "cae", "cai");
+                string r = ResolvePositiveDestinationRole(c, catalog);
+
+                bool mentionsCae = ContainsToken(c, "cae") || ContainsToken(c, "cai");
                 bool caeNegative = mentionsCae && ContainsAny(c,
-                    "no tiene cae", "no posee cae", "falta cae", "sin cae", "si no tiene cae", "si falta cae");
+                    "no tiene cae", "no tenga cae", "no posee cae", "falta cae", "falta el cae", "sin cae", "si no tiene cae", "cuando no tenga cae", "si falta cae", "si falta el cae");
 
                 bool totalNegative = ContainsAny(c,
-                    "no supera", "no es mayor", "menor a", "menor que", "menor o igual", "no llega a", "por debajo");
+                    "no supera", "no lo supera", "no la supera", "no supera ese importe", "no supera el importe", "no supera dicho importe",
+                    "no es mayor", "menor a", "menor que", "menor o igual", "no llega a", "por debajo");
 
                 bool totalPositive = !totalNegative && ContainsAny(c,
                     "supera", "mayor a", "mayor que", "mas de", ">");
 
-                if (caeNegative && string.IsNullOrWhiteSpace(b.CaeFalseRole))
-                    b.CaeFalseRole = r;
+                bool contrary = ContainsAny(c, "caso contrario", "de lo contrario", "contrario");
 
-                if (totalNegative && string.IsNullOrWhiteSpace(b.TotalFalseRole))
-                    b.TotalFalseRole = r;
-                else if (totalPositive && string.IsNullOrWhiteSpace(b.TotalTrueRole))
-                    b.TotalTrueRole = r;
+                if (contrary && !string.IsNullOrWhiteSpace(r))
+                {
+                    if (string.Equals(lastConditionKind, "total", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AssignBranchRole(b, "totalFalse", r);
+                        pendingBranch = "";
+                        continue;
+                    }
+
+                    if (string.Equals(lastConditionKind, "cae", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AssignBranchRole(b, "caeFalse", r);
+                        pendingBranch = "";
+                        continue;
+                    }
+                }
+
+                string branchKind = "";
+                if (caeNegative) branchKind = "caeFalse";
+                else if (totalNegative) branchKind = "totalFalse";
+                else if (totalPositive) branchKind = "totalTrue";
+
+                if (!string.IsNullOrWhiteSpace(branchKind))
+                {
+                    if (!string.IsNullOrWhiteSpace(r))
+                    {
+                        AssignBranchRole(b, branchKind, r);
+                        pendingBranch = "";
+                    }
+                    else
+                    {
+                        pendingBranch = branchKind;
+                    }
+
+                    if (branchKind.StartsWith("total", StringComparison.OrdinalIgnoreCase))
+                        lastConditionKind = "total";
+                    else if (branchKind.StartsWith("cae", StringComparison.OrdinalIgnoreCase))
+                        lastConditionKind = "cae";
+
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(r) && !string.IsNullOrWhiteSpace(pendingBranch))
+                {
+                    AssignBranchRole(b, pendingBranch, r);
+                    pendingBranch = "";
+                }
             }
 
             return b;
+        }
+
+        private static void AssignBranchRole(BranchAnalysis b, string branchKind, string role)
+        {
+            if (b == null || string.IsNullOrWhiteSpace(role)) return;
+
+            if (string.Equals(branchKind, "caeFalse", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(b.CaeFalseRole))
+                b.CaeFalseRole = role;
+
+            if (string.Equals(branchKind, "totalTrue", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(b.TotalTrueRole))
+                b.TotalTrueRole = role;
+
+            if (string.Equals(branchKind, "totalFalse", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(b.TotalFalseRole))
+                b.TotalFalseRole = role;
+        }
+
+        private static string ResolvePositiveDestinationRole(string clause, WfAiCatalog catalog)
+        {
+            string c = Normalize(clause);
+            string fromMarker = ResolveRoleAfterPositiveDestinationMarker(c, catalog);
+            if (!string.IsNullOrWhiteSpace(fromMarker)) return fromMarker;
+
+            string role = ResolveRole(c, catalog);
+            if (string.IsNullOrWhiteSpace(role)) return "";
+
+            if (RoleAppearsOnlyInNegatedDestination(c, role, catalog))
+                return "";
+
+            return role;
+        }
+
+        private static string ResolveRoleAfterPositiveDestinationMarker(string clause, WfAiCatalog catalog)
+        {
+            string c = Normalize(clause);
+            string[] markers = new[]
+            {
+                "mandarla a", "mandarlo a", "mandar a", "enviarla a", "enviarlo a", "enviar a",
+                "derivarla a", "derivarlo a", "derivar a", "pasarla a", "pasarlo a", "pasar a",
+                "debe ir a", "ir a", "lo revisa", "la revisa", "revisa", "aprueba", "aprobarla", "aprobarlo",
+                "debe verla", "debe verlo", "verla", "verlo", "corregirlo", "corregirla", "corrige"
+            };
+
+            for (int i = 0; i < markers.Length; i++)
+            {
+                string marker = " " + markers[i] + " ";
+                int idx = c.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) continue;
+                if (IsNegatedDestinationMarker(c, idx)) continue;
+
+                string tail = c.Substring(idx + marker.Length);
+                string r = ResolveRole(tail, catalog);
+                if (!string.IsNullOrWhiteSpace(r)) return r;
+            }
+
+            return "";
+        }
+
+        private static bool IsNegatedDestinationMarker(string text, int markerIndex)
+        {
+            if (markerIndex < 0) return false;
+
+            int start = Math.Max(0, markerIndex - 18);
+            int end = Math.Min(text == null ? 0 : text.Length, markerIndex + 28);
+            if (end <= start) return false;
+
+            string window = text.Substring(start, end - start);
+
+            return ContainsAny(window,
+                "no debe ir a", "no debe enviar a", "no debe mandar a", "no debe derivar a", "no debe pasar a",
+                "no tiene que ir a", "no tiene que enviar a", "no tiene que mandar a", "no tiene que derivar a", "no tiene que pasar a",
+                "no ir a", "no enviar a", "no mandar a", "no derivar a", "no pasar a");
+        }
+
+        private static bool RoleAppearsOnlyInNegatedDestination(string clause, string role, WfAiCatalog catalog)
+        {
+            string c = Normalize(clause);
+            if (string.IsNullOrWhiteSpace(role)) return false;
+
+            var roleWords = new List<string>();
+            roleWords.Add(role);
+            roleWords.Add(role.Replace("_", " "));
+            roleWords.Add(RoleFriendlyName(role));
+
+            foreach (string word in roleWords)
+            {
+                string w = Normalize(word).Trim();
+                if (w.Length == 0) continue;
+
+                if (ContainsPhrase(c, w)
+                    && (ContainsPhrase(c, "no debe ir a " + w)
+                        || ContainsPhrase(c, "no debe enviar a " + w)
+                        || ContainsPhrase(c, "no debe mandar a " + w)
+                        || ContainsPhrase(c, "no debe derivar a " + w)
+                        || ContainsPhrase(c, "no debe pasar a " + w)))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static string DetectUnknownRoleMention(string normalizedText, WfAiCatalog catalog)
+        {
+            string t = Normalize(normalizedText);
+
+            Match m = Regex.Match(t, @"(?:sector|area)\s+(?<name>[a-z0-9_]+)", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                string candidate = NormalizeUnknownRoleName(m.Groups["name"].Value);
+                if (candidate.Length > 0 && string.IsNullOrWhiteSpace(ResolveRole(candidate, catalog)))
+                    return candidate;
+            }
+
+            // Caso frecuente de prueba: "Legales" no debe convertirse en tarea humana si no existe como rol real.
+            if (ContainsPhrase(t, "legales") && string.IsNullOrWhiteSpace(ResolveRole("legales", catalog)))
+                return "Legales";
+
+            return "";
+        }
+
+        private static string NormalizeUnknownRoleName(string raw)
+        {
+            string v = (raw ?? "").Trim();
+            if (v.Length == 0) return "";
+
+            if (ContainsAny(v, "si", "no", "que", "cuando", "para", "corregir", "validar", "finalizar", "terminar", "registrar"))
+                return "";
+
+            if (v.Length == 1) return v.ToUpperInvariant();
+            return char.ToUpperInvariant(v[0]) + v.Substring(1).ToLowerInvariant();
         }
 
         private static List<string> SplitClausesForBranches(string normalizedText)
@@ -440,8 +964,11 @@ namespace Intranet.WorkflowStudio.WebForms
             var result = new List<string>();
             string t = Normalize(normalizedText).Trim();
 
+            t = Regex.Replace(t, @"(?<!\d)\.(?!\d)", "|");
             t = Regex.Replace(t, @"\s*,\s*", "|");
             t = Regex.Replace(t, @"\s+y\s+si\s+", "|si ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+pero\s+si\s+", "|si ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+pero\s+antes\s+", "|pero antes ", RegexOptions.IgnoreCase);
             t = Regex.Replace(t, @"\s+de\s+lo\s+contrario\s+", "|de lo contrario ", RegexOptions.IgnoreCase);
             t = Regex.Replace(t, @"\s+caso\s+contrario\s+", "|caso contrario ", RegexOptions.IgnoreCase);
 
@@ -714,24 +1241,46 @@ namespace Intranet.WorkflowStudio.WebForms
             return "";
         }
 
+        private static bool ContainsToken(string normalizedText, string token)
+        {
+            string haystack = Normalize(normalizedText).Trim();
+            string needle = Normalize(token).Trim();
+            if (needle.Length == 0) return false;
+
+            string pattern = @"(^|[^a-z0-9_])" + Regex.Escape(needle) + @"($|[^a-z0-9_])";
+            return Regex.IsMatch(haystack, pattern, RegexOptions.IgnoreCase);
+        }
+
         private static bool ContainsPhrase(string normalizedText, string phrase)
         {
             string haystack = Normalize(normalizedText).Trim();
             string needle = Normalize(phrase).Trim();
             if (needle.Length == 0) return false;
-            return (" " + haystack + " ").IndexOf(" " + needle + " ", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            string pattern = @"(^|[^a-z0-9_])" + Regex.Escape(needle).Replace(@"\ ", @"\s+") + @"($|[^a-z0-9_])";
+            return Regex.IsMatch(haystack, pattern, RegexOptions.IgnoreCase);
         }
 
         private static bool ContainsAny(string text, params string[] values)
         {
             if (text == null) text = "";
-            string padded = " " + text + " ";
+
             foreach (string v in values)
             {
-                string n = Normalize(v);
-                if (padded.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
+                string n = Normalize(v).Trim();
+                if (n.Length == 0) continue;
+
+                if (Regex.IsMatch(n, @"^[a-z0-9_]+(?:\s+[a-z0-9_]+)*$", RegexOptions.IgnoreCase))
+                {
+                    if (ContainsPhrase(text, n)) return true;
+                }
+                else
+                {
+                    string haystack = Normalize(text);
+                    if (haystack.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                }
             }
+
             return false;
         }
 

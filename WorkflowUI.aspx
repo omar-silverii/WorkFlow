@@ -182,8 +182,8 @@
     <!-- JS de la IU -->
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
-    <script src="Scripts/workflow.ui.js?v=dev210"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=dev002"></script>
+    <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=dev003"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
