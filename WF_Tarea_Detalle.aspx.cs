@@ -70,6 +70,18 @@ namespace Intranet.WorkflowStudio.WebForms
             public string Resultado;
         }
 
+        private sealed class NotificacionPendienteRow
+        {
+            public long Id { get; set; }
+            public DateTime FechaCreacion { get; set; }
+            public string Prioridad { get; set; }
+            public string Titulo { get; set; }
+            public string Mensaje { get; set; }
+            public string UsuarioDestino { get; set; }
+            public string RolDestino { get; set; }
+            public string UrlAccion { get; set; }
+        }
+
         private sealed class VolverAItem
         {
             public string NodeId { get; set; }
@@ -207,7 +219,7 @@ WHERE t.Id = @TareaId;", cn))
                 .ToList();
         }
 
-        
+
         protected void Page_Load(object sender, EventArgs e)
         {
             try { Topbar1.ActiveSection = "Documentos"; } catch { }
@@ -296,6 +308,12 @@ WHERE   t.Id = @Id;", cn))
 
                     string estado = Convert.ToString(dr["Estado"]);
 
+                    ddlResultado.Enabled = true;
+                    txtObs.Enabled = true;
+                    btnCompletar.Enabled = true;
+                    btnAdjuntar.Enabled = true;
+                    fuAdjunto.Enabled = true;
+
                     if (estado.Equals("Completada", StringComparison.OrdinalIgnoreCase) ||
                         estado.Equals("Cancelada", StringComparison.OrdinalIgnoreCase))
                     {
@@ -305,7 +323,7 @@ WHERE   t.Id = @Id;", cn))
                         lblInfo.Text = "La tarea ya está cerrada.";
                         btnAdjuntar.Enabled = false;   // ✔️
                         fuAdjunto.Enabled = false;     // ✔️
-                        
+
                     }
 
                     var res = dr["Resultado"] as string;
@@ -335,10 +353,244 @@ WHERE   t.Id = @Id;", cn))
                     }
 
                     CargarPedidosPendientes(id, instanciaId);
+                    CargarNotificacionesPendientes(instanciaId);
                     BindAdjuntos();
                     CargarOpcionesVolverA(id);
                     AplicarConfiguracionAdjuntos(instanciaId);
                 }
+            }
+        }
+
+        private void CargarNotificacionesPendientes(long instanciaId)
+        {
+            pnlNotificacionesPendientes.Visible = false;
+            litNotificacionesPendientes.Text = string.Empty;
+
+            if (instanciaId <= 0)
+                return;
+
+            if (!ExisteTablaNotificacion())
+                return;
+
+            string userKey = (Context.User?.Identity?.Name ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(userKey))
+                return;
+
+            var notificaciones = ObtenerNotificacionesPendientesInstancia(instanciaId, userKey);
+            if (notificaciones.Count == 0)
+                return;
+
+            pnlNotificacionesPendientes.Visible = true;
+            litNotificacionesPendientes.Text = RenderNotificacionesPendientes(notificaciones);
+
+            bool hayCritica = notificaciones.Any(x => EsPrioridadCritica(x.Prioridad));
+            if (hayCritica && btnCompletar.Enabled)
+            {
+                btnCompletar.Enabled = false;
+                lblInfo.Text = "Hay una notificación crítica pendiente. Marcala como leída antes de completar la tarea.";
+            }
+        }
+
+        private List<NotificacionPendienteRow> ObtenerNotificacionesPendientesInstancia(long instanciaId, string userKey)
+        {
+            var list = new List<NotificacionPendienteRow>();
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT TOP 20
+    N.Id,
+    N.FechaCreacion,
+    N.Prioridad,
+    N.Titulo,
+    N.Mensaje,
+    N.UsuarioDestino,
+    N.RolDestino,
+    N.UrlAccion
+FROM dbo.WF_Notificacion N
+WHERE
+    N.Leido = 0
+    AND N.WF_InstanciaId = @InstanciaId
+    AND
+    (
+        (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
+        OR N.UsuarioDestino = @UserKey
+        OR EXISTS
+        (
+            SELECT 1
+            FROM dbo.WF_UsuarioRol UR
+            WHERE UR.Activo = 1
+              AND UR.Usuario = @UserKey
+              AND UR.RolKey = N.RolDestino
+        )
+    )
+ORDER BY
+    CASE
+        WHEN LOWER(ISNULL(N.Prioridad, 'normal')) IN ('critica', 'crítica') THEN 0
+        WHEN LOWER(ISNULL(N.Prioridad, 'normal')) = 'alta' THEN 1
+        WHEN LOWER(ISNULL(N.Prioridad, 'normal')) = 'normal' THEN 2
+        ELSE 3
+    END,
+    N.FechaCreacion DESC,
+    N.Id DESC;";
+
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey;
+
+                cn.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        list.Add(new NotificacionPendienteRow
+                        {
+                            Id = Convert.ToInt64(dr["Id"]),
+                            FechaCreacion = Convert.ToDateTime(dr["FechaCreacion"]),
+                            Prioridad = dr["Prioridad"] == DBNull.Value ? "normal" : Convert.ToString(dr["Prioridad"]),
+                            Titulo = dr["Titulo"] == DBNull.Value ? "" : Convert.ToString(dr["Titulo"]),
+                            Mensaje = dr["Mensaje"] == DBNull.Value ? "" : Convert.ToString(dr["Mensaje"]),
+                            UsuarioDestino = dr["UsuarioDestino"] == DBNull.Value ? "" : Convert.ToString(dr["UsuarioDestino"]),
+                            RolDestino = dr["RolDestino"] == DBNull.Value ? "" : Convert.ToString(dr["RolDestino"]),
+                            UrlAccion = dr["UrlAccion"] == DBNull.Value ? "" : Convert.ToString(dr["UrlAccion"])
+                        });
+                    }
+                }
+            }
+
+            return list;
+        }
+
+        private string RenderNotificacionesPendientes(List<NotificacionPendienteRow> list)
+        {
+            if (list == null || list.Count == 0) return string.Empty;
+
+            var html = new System.Text.StringBuilder();
+            html.Append("<div class='table-responsive mt-2'>");
+            html.Append("<table class='table table-sm align-middle mb-0'>");
+            html.Append("<thead><tr>");
+            html.Append("<th style='width:140px'>Fecha</th>");
+            html.Append("<th style='width:100px'>Prioridad</th>");
+            html.Append("<th style='width:220px'>Título</th>");
+            html.Append("<th>Mensaje</th>");
+            html.Append("<th style='width:180px'>Destino</th>");
+            html.Append("</tr></thead><tbody>");
+
+            foreach (var n in list)
+            {
+                html.Append("<tr>");
+                html.Append("<td>" + Server.HtmlEncode(n.FechaCreacion.ToString("dd/MM/yyyy HH:mm")) + "</td>");
+                html.Append("<td>" + RenderPrioridadNotificacion(n.Prioridad) + "</td>");
+                html.Append("<td class='fw-semibold'>" + Server.HtmlEncode(n.Titulo) + "</td>");
+                html.Append("<td>" + Server.HtmlEncode(n.Mensaje) + "</td>");
+                html.Append("<td>" + Server.HtmlEncode(RenderDestinoNotificacion(n)) + "</td>");
+                html.Append("</tr>");
+            }
+
+            html.Append("</tbody></table>");
+            html.Append("</div>");
+
+            if (list.Any(x => EsPrioridadCritica(x.Prioridad)))
+            {
+                html.Append("<div class='alert alert-danger mt-3 mb-0'>");
+                html.Append("Hay una notificación crítica pendiente. Para evitar resolver la tarea sin leer el aviso, primero marcá estas notificaciones como leídas.");
+                html.Append("</div>");
+            }
+
+            return html.ToString();
+        }
+
+        private string RenderDestinoNotificacion(NotificacionPendienteRow n)
+        {
+            if (n == null) return "Sistema";
+            if (!string.IsNullOrWhiteSpace(n.UsuarioDestino)) return "Usuario: " + n.UsuarioDestino;
+            if (!string.IsNullOrWhiteSpace(n.RolDestino)) return "Rol: " + n.RolDestino;
+            return "Sistema";
+        }
+
+        private string RenderPrioridadNotificacion(string prioridad)
+        {
+            string p = (prioridad ?? "normal").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(p)) p = "normal";
+
+            string cls = "bg-info text-dark";
+            if (p == "alta") cls = "bg-warning text-dark";
+            else if (p == "critica" || p == "crítica") cls = "bg-danger";
+            else if (p == "baja") cls = "bg-secondary";
+
+            return "<span class='badge " + cls + "'>" + Server.HtmlEncode(p.ToUpperInvariant()) + "</span>";
+        }
+
+        private bool EsPrioridadCritica(string prioridad)
+        {
+            string p = (prioridad ?? "").Trim().ToLowerInvariant();
+            return p == "critica" || p == "crítica";
+        }
+
+        protected void btnMarcarNotificacionesLeidas_Click(object sender, EventArgs e)
+        {
+            long tareaId = TareaIdActual;
+            long instanciaId = InstanciaIdActual;
+
+            if (tareaId <= 0 || instanciaId <= 0)
+                return;
+
+            if (!ExisteTablaNotificacion())
+                return;
+
+            string userKey = (Context.User?.Identity?.Name ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(userKey))
+                return;
+
+            MarcarNotificacionesPendientesInstanciaLeidas(instanciaId, userKey);
+            CargarTarea(tareaId);
+        }
+
+        private void MarcarNotificacionesPendientesInstanciaLeidas(long instanciaId, string userKey)
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = cn.CreateCommand())
+            {
+                cmd.CommandText = @"
+UPDATE N
+SET
+    N.Leido = 1,
+    N.FechaLeido = GETDATE(),
+    N.LeidoPor = @UserKey
+FROM dbo.WF_Notificacion N
+WHERE
+    N.Leido = 0
+    AND N.WF_InstanciaId = @InstanciaId
+    AND
+    (
+        (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
+        OR N.UsuarioDestino = @UserKey
+        OR EXISTS
+        (
+            SELECT 1
+            FROM dbo.WF_UsuarioRol UR
+            WHERE UR.Activo = 1
+              AND UR.Usuario = @UserKey
+              AND UR.RolKey = N.RolDestino
+        )
+    );";
+
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey;
+
+                cn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private bool ExisteTablaNotificacion()
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_Notificacion', 'U');", cn))
+            {
+                cn.Open();
+                var x = cmd.ExecuteScalar();
+                return x != null && x != DBNull.Value;
             }
         }
 

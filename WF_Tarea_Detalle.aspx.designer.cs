@@ -69,6 +69,33 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.Literal litPedidosPendientes;
 
         /// <summary>
+        /// Control pnlNotificacionesPendientes.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlNotificacionesPendientes;
+
+        /// <summary>
+        /// Control litNotificacionesPendientes.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Literal litNotificacionesPendientes;
+
+        /// <summary>
+        /// Control btnMarcarNotificacionesLeidas.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Button btnMarcarNotificacionesLeidas;
+
+        /// <summary>
         /// Control pnlAdjuntos.
         /// </summary>
         /// <remarks>

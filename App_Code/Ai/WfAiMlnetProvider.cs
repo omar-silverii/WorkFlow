@@ -133,6 +133,9 @@ namespace Intranet.WorkflowStudio.WebForms
             string amount = ExtractAmount(norm);
             List<EmailRequest> emailRequests = AnalyzeEmailRequests(userText, norm, catalog);
             EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
+            NotifyRequest notifyRequest = AnalyzeNotifyRequest(userText, norm);
+            StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(userText);
+            DelayRequest delayRequest = AnalyzeDelayRequest(norm);
             string preBranchRole = ExtractPreBranchHumanTaskRole(norm, catalog);
             if (!string.IsNullOrWhiteSpace(preBranchRole))
             {
@@ -143,9 +146,21 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 userKey = "";
             }
+            else if (notifyRequest.WantsNotify && RoleMentionAppearsOnlyInNotifyContext(norm, role))
+            {
+                role = "";
+                userKey = "";
+            }
 
             bool wantsCaeValidation = ContainsToken(norm, "cae") || ContainsToken(norm, "cai");
-            bool wantsDocument = docTipo.Length > 0 || HasIntent(predictions, "CARGAR_DOCUMENTO") || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", " nc ");
+
+            // No alcanza con que ML.NET prediga CARGAR_DOCUMENTO:
+            // frases de variables como "quitar variable" pueden clasificarse mal.
+            // Para agregar doc.load exigimos una señal explícita de documento en la frase.
+            bool hasExplicitDocumentSignal = docTipo.Length > 0
+                || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
+            bool wantsDocument = hasExplicitDocumentSignal;
+
             bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || ContainsAny(norm, "enviar a", "mandar a", "derivar a", "pasar a", "aprobar", "revision");
             if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(norm))
                 wantsHumanTask = false;
@@ -190,6 +205,12 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (emailRequests.Count > 0)
                 AddEmailRequestAction(actions, missing, emailRequests[0], emailRequests.Count > 1 ? 1 : 0);
+
+            if (stateVarsRequest.HasChanges)
+                AddStateVarsAction(actions, stateVarsRequest);
+
+            if (notifyRequest.WantsNotify)
+                AddNotifyAction(actions, notifyRequest, catalog);
 
             bool preBranchTaskCreated = false;
             if (!string.IsNullOrWhiteSpace(preBranchRole))
@@ -310,6 +331,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
             }
 
+            if (delayRequest.WantsDelay)
+                AddDelayAction(actions, delayRequest);
+
             if (wantsLogger)
             {
                 actions.Add(AddNode("util.logger", "Registrar evento", new JObject
@@ -351,10 +375,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 warnings.Add("Branch Connector v1: se generaron conexiones propuestas para revisión. Todavía no se aplican al canvas automáticamente.");
             if (emailRequest.WantsEmail)
                 warnings.Add("email.send: se genera nodo de correo, no tarea humana. El envío real depende de la configuración SMTP/Web.config.");
+            if (notifyRequest.WantsNotify)
+                warnings.Add("util.notify: se genera una notificación operativa interna; no envía email real.");
 
             return new JObject
             {
-                ["assistantVersion"] = "1.9-mlnet-email-mixed-flow-fix11",
+                ["assistantVersion"] = "1.13-mlnet-operational-notify-fix17",
                 ["intent"] = "build_workflow",
                 ["confidence"] = AggregateConfidence(predictions),
                 ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches),
@@ -378,6 +404,13 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["emailCount"] = emailRequests.Count,
                         ["emailTo"] = JArray.FromObject(emailRequest.To),
                         ["emailSubject"] = emailRequest.Subject,
+                        ["notifyRequested"] = notifyRequest.WantsNotify,
+                        ["notifyTitle"] = notifyRequest.Title,
+                        ["notifyMessage"] = notifyRequest.Message,
+                        ["stateVarsRequested"] = stateVarsRequest.HasChanges,
+                        ["delayRequested"] = delayRequest.WantsDelay,
+                        ["delayMilliseconds"] = delayRequest.Milliseconds,
+                        ["delaySeconds"] = delayRequest.Seconds,
                         ["caeFalseRole"] = branches.CaeFalseRole,
                         ["totalTrueRole"] = branches.TotalTrueRole,
                         ["totalFalseRole"] = branches.TotalFalseRole
@@ -424,6 +457,84 @@ namespace Intranet.WorkflowStudio.WebForms
                     ["question"] = EmailMissingRecipientQuestion(request)
                 });
             }
+        }
+
+        private static void AddStateVarsAction(JArray actions, StateVarsRequest request)
+        {
+            if (actions == null || request == null || !request.HasChanges) return;
+
+            var p = new JObject();
+            if (request.Set.Count > 0)
+            {
+                var set = new JObject();
+                foreach (var kv in request.Set)
+                    set[kv.Key] = kv.Value == null ? JValue.CreateNull() : JToken.FromObject(kv.Value);
+                p["set"] = set;
+            }
+
+            if (request.Remove.Count > 0)
+                p["remove"] = JArray.FromObject(request.Remove);
+
+            actions.Add(AddNode("state.vars", "Definir variables", p));
+        }
+
+        private static void AddDelayAction(JArray actions, DelayRequest request)
+        {
+            if (actions == null || request == null || !request.WantsDelay) return;
+
+            var p = new JObject
+            {
+                ["message"] = "Demora agregada por Asistente IA"
+            };
+
+            if (request.Milliseconds > 0)
+                p["ms"] = request.Milliseconds;
+            else if (!string.IsNullOrWhiteSpace(request.Seconds))
+                p["seconds"] = request.Seconds;
+
+            actions.Add(AddNode("control.delay", "Demora", p));
+        }
+
+        private static void AddNotifyAction(JArray actions, NotifyRequest request, WfAiCatalog catalog)
+        {
+            if (actions == null || request == null || !request.WantsNotify) return;
+
+            string destino = request.Destination ?? "";
+            string destinoTipo = "usuarioActual";
+            string usuarioDestino = "";
+            string rolDestino = "";
+
+            if (!string.IsNullOrWhiteSpace(destino))
+            {
+                string destinoTrim = NormalizeNotifyDestinationText(destino);
+                if (destinoTrim.Contains("\\") || destinoTrim.Contains("@"))
+                {
+                    destinoTipo = "usuario";
+                    usuarioDestino = destinoTrim;
+                }
+                else
+                {
+                    destinoTipo = "rol";
+                    string resolvedRole = ResolveRole(Normalize(destinoTrim), catalog);
+                    rolDestino = string.IsNullOrWhiteSpace(resolvedRole) ? destinoTrim : resolvedRole;
+                }
+            }
+
+            var p = new JObject
+            {
+                ["tipo"] = "sistema",
+                ["canal"] = "sistema",
+                ["nivel"] = "info",
+                ["destinoTipo"] = destinoTipo,
+                ["usuarioDestino"] = usuarioDestino,
+                ["rolDestino"] = rolDestino,
+                ["destino"] = usuarioDestino.Length > 0 ? usuarioDestino : rolDestino,
+                ["prioridad"] = "normal",
+                ["asunto"] = request.Title ?? "Notificación Workflow Studio",
+                ["mensaje"] = request.Message ?? "Notificación generada por Asistente IA."
+            };
+
+            actions.Add(AddNode("util.notify", "Notificar", p));
         }
 
         private static void EnsureWorkflowBoundaries(JArray actions)
@@ -813,6 +924,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrWhiteSpace(branches.TotalFalseRole)) parts.Add("si no supera el total derivar a " + branches.TotalFalseRole);
             }
 
+            if (FirstAction(actions, "state.vars") != null) parts.Add("definición de variables");
+            if (FirstAction(actions, "control.delay") != null) parts.Add("demora controlada");
+            if (FirstAction(actions, "util.notify") != null) parts.Add("notificación interna");
             if (FirstAction(actions, "email.send") != null) parts.Add("envío de correo");
             if (!string.IsNullOrWhiteSpace(role) && (branches == null || !branches.HasBranchInfo) && FirstAction(actions, "human.task") != null) parts.Add("derivación al rol " + role);
             if (!string.IsNullOrWhiteSpace(userKey) && FirstAction(actions, "human.task") != null) parts.Add("derivación al usuario " + userKey);
@@ -821,6 +935,186 @@ namespace Intranet.WorkflowStudio.WebForms
                 return "Recibí la intención y preparé una propuesta inicial para revisar.";
 
             return "Preparé una propuesta con " + string.Join(", ", parts.ToArray()) + ".";
+        }
+
+        private static NotifyRequest AnalyzeNotifyRequest(string originalText, string normalizedText)
+        {
+            var request = new NotifyRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool explicitInternalNotify = ContainsAny(t,
+                "notificar internamente", "notificacion interna", "notificación interna",
+                "notificar por sistema", "notificacion por sistema", "notificación por sistema",
+                "notificar en el sistema", "aviso interno", "aviso por sistema", "aviso en el sistema",
+                "avisar por sistema", "mostrar notificacion", "mostrar notificación",
+                "agregar notificacion", "agregar notificación", "crear notificacion", "crear notificación");
+
+            if (!explicitInternalNotify)
+                return request;
+
+            // Si el usuario pide correo/mail/email, eso lo maneja email.send.
+            // Permitimos util.notify solamente cuando la frase aclara que es interno/sistema.
+            if (ContainsAny(t, "notificar por correo", "notificar por mail", "notificar por email", "correo", "mail", "email")
+                && !ContainsAny(t, "internamente", "interno", "sistema"))
+                return request;
+
+            request.WantsNotify = true;
+            request.Title = ExtractNotifyTitle(originalText);
+            request.Message = ExtractNotifyMessage(originalText);
+            request.Destination = ExtractNotifyDestination(originalText);
+
+            if (string.IsNullOrWhiteSpace(request.Title))
+                request.Title = "Notificación Workflow Studio";
+
+            if (string.IsNullOrWhiteSpace(request.Message))
+                request.Message = "Notificación interna generada por Asistente IA.";
+
+            return request;
+        }
+
+        private static string ExtractNotifyTitle(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:titulo|título|asunto)\s+(?<title>.+?)(?=(?:\s+y\s+)?(?:mensaje|cuerpo|texto)\s+|(?:,|\.)\s*\b(?:luego|despues|después|mandar|enviar|derivar|pasar|validar|si|registrar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            return m.Success ? CleanExtractedSentence(m.Groups["title"].Value) : "";
+        }
+
+        private static string ExtractNotifyMessage(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:mensaje|cuerpo|texto)\s+(?<msg>.+?)(?=(?:,|\.)\s*\b(?:luego|despues|después|mandar|enviar|derivar|pasar|validar|si|registrar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            return m.Success ? CleanExtractedSentence(m.Groups["msg"].Value) : "";
+        }
+
+        private static string ExtractNotifyDestination(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:notificar|avisar)\s+(?:internamente\s+|por\s+sistema\s+|en\s+el\s+sistema\s+)?(?:(?:al|a\s+la|a|para\s+el|para\s+la|para)\s+)(?:(?:rol|sector|area|área|usuario)\s+)?(?<dest>.+?)(?=(?:\s+con\s+)?(?:titulo|título|asunto|mensaje|cuerpo|texto)\b|(?:,|\.)\s*\b(?:luego|despues|después|mandar|enviar|derivar|pasar|validar|si|registrar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            return m.Success ? NormalizeNotifyDestinationText(CleanExtractedSentence(m.Groups["dest"].Value)) : "";
+        }
+
+        private static string NormalizeNotifyDestinationText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+
+            string r = CleanExtractedSentence(value).Trim();
+            r = Regex.Replace(r,
+                @"^(?:al\s+|a\s+la\s+|a\s+|para\s+el\s+|para\s+la\s+|para\s+)?(?:rol|sector|area|área)\s+",
+                "",
+                RegexOptions.IgnoreCase).Trim();
+            r = Regex.Replace(r,
+                @"^(?:al\s+|a\s+la\s+|a\s+|para\s+el\s+|para\s+la\s+|para\s+)?usuario\s+",
+                "",
+                RegexOptions.IgnoreCase).Trim();
+            return r;
+        }
+
+        private static StateVarsRequest AnalyzeStateVarsRequest(string originalText)
+        {
+            var request = new StateVarsRequest();
+            if (string.IsNullOrWhiteSpace(originalText)) return request;
+
+            string setPattern = @"\b(?:guardar|setear|definir|crear|asignar|poner)\s+(?:la\s+)?variable\s+(?<key>[A-Z0-9_\.]+)\s+(?:con\s+valor|como|en|=)\s+(?<value>.+?)(?=(?:,|\.)?\s*\b(?:luego|despues|después|registrar|finalizar|terminar|esperar|demorar|pausar|mandar|enviar|derivar|pasar|validar|si)\b|[\r\n]|$)";
+            foreach (Match m in Regex.Matches(originalText, setPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
+            {
+                string key = CleanVariableKey(m.Groups["key"].Value);
+                string value = CleanExtractedSentence(m.Groups["value"].Value);
+                if (key.Length == 0) continue;
+
+                request.Set[key] = CoerceStateVarValue(value);
+            }
+
+            string removePattern = @"\b(?:quitar|eliminar|borrar|remover)\s+(?:la\s+)?variable\s+(?<key>[A-Z0-9_\.]+)";
+            foreach (Match m in Regex.Matches(originalText, removePattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
+            {
+                string key = CleanVariableKey(m.Groups["key"].Value);
+                if (key.Length > 0 && !ContainsIgnoreCase(request.Remove, key))
+                    request.Remove.Add(key);
+            }
+
+            return request;
+        }
+
+        private static DelayRequest AnalyzeDelayRequest(string normalizedText)
+        {
+            var request = new DelayRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            var m = Regex.Match(t,
+                @"\b(?:esperar|demorar|pausar|delay|demora)\s+(?:de\s+)?(?<n>\d+(?:[\.,]\d+)?)\s*(?<unit>milisegundos|milisegundo|ms|segundos|segundo|minutos|minuto|minutes|minute|min)\b",
+                RegexOptions.IgnoreCase);
+
+            if (!m.Success) return request;
+
+            string rawNumber = (m.Groups["n"].Value ?? "").Replace(',', '.');
+            string unit = Normalize(m.Groups["unit"].Value).Trim();
+
+            double number;
+            if (!double.TryParse(rawNumber, NumberStyles.Any, CultureInfo.InvariantCulture, out number))
+                return request;
+
+            if (number <= 0) return request;
+
+            request.WantsDelay = true;
+
+            if (unit == "ms" || unit.StartsWith("milisegundo", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Milliseconds = (int)Math.Round(number);
+            }
+            else if (unit.StartsWith("minuto", StringComparison.OrdinalIgnoreCase)
+                || unit.StartsWith("minute", StringComparison.OrdinalIgnoreCase)
+                || unit == "min")
+            {
+                request.Seconds = Math.Round(number * 60.0, 3).ToString(CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                request.Seconds = Math.Round(number, 3).ToString(CultureInfo.InvariantCulture);
+            }
+
+            return request;
+        }
+
+        private static string CleanVariableKey(string value)
+        {
+            value = (value ?? "").Trim().Trim('.', ',', ';', ':');
+            if (value.Length == 0) return "";
+
+            if (!Regex.IsMatch(value, @"^[A-Z0-9_]+(?:\.[A-Z0-9_]+)*$", RegexOptions.IgnoreCase))
+                return "";
+
+            return value;
+        }
+
+        private static object CoerceStateVarValue(string value)
+        {
+            value = (value ?? "").Trim();
+            if (value.Length == 0) return "";
+
+            bool b;
+            if (bool.TryParse(value, out b)) return b;
+
+            int i;
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out i)) return i;
+
+            double d;
+            if (double.TryParse(value.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out d)) return d;
+
+            return value;
         }
 
         private static EmailRequest AnalyzeEmailRequest(string originalText, string normalizedText, WfAiCatalog catalog)
@@ -940,6 +1234,18 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (!ContainsAny(t, "correo", "mail", "email", "e mail")) return false;
             if (ContainsAny(t, "tarea a", "usuario", "asignar a", "derivar a usuario", "mandar la tarea", "enviar la tarea")) return false;
+
+            return true;
+        }
+
+        private static bool RoleMentionAppearsOnlyInNotifyContext(string normalizedText, string role)
+        {
+            if (string.IsNullOrWhiteSpace(role)) return false;
+            string t = Normalize(normalizedText);
+
+            if (!ContainsAny(t, "notificar", "notificacion", "aviso", "avisar")) return false;
+            if (ContainsAny(t, "tarea", "tarea humana", "asignar tarea", "crear tarea", "derivar a", "pasar a", "mandar a", "enviar a", "aprobar", "aprobacion", "autorizar", "revision", "revisar"))
+                return false;
 
             return true;
         }
@@ -1721,6 +2027,53 @@ namespace Intranet.WorkflowStudio.WebForms
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out n)) return n;
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.CurrentCulture, out n)) return n;
             return fallback;
+        }
+
+        private class NotifyRequest
+        {
+            public bool WantsNotify { get; set; }
+            public string Destination { get; set; }
+            public string Title { get; set; }
+            public string Message { get; set; }
+
+            public NotifyRequest()
+            {
+                WantsNotify = false;
+                Destination = "";
+                Title = "";
+                Message = "";
+            }
+        }
+
+        private class StateVarsRequest
+        {
+            public Dictionary<string, object> Set { get; private set; }
+            public List<string> Remove { get; private set; }
+
+            public StateVarsRequest()
+            {
+                Set = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                Remove = new List<string>();
+            }
+
+            public bool HasChanges
+            {
+                get { return Set.Count > 0 || Remove.Count > 0; }
+            }
+        }
+
+        private class DelayRequest
+        {
+            public bool WantsDelay { get; set; }
+            public int Milliseconds { get; set; }
+            public string Seconds { get; set; }
+
+            public DelayRequest()
+            {
+                WantsDelay = false;
+                Milliseconds = 0;
+                Seconds = "";
+            }
         }
 
         private class EmailRequest

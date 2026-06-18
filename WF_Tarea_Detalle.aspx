@@ -46,6 +46,27 @@
                     <asp:Literal ID="litPedidosPendientes" runat="server" />
                 </asp:Panel>
 
+                <asp:Panel ID="pnlNotificacionesPendientes" runat="server" Visible="false" CssClass="alert alert-info ws-card mb-3">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div>
+                            <div class="fw-bold mb-1">Atención: hay notificaciones pendientes para esta instancia</div>
+                            <div class="small mb-2">
+                                Revisá estos avisos antes de completar la tarea. Las notificaciones pueden venir dirigidas a tu usuario o a alguno de tus roles.
+                            </div>
+                        </div>
+                        <span class="ws-pill">Notificaciones</span>
+                    </div>
+                    <asp:Literal ID="litNotificacionesPendientes" runat="server" />
+                    <div class="mt-3 d-flex flex-wrap gap-2">
+                        <asp:Button ID="btnMarcarNotificacionesLeidas" runat="server"
+                            Text="Marcar estas notificaciones como leídas"
+                            CssClass="btn btn-sm btn-outline-primary"
+                            CausesValidation="false"
+                            OnClick="btnMarcarNotificacionesLeidas_Click" />
+                        <a class="btn btn-sm btn-outline-secondary" href="WF_Notificaciones.aspx">Ver Mis notificaciones</a>
+                    </div>
+                </asp:Panel>
+
                 <a id="adjuntos"></a>
 
                 <!-- Adjuntos solicitados por backtrack (Instancia + Tarea) -->

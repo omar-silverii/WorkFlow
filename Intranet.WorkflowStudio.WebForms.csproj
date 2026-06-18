@@ -445,6 +445,7 @@
     <Content Include="WF_Entidades.aspx" />
     <Content Include="WF_Gerente_Tareas.aspx" />
     <Content Include="WF_Instancias.aspx" />
+    <Content Include="WF_Notificaciones.aspx" />
     <Content Include="WF_Seguridad.aspx" />
     <Content Include="WF_Tareas.aspx" />
     <Content Include="WF_Tarea_Detalle.aspx" />
@@ -468,6 +469,7 @@
     <Content Include="Api\WF_TaskCounters.ashx" />
     <Content Include="Api\WF_AiAssistant.ashx" />
     <Content Include="App_Data\WF_AI\workflow_intent_model.zip" />
+    <Content Include="Api\WF_NotificationCounters.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -538,6 +540,9 @@
     </Compile>
     <Compile Include="Api\WF_AiAssistant.ashx.cs">
       <DependentUpon>WF_AiAssistant.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_NotificationCounters.ashx.cs">
+      <DependentUpon>WF_NotificationCounters.ashx</DependentUpon>
     </Compile>
     <Compile Include="Api\WF_Roles_List.ashx.cs">
       <DependentUpon>WF_Roles_List.ashx</DependentUpon>
@@ -773,6 +778,13 @@
     </Compile>
     <Compile Include="WF_Instancias.aspx.designer.cs">
       <DependentUpon>WF_Instancias.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_Notificaciones.aspx.cs">
+      <DependentUpon>WF_Notificaciones.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Notificaciones.aspx.designer.cs">
+      <DependentUpon>WF_Notificaciones.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_Seguridad.aspx.cs">
       <DependentUpon>WF_Seguridad.aspx</DependentUpon>

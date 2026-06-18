@@ -71,6 +71,15 @@
                     </ul>
                 </li>
 
+                <li class="nav-item">
+                    <a class="nav-link" href="<%= ResolveUrl("~/WF_Notificaciones.aspx") %>">
+                        Notificaciones
+                        <span id="wsNotifBadge"
+                              class="badge rounded-pill bg-warning text-dark ms-1"
+                              style="display:none;">0</span>
+                    </a>
+                </li>
+
                 <li class="nav-item" runat="server" id="liAdmin">
                     <asp:HyperLink ID="lnkAdmin" runat="server" CssClass="nav-link" NavigateUrl="~/WF_Definiciones.aspx">Administración</asp:HyperLink>
                 </li>
@@ -82,45 +91,73 @@
 <script>
 (function () {
     var url = '<%= ResolveUrl("~/Api/WF_TaskCounters.ashx") %>';
+    var notifUrl = '<%= ResolveUrl("~/Api/WF_NotificationCounters.ashx") %>';
 
-    function setText(id, value) {
-        var el = document.getElementById(id);
-        if (el) el.textContent = value;
-    }
-
-    function setBadge(total) {
-        var badge = document.getElementById('wsTaskBadge');
-        if (!badge) return;
-
-        if (total > 0) {
-            badge.style.display = '';
-            badge.textContent = total;
-        } else {
-            badge.style.display = 'none';
-            badge.textContent = '0';
+        function setText(id, value) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = value;
         }
-    }
 
-    function refreshTaskCounters() {
-        fetch(url, { cache: 'no-store', credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data || data.ok !== true) return;
+        function setBadge(total) {
+            var badge = document.getElementById('wsTaskBadge');
+            if (!badge) return;
 
-                setBadge(data.total || 0);
+            if (total > 0) {
+                badge.style.display = '';
+                badge.textContent = total;
+            } else {
+                badge.style.display = 'none';
+                badge.textContent = '0';
+            }
+        }
 
-                setText('wsTaskPendingCount', data.pendientes || 0);
-                setText('wsTaskBackCount', data.back || 0);
-                setText('wsTaskTotalCount', data.total || 0);
-            })
-            .catch(function () {
-                // silencioso
-            });
-    }
+        function refreshTaskCounters() {
+            fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data || data.ok !== true) return;
 
-    document.addEventListener('DOMContentLoaded', function () {
-        refreshTaskCounters();
-        window.setInterval(refreshTaskCounters, 30000);
-    });
-})();
+                    setBadge(data.total || 0);
+
+                    setText('wsTaskPendingCount', data.pendientes || 0);
+                    setText('wsTaskBackCount', data.back || 0);
+                    setText('wsTaskTotalCount', data.total || 0);
+                })
+                .catch(function () {
+                    // silencioso
+                });
+        }
+
+        function setNotificationBadge(total) {
+            var badge = document.getElementById('wsNotifBadge');
+            if (!badge) return;
+
+            if (total > 0) {
+                badge.style.display = '';
+                badge.textContent = total;
+            } else {
+                badge.style.display = 'none';
+                badge.textContent = '0';
+            }
+        }
+
+        function refreshNotificationCounters() {
+            fetch(notifUrl, { cache: 'no-store', credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data || data.ok !== true) return;
+                    setNotificationBadge(data.unread || 0);
+                })
+                .catch(function () {
+                    // silencioso
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            refreshTaskCounters();
+            refreshNotificationCounters();
+            window.setInterval(refreshTaskCounters, 30000);
+            window.setInterval(refreshNotificationCounters, 30000);
+        });
+    })();
 </script>
