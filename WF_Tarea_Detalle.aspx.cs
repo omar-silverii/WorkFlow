@@ -369,7 +369,7 @@ WHERE   t.Id = @Id;", cn))
             if (instanciaId <= 0)
                 return;
 
-            if (!ExisteTablaNotificacion())
+            if (!ExisteTablaNotificacion() || !ExisteTablaNotificacionLectura())
                 return;
 
             string userKey = (Context.User?.Identity?.Name ?? "").Trim();
@@ -409,8 +409,11 @@ SELECT TOP 20
     N.RolDestino,
     N.UrlAccion
 FROM dbo.WF_Notificacion N
+LEFT JOIN dbo.WF_NotificacionLectura L
+    ON L.NotificacionId = N.Id
+   AND L.Usuario = @UserKey
 WHERE
-    N.Leido = 0
+    L.Id IS NULL
     AND N.WF_InstanciaId = @InstanciaId
     AND
     (
@@ -535,7 +538,7 @@ ORDER BY
             if (tareaId <= 0 || instanciaId <= 0)
                 return;
 
-            if (!ExisteTablaNotificacion())
+            if (!ExisteTablaNotificacion() || !ExisteTablaNotificacionLectura())
                 return;
 
             string userKey = (Context.User?.Identity?.Name ?? "").Trim();
@@ -552,15 +555,14 @@ ORDER BY
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = @"
-UPDATE N
-SET
-    N.Leido = 1,
-    N.FechaLeido = GETDATE(),
-    N.LeidoPor = @UserKey
+INSERT INTO dbo.WF_NotificacionLectura (NotificacionId, Usuario, FechaLeido)
+SELECT
+    N.Id,
+    @UserKey,
+    GETDATE()
 FROM dbo.WF_Notificacion N
 WHERE
-    N.Leido = 0
-    AND N.WF_InstanciaId = @InstanciaId
+    N.WF_InstanciaId = @InstanciaId
     AND
     (
         (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
@@ -573,6 +575,13 @@ WHERE
               AND UR.Usuario = @UserKey
               AND UR.RolKey = N.RolDestino
         )
+    )
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.WF_NotificacionLectura L
+        WHERE L.NotificacionId = N.Id
+          AND L.Usuario = @UserKey
     );";
 
                 cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
@@ -587,6 +596,17 @@ WHERE
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_Notificacion', 'U');", cn))
+            {
+                cn.Open();
+                var x = cmd.ExecuteScalar();
+                return x != null && x != DBNull.Value;
+            }
+        }
+
+        private bool ExisteTablaNotificacionLectura()
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_NotificacionLectura', 'U');", cn))
             {
                 cn.Open();
                 var x = cmd.ExecuteScalar();

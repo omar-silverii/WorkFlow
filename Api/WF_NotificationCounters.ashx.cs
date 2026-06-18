@@ -37,12 +37,17 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                         return;
                     }
 
+                    if (!ExisteTablaNotificacionLectura(cn))
+                    {
+                        WriteJson(ctx, new { ok = true, unread = 0, total = 0, tableMissingRead = true });
+                        return;
+                    }
+
                     using (var cmd = new SqlCommand(@"
 SELECT COUNT(*)
 FROM dbo.WF_Notificacion N
 WHERE
-    N.Leido = 0
-    AND (
+    (
         (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
         OR N.UsuarioDestino = @UserKey
         OR EXISTS
@@ -53,6 +58,13 @@ WHERE
               AND UR.Usuario = @UserKey
               AND UR.RolKey = N.RolDestino
         )
+    )
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.WF_NotificacionLectura L
+        WHERE L.NotificacionId = N.Id
+          AND L.Usuario = @UserKey
     );", cn))
                     {
                         cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey;
@@ -62,7 +74,8 @@ WHERE
                     using (var cmd = new SqlCommand(@"
 SELECT COUNT(*)
 FROM dbo.WF_Notificacion N
-WHERE (
+WHERE
+    (
         (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
         OR N.UsuarioDestino = @UserKey
         OR EXISTS
@@ -91,6 +104,15 @@ WHERE (
         private static bool ExisteTablaNotificacion(SqlConnection cn)
         {
             using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_Notificacion', 'U');", cn))
+            {
+                var x = cmd.ExecuteScalar();
+                return x != null && x != DBNull.Value;
+            }
+        }
+
+        private static bool ExisteTablaNotificacionLectura(SqlConnection cn)
+        {
+            using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_NotificacionLectura', 'U');", cn))
             {
                 var x = cmd.ExecuteScalar();
                 return x != null && x != DBNull.Value;

@@ -1,0 +1,673 @@
+# CONTEXTPACK — Workflow Studio / Asistente IA / email.send / util.notify operativo / fix10 a fix18
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó como en el chat.
+* No reemplazar archivos completos sin revisar el archivo real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Hacer cambios mínimos y profesionales.
+* Preferir correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME explicativo en cada ZIP correctivo.
+* Si falta una pieza, pedirla.
+* Si algo no cierra, decirlo.
+* No reabrir temas cerrados salvo bug real.
+* No tocar líneas estables sin necesidad.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* Omar quiere que además de corregir lo técnico, se revise sentido operativo completo: para qué se usará, quién lo verá, dónde queda registrado, qué falta para que sea productivo y qué está inconcluso aunque compile o funcione.
+
+## 2. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una sola conexión principal `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Uso de `ctx.Estado` como estado principal.
+* Claves técnicas `wf.*`.
+* Claves de negocio `biz.*`.
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+## 3. Líneas estables que NO se deben tocar salvo bug real
+
+No tocar salvo bug real:
+
+* WorkflowUI dev210.
+* Canvas.
+* Aristas.
+* Zoom.
+* Minimap.
+* FACTURA_ELECTRONICA_AR.
+* FACTURA_AR.
+* NOTA_CREDITO_ELECTRONICA_AR.
+* NC_AR.
+* Extractores documentales ya validados.
+* Motor de ejecución.
+* email.send/HEmailSend salvo tema SMTP pendiente o bug real.
+* SMTP/Web.config salvo que Omar retome relay.
+
+Omar aclaró que canvas/aristas/zoom están funcionando bien y no hay problema reciente.
+
+## 4. Forma de entrega acordada
+
+Omar prefiere que las correcciones se entreguen como ZIP correctivo con estructura real de carpetas del proyecto y archivos completos modificados, más un LEEME.
+
+Formato esperado:
+
+```text
+LEEME_FIXxx_....txt
+Ruta/Real/Del/Proyecto/ArchivoModificado.ext
+```
+
+No entregar archivos completos si no fueron generados desde el ZIP/código real actual.
+
+## 5. Estado Asistente IA antes de esta sesión
+
+Se descartó definitivamente Ollama / llama3.1.
+
+Arquitectura vigente:
+
+```text
+WorkflowStudio.AITrainer
+    entrena CSV
+    genera workflow_intent_model.zip
+
+Workflow Studio WebForms
+    consume modelo ML.NET externo
+    interpreta intención
+    valida contra catálogos reales
+    muestra propuesta
+    aplica al canvas
+```
+
+Workflow Studio NO entrena en runtime.
+
+Ruta esperada del modelo:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+Configuración esperada:
+
+```xml
+<add key="WF_AI_PROVIDER" value="mlnet" />
+<add key="WF_AI_MLNET_MODEL_PATH" value="App_Data/WF_AI/workflow_intent_model.zip" />
+<add key="WF_AI_MLNET_MIN_CONFIDENCE" value="0.25" />
+```
+
+## 6. Hitos anteriores ya estables
+
+Ya estaba validado:
+
+```text
+Asistente IA
+→ propuesta
+→ aplicar al canvas
+→ JSON
+→ guardar en SQL
+→ ejecutar motor
+→ doc.load
+→ NC_AR
+→ control.if
+→ human.task
+→ reanudación
+→ logger
+→ end
+```
+
+Definición anterior validada:
+
+```text
+8137 · Primer Grafo con IA
+```
+
+Ramas validadas:
+
+```text
+CAE true + total > 200000 true → DIR_GENERAL → Logger → End
+CAE true + total > 500000 false → ADM_FIN → Logger → End
+CAE false forzado → COMPRAS → Logger → End
+```
+
+Comportamiento aprobado por Omar:
+
+* Al aplicar al canvas, el Asistente IA se oculta.
+* Puede volver a abrirse manualmente.
+* Al reabrirse conserva/muestra la frase anterior.
+* No eliminar este comportamiento.
+
+## 7. email.send — Estado actual
+
+Se revisó `email.send`.
+
+Conclusiones:
+
+```text
+email.send existe.
+HEmailSend es el handler real registrado por el motor.
+ManejadorEmailSend existe pero no es el handler activo.
+El nodo ejecuta.
+El problema real pendiente es SMTP/autenticación/SSL.
+```
+
+Se hizo fix para mejorar logs y estado:
+
+* `email.sent`
+* `email.lastError`
+* `email.lastTo`
+* `email.lastSubject`
+* log correcto cuando usa web.config:
+
+```text
+host=(web.config), port=(web.config), ssl=(web.config), user=(web.config)
+```
+
+Se validó que el logger puede expandir:
+
+```text
+${email.lastError}
+```
+
+SMTP queda pendiente.
+
+Decisión tomada por Omar:
+
+```text
+La solución profesional será SMTP Relay de Google Workspace o relay interno de la empresa.
+No seguir ahora por Gmail/App Password.
+Retomar cuando Omar hable con el administrador de Gmail/Google Workspace.
+```
+
+## 8. fix10/fix11 — IA diferencia email.send de human.task
+
+Problema detectado:
+
+```text
+"mandar un mail a Omar"
+```
+
+se interpretaba como:
+
+```text
+human.task → OMARD\OMARD
+```
+
+Debería ser:
+
+```text
+email.send
+```
+
+Se corrigió para separar:
+
+```text
+Enviar a usuario / rol / sector → human.task
+Enviar correo / mail / email / notificación por email → email.send
+```
+
+También se corrigió falso rol/sector `"A"` causado por detectar `area` dentro de `tarea`.
+
+Frase validada:
+
+```text
+Quiero iniciar un flujo, cargar una NC desde input.filePath, enviar un email a omar.silverii@edi-sa.com con asunto Aviso de inicio Workflow Studio y cuerpo Se inició el circuito mixto, mandar la tarea a Compras para revisión, validar si el total supera 200000, si supera 200000 mandarla a Dirección para aprobación, si no supera 200000 mandarla a Administración, enviar otro email a omar.silverii@edi-sa.com con asunto Circuito derivado y cuerpo El flujo fue derivado correctamente, registrar un log y finalizar.
+```
+
+Resultado validado:
+
+```text
+Inicio
+→ doc.load
+→ email.send
+→ human.task Compras
+→ control.if total > 200000
+    true  → human.task DIR_GENERAL
+    false → human.task ADM_FIN
+→ email.send 2
+→ logger
+→ end
+```
+
+Se ejecutó con email en modo simulado y funcionó completo, incluyendo tareas humanas y reanudación.
+
+## 9. Catálogo IA — criterio profesional
+
+Se detectó que `WfAiCatalogProvider.cs` no debe copiar automáticamente todo `workflow.catalog.js`.
+
+Conclusión:
+
+```text
+workflow.catalog.js = catálogo visual del editor.
+WfAiCatalogProvider.cs = catálogo controlado que la IA puede usar con seguridad.
+```
+
+No conviene habilitar todos los nodos a la IA de golpe.
+
+Criterio por niveles:
+
+```text
+Nivel 1 — Estable:
+util.start, util.end, util.logger, doc.load, control.if, human.task, email.send
+
+Nivel 2 — Básico seguro:
+state.vars, control.delay, util.notify
+
+Futuros:
+data.sql, http.request, file.read/file.write, subflow, switch, retry, etc., pero solo después de revisar handlers, inspectors, parámetros, validación y utilidad operativa real.
+```
+
+## 10. fix13/fix14 — state.vars y control.delay
+
+Se agregó a la IA:
+
+```text
+state.vars
+control.delay
+```
+
+Prueba 1 validada:
+
+```text
+Quiero iniciar un flujo, guardar variable wf.prueba con valor iniciado, esperar 2 segundos, registrar un log y finalizar.
+```
+
+Resultado:
+
+```text
+Inicio
+→ state.vars set wf.prueba = iniciado
+→ control.delay
+→ logger
+→ end
+```
+
+Prueba 2 inicialmente falló porque `quitar variable wf.prueba` generaba `doc.load` incorrectamente. Se corrigió en fix14.
+
+Prueba 2 validada:
+
+```text
+Quiero iniciar un flujo, quitar variable wf.prueba, hacer una demora de 1500 ms, registrar un log y finalizar.
+```
+
+JSON validado:
+
+```json
+{
+  "remove": [
+    "wf.prueba"
+  ]
+}
+```
+
+y:
+
+```json
+{
+  "ms": 1500
+}
+```
+
+Ejecución validada:
+
+```text
+[Start]
+[state.vars] SET vacío.
+[state.vars] REMOVE 0/1 key(s).
+[control.delay] Demora agregada por Asistente IA (ms=1500).
+[control.delay] OK.
+[Logger NUEVO] [Info] Paso agregado por Asistente IA
+[End]
+```
+
+Conclusión:
+
+```text
+state.vars y control.delay quedan validados.
+```
+
+## 11. fix15/fix16 — util.notify inicial y aclaración
+
+Se agregó `util.notify` al Asistente IA.
+
+Primera prueba:
+
+```text
+Quiero iniciar un flujo, notificar internamente con asunto Aviso de prueba y mensaje Se generó una notificación interna desde el Asistente IA, registrar un log y finalizar.
+```
+
+Inicialmente funcionaba solo como log:
+
+```text
+[notify/log/info] ...
+```
+
+Omar detectó correctamente que no era una notificación operativa real:
+
+```text
+¿Dónde se ve?
+¿Para quién es?
+¿Dónde queda?
+¿Quién la recibe?
+```
+
+Se aclaró el inspector para no confundir con email:
+
+```text
+util.notify → notificación interna/sistema/log.
+email.send → correo real/simulado.
+```
+
+Pero se concluyó que `util.notify` tenía que evolucionar a una funcionalidad operativa real.
+
+## 12. fix17 — util.notify operativo real
+
+Se implementó `util.notify` operativo.
+
+Archivos principales incluidos en fix17:
+
+```text
+Sql/FIX17_WF_Notificacion.sql
+App_Code/Handlers/HUtilNotify.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+App_Code/Ai/WfAiMlnetProvider.cs
+Scripts/Inspectors/inspector.util.notify.js
+Controls/WsTopbar.ascx
+Api/WF_NotificationCounters.ashx
+Api/WF_NotificationCounters.ashx.cs
+WF_Notificaciones.aspx
+WF_Notificaciones.aspx.cs
+WF_Notificaciones.aspx.designer.cs
+Intranet.WorkflowStudio.WebForms.csproj
+```
+
+Se corrigieron errores de compilación posteriores:
+
+* fix17b: escape en `WfAiMlnetProvider.cs`, `Contains("\\")`.
+* fix17c: inicialización de variables en `WF_Notificaciones.aspx.cs`.
+* fix17d: notificaciones por rol y limpieza de `DatosJson`.
+
+Funcionalidad validada:
+
+```text
+util.notify
+→ crea registro en WF_Notificacion
+→ queda asociado a WF_InstanciaId
+→ queda asociado a WF_DefinicionId
+→ queda asociado a NodoId / NodoTipo
+→ queda dirigido a usuario o rol
+→ aparece en badge de topbar
+→ aparece en WF_Notificaciones.aspx
+→ puede marcarse como leída
+```
+
+Prueba usuario actual validada:
+
+```text
+Quiero iniciar un flujo, notificar internamente con asunto Aviso operativo y mensaje Esta notificación debe quedar visible en Mis notificaciones, registrar un log y finalizar.
+```
+
+Registro SQL validado:
+
+```text
+WF_InstanciaId = 150476
+WF_DefinicionId = 8143
+NodoId = n2
+NodoTipo = util.notify
+Tipo = sistema
+Canal = sistema
+Prioridad = normal
+Titulo = Aviso operativo
+Mensaje = Esta notificación debe quedar visible en Mis notificaciones
+UsuarioDestino = OMARD\OMARD
+RolDestino = NULL
+UrlAccion = WF_Instancias.aspx?defId=8143&inst=150476
+Leido = 0
+CreadoPor = OMARD\OMARD
+```
+
+Se marcó como leída correctamente y desapareció del filtro “Sólo no leídas”.
+
+## 13. fix17d — notificación por rol COMPRAS
+
+Problema inicial:
+
+La frase:
+
+```text
+notificar internamente al rol Compras
+```
+
+seguía generando notificación para usuario actual.
+
+Se corrigió.
+
+Frase validada:
+
+```text
+Quiero iniciar un flujo, notificar internamente al rol Compras con asunto Aviso para Compras y mensaje Hay una revisión pendiente para el sector Compras, registrar un log y finalizar.
+```
+
+Resultado en logs:
+
+```text
+[notify/db/info] #3 rol=COMPRAS Aviso para Compras: Hay una revisión pendiente para el sector Compras
+```
+
+Validación:
+
+```text
+OMARD\OMARD no ve esa notificación.
+OMARD\USUARIO1 sí la ve.
+```
+
+Roles recordados:
+
+```text
+OMARD\OMARD     → DIR_GENERAL
+OMARD\USUARIO1  → COMPRAS
+OMARD\USUARIO2  → OPERACIONES
+OMARD\USUARIO3  → ADM_FIN
+OMARD\USUARIO4  → IT
+```
+
+## 14. fix18 — alertas de notificaciones pendientes en tarea
+
+Omar detectó un punto operativo importante:
+
+Si una notificación está asociada a la misma instancia/tarea que el usuario está por resolver, no alcanza con que esté en “Mis notificaciones”. El usuario podría abrir la tarea, resolverla y nunca mirar la notificación.
+
+Se implementó fix18 sobre:
+
+```text
+WF_Tarea_Detalle.aspx
+WF_Tarea_Detalle.aspx.cs
+WF_Tarea_Detalle.aspx.designer.cs
+```
+
+Funcionalidad:
+
+```text
+Cuando el usuario abre WF_Tarea_Detalle.aspx,
+busca notificaciones no leídas asociadas a la misma instancia,
+dirigidas al usuario actual o a alguno de sus roles.
+```
+
+Resultado visual validado:
+
+Aparece panel arriba de la tarea:
+
+```text
+Atención: hay notificaciones pendientes para esta instancia.
+Revisá estos avisos antes de completar la tarea. Las notificaciones pueden venir dirigidas a tu usuario o a alguno de tus roles.
+```
+
+Muestra:
+
+```text
+Fecha
+Prioridad
+Título
+Mensaje
+Destino
+Botón Marcar estas notificaciones como leídas
+Botón Ver Mis notificaciones
+```
+
+En la prueba de `OMARD\USUARIO1`, abrió tarea de Compras y vio:
+
+```text
+Aviso para Compras
+Hay una revisión pendiente para el sector Compras
+Destino: Rol COMPRAS
+```
+
+Esto validó que `util.notify` ya es productivo de punta a punta:
+
+```text
+notify por rol
+→ badge en topbar
+→ página Mis notificaciones
+→ alerta dentro de tarea relacionada
+```
+
+## 15. Pendiente importante detectado y guardado
+
+`WF_Notificacion.Leido` hoy es global por registro.
+
+Problema:
+
+```text
+Si una notificación va dirigida a un rol,
+cuando un usuario la marca como leída,
+queda leída para todos los usuarios del rol.
+```
+
+Para una primera versión está aceptable, pero operativamente lo correcto es lectura por usuario.
+
+Pendiente recomendado para próxima sesión:
+
+```text
+fix19 — lectura de notificaciones por usuario
+```
+
+Posible diseño:
+
+```text
+WF_Notificacion = cabecera/mensaje/destino general
+WF_NotificacionLectura = estado de lectura por usuario
+```
+
+Tabla sugerida:
+
+```text
+WF_NotificacionLectura
+- Id
+- NotificacionId
+- Usuario
+- Leido
+- FechaLeido
+```
+
+O más simple:
+
+```text
+Id
+NotificacionId
+Usuario
+FechaLeido
+```
+
+Criterio:
+
+* Para notificación directa a usuario: lectura afecta solo a ese usuario.
+* Para notificación a rol: cada usuario del rol debe poder marcarla como leída individualmente.
+* El badge debe contar no leídas para el usuario actual considerando:
+
+  * notificaciones directas no leídas
+  * notificaciones de roles del usuario que aún no tengan lectura por ese usuario.
+
+## 16. Observaciones operativas futuras
+
+Además de fix19, revisar más adelante:
+
+1. `DatosJson` de notificaciones ya no debería guardar `position` del canvas.
+2. Probar botón “Abrir” de notificación para confirmar que navega bien a instancia/tarea.
+3. Definir qué pasa con prioridad:
+
+   * normal: solo aviso.
+   * alta: aviso destacado.
+   * crítica: bloquear completar tarea hasta marcar como leída.
+4. Evaluar si `util.notify` debería poder apuntar directamente a:
+
+   * usuario específico
+   * rol
+   * instancia
+   * tarea actual
+   * gerencia
+   * creador de instancia
+5. Evaluar página de administración o historial de notificaciones.
+6. Evaluar borrado lógico o limpieza de notificaciones antiguas.
+7. Evaluar permisos: un usuario no debería ver notificaciones de roles que no tiene.
+8. Evaluar si gerente/admin puede ver todas las notificaciones.
+
+## 17. Estado final de la jornada
+
+Validado y funcionando:
+
+```text
+✔ email.send ejecuta y se diferencia de human.task.
+✔ SMTP real queda pendiente por relay.
+✔ IA genera email.send, human.task, control.if, doc.load, logger y end correctamente.
+✔ IA puede mezclar correo + tareas humanas + condición + ramas.
+✔ state.vars validado.
+✔ control.delay validado.
+✔ util.notify evolucionó de log a notificación operativa real.
+✔ Notificaciones directas a usuario funcionan.
+✔ Notificaciones por rol funcionan.
+✔ Badge de topbar funciona.
+✔ WF_Notificaciones.aspx funciona.
+✔ Marcar como leída funciona.
+✔ WF_Tarea_Detalle muestra alerta de notificaciones pendientes relacionadas con la instancia.
+```
+
+Última validación visual:
+
+`OMARD\USUARIO1` abrió una tarea y vio arriba el panel de notificaciones pendientes para la instancia con destino `Rol: COMPRAS`.
+
+## 18. Próximo foco recomendado
+
+Mañana no seguir agregando nodos nuevos todavía.
+
+Próximo paso recomendado:
+
+```text
+fix19 — WF_NotificacionLectura / lectura por usuario
+```
+
+Objetivo:
+
+```text
+Corregir la lectura global de notificaciones para que las notificaciones por rol puedan ser leídas individualmente por cada usuario.
+```
+
+Después de eso, continuar con:
+
+```text
+fix20 — prioridad crítica/alta y bloqueo opcional en tareas
+```
+
+Solo si Omar confirma.

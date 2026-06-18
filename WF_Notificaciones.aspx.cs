@@ -35,7 +35,16 @@ namespace Intranet.WorkflowStudio.WebForms
                 gvNotificaciones.DataSource = new DataTable();
                 gvNotificaciones.DataBind();
                 pnlAviso.Visible = true;
-                litAviso.Text = "No existe la tabla dbo.WF_Notificacion. Ejecutá Sql/FIX17_WF_Notificacion.sql sobre la base DefaultConnection.";
+                litAviso.Text = "No existe la tabla dbo.WF_Notificacion. Ejecutá el script de creación de notificaciones sobre la base DefaultConnection.";
+                return;
+            }
+
+            if (!ExisteTablaNotificacionLectura())
+            {
+                gvNotificaciones.DataSource = new DataTable();
+                gvNotificaciones.DataBind();
+                pnlAviso.Visible = true;
+                litAviso.Text = "No existe la tabla dbo.WF_NotificacionLectura. Ejecutá Sql/FIX19_WF_NotificacionLectura.sql sobre la base DefaultConnection.";
                 return;
             }
 
@@ -63,12 +72,15 @@ SELECT TOP 500
     N.RolDestino,
     N.Destino,
     N.UrlAccion,
-    N.Leido,
-    N.FechaLeido,
-    N.LeidoPor
+    CAST(CASE WHEN L.Id IS NULL THEN 0 ELSE 1 END AS BIT) AS Leido,
+    L.FechaLeido,
+    L.Usuario AS LeidoPor
 FROM dbo.WF_Notificacion N
+LEFT JOIN dbo.WF_NotificacionLectura L
+    ON L.NotificacionId = N.Id
+   AND L.Usuario = @UserKey
 WHERE
-    (@SoloNoLeidas = 0 OR N.Leido = 0)
+    (@SoloNoLeidas = 0 OR L.Id IS NULL)
     AND (
         (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
         OR N.UsuarioDestino = @UserKey
@@ -91,7 +103,7 @@ WHERE
         OR CONVERT(NVARCHAR(30), N.WF_InstanciaId) LIKE @Like
     )
 ORDER BY
-    N.Leido ASC,
+    CASE WHEN L.Id IS NULL THEN 0 ELSE 1 END ASC,
     N.FechaCreacion DESC,
     N.Id DESC;";
 
@@ -128,13 +140,14 @@ ORDER BY
 
         protected void btnMarcarTodas_Click(object sender, EventArgs e)
         {
-            if (!ExisteTablaNotificacion())
+            if (!ExisteTablaNotificacion() || !ExisteTablaNotificacionLectura())
             {
                 CargarGrid();
                 return;
             }
 
             string userKey = (Context.User.Identity.Name ?? "").Trim();
+            string filtro = (txtFiltro.Text ?? "").Trim();
 
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = cn.CreateCommand())
@@ -142,15 +155,14 @@ ORDER BY
                 cn.Open();
 
                 cmd.CommandText = @"
-UPDATE N
-SET
-    N.Leido = 1,
-    N.FechaLeido = GETDATE(),
-    N.LeidoPor = @UserKey
+INSERT INTO dbo.WF_NotificacionLectura (NotificacionId, Usuario, FechaLeido)
+SELECT
+    N.Id,
+    @UserKey,
+    GETDATE()
 FROM dbo.WF_Notificacion N
 WHERE
-    N.Leido = 0
-    AND (
+    (
         (ISNULL(N.UsuarioDestino, '') = '' AND ISNULL(N.RolDestino, '') = '')
         OR N.UsuarioDestino = @UserKey
         OR EXISTS
@@ -161,9 +173,27 @@ WHERE
               AND UR.Usuario = @UserKey
               AND UR.RolKey = N.RolDestino
         )
+    )
+    AND
+    (
+        @Filtro = ''
+        OR N.Titulo LIKE @Like
+        OR N.Mensaje LIKE @Like
+        OR N.UsuarioDestino LIKE @Like
+        OR N.RolDestino LIKE @Like
+        OR CONVERT(NVARCHAR(30), N.WF_InstanciaId) LIKE @Like
+    )
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.WF_NotificacionLectura L
+        WHERE L.NotificacionId = N.Id
+          AND L.Usuario = @UserKey
     );";
 
                 cmd.Parameters.Add("@UserKey", SqlDbType.NVarChar, 200).Value = userKey;
+                cmd.Parameters.Add("@Filtro", SqlDbType.NVarChar, 200).Value = filtro;
+                cmd.Parameters.Add("@Like", SqlDbType.NVarChar, 240).Value = "%" + filtro + "%";
                 cmd.ExecuteNonQuery();
             }
 
@@ -202,7 +232,7 @@ WHERE
 
         private void MarcarLeida(long id)
         {
-            if (!ExisteTablaNotificacion()) return;
+            if (!ExisteTablaNotificacion() || !ExisteTablaNotificacionLectura()) return;
 
             string userKey = (Context.User.Identity.Name ?? "").Trim();
 
@@ -212,11 +242,11 @@ WHERE
                 cn.Open();
 
                 cmd.CommandText = @"
-UPDATE N
-SET
-    N.Leido = 1,
-    N.FechaLeido = GETDATE(),
-    N.LeidoPor = @UserKey
+INSERT INTO dbo.WF_NotificacionLectura (NotificacionId, Usuario, FechaLeido)
+SELECT
+    N.Id,
+    @UserKey,
+    GETDATE()
 FROM dbo.WF_Notificacion N
 WHERE
     N.Id = @Id
@@ -231,6 +261,13 @@ WHERE
               AND UR.Usuario = @UserKey
               AND UR.RolKey = N.RolDestino
         )
+    )
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.WF_NotificacionLectura L
+        WHERE L.NotificacionId = N.Id
+          AND L.Usuario = @UserKey
     );";
 
                 cmd.Parameters.Add("@Id", SqlDbType.BigInt).Value = id;
@@ -288,6 +325,17 @@ WHERE
         {
             using (var cn = new SqlConnection(Cnn))
             using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_Notificacion', 'U');", cn))
+            {
+                cn.Open();
+                var x = cmd.ExecuteScalar();
+                return x != null && x != DBNull.Value;
+            }
+        }
+
+        private bool ExisteTablaNotificacionLectura()
+        {
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand("SELECT OBJECT_ID('dbo.WF_NotificacionLectura', 'U');", cn))
             {
                 cn.Open();
                 var x = cmd.ExecuteScalar();

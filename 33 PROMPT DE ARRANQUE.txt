@@ -1,0 +1,315 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Notificaciones operativas / fix19
+
+Voy a pasarte:
+
+1. Este ContextPack.
+2. El ZIP actualizado del proyecto Workflow Studio WebForms, con todos los fixes aplicados hasta fix18.
+3. Si corresponde, cualquier ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre trabajar sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora, salvo que yo lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+
+## Estado actual estable
+
+Workflow Studio funciona en servidores reales.
+
+Está validada la cadena:
+
+```text
+Asistente IA
+→ canvas
+→ JSON
+→ SQL
+→ motor
+→ human.task
+→ reanudación
+→ logger
+→ end
+```
+
+También está validado:
+
+```text
+email.send simulado
+human.task
+doc.load
+control.if
+state.vars
+control.delay
+util.notify operativo
+```
+
+## No tocar salvo bug real
+
+```text
+WorkflowUI dev210
+canvas
+aristas
+zoom
+minimapa
+FACTURA_AR
+NC_AR
+extractores documentales
+motor de ejecución
+email.send/HEmailSend
+SMTP/Web.config
+```
+
+## SMTP pendiente
+
+La solución profesional decidida es:
+
+```text
+SMTP Relay de Google Workspace o relay interno de la empresa.
+```
+
+No seguir por Gmail/App Password ahora.
+
+## Estado Asistente IA
+
+La IA usa ML.NET + CSV + modelo externo.
+
+No usar Ollama.
+
+Workflow Studio WebForms solo consume:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+La IA ya puede generar de forma validada:
+
+```text
+util.start
+util.end
+util.logger
+doc.load
+control.if
+human.task
+email.send
+state.vars
+control.delay
+util.notify
+```
+
+No agregar nuevos nodos todavía.
+
+## Estado notificaciones
+
+Se implementó `util.notify` operativo real.
+
+Ya no es solo log.
+
+Ahora:
+
+```text
+util.notify
+→ crea registro en WF_Notificacion
+→ queda asociado a instancia/definición/nodo
+→ queda dirigido a usuario o rol
+→ aparece badge en topbar
+→ aparece en WF_Notificaciones.aspx
+→ se puede marcar como leída
+→ aparece como alerta dentro de WF_Tarea_Detalle si hay notificaciones no leídas relacionadas con la instancia y destinadas al usuario o a sus roles
+```
+
+Probado:
+
+```text
+Notificación directa a OMARD\OMARD funciona.
+Notificación al rol COMPRAS funciona.
+OMARD\USUARIO1 ve la notificación de COMPRAS.
+OMARD\OMARD no ve la notificación de COMPRAS.
+WF_Tarea_Detalle muestra panel de alerta al usuario de Compras.
+```
+
+## Último punto pendiente detectado
+
+`WF_Notificacion.Leido` hoy es global por registro.
+
+Problema:
+
+```text
+Si una notificación va dirigida a un rol,
+cuando un usuario la marca como leída,
+queda leída para todos los usuarios del rol.
+```
+
+Esto no es correcto para producción.
+
+## Objetivo inmediato de la próxima sesión
+
+Implementar:
+
+```text
+fix19 — lectura de notificaciones por usuario
+```
+
+Diseño recomendado:
+
+```text
+WF_Notificacion = cabecera/mensaje/destino general
+WF_NotificacionLectura = lectura individual por usuario
+```
+
+Tabla sugerida:
+
+```text
+WF_NotificacionLectura
+- Id
+- NotificacionId
+- Usuario
+- FechaLeido
+```
+
+O equivalente profesional.
+
+Reglas esperadas:
+
+```text
+1. Una notificación directa a usuario se considera leída solo para ese usuario.
+2. Una notificación dirigida a rol se muestra a todos los usuarios activos de ese rol.
+3. Cada usuario del rol puede marcarla como leída sin ocultársela a los demás.
+4. El badge de topbar debe contar no leídas del usuario actual considerando lectura individual.
+5. WF_Notificaciones.aspx debe mostrar no leídas para el usuario actual.
+6. WF_Tarea_Detalle debe mostrar alertas pendientes según lectura individual del usuario actual.
+7. Marcar visible como leída no debe afectar la lectura de otros usuarios del mismo rol.
+```
+
+## Archivos esperados a revisar
+
+Revisar en ZIP real:
+
+```text
+Sql/FIX17_WF_Notificacion.sql
+App_Code/Handlers/HUtilNotify.cs
+Api/WF_NotificationCounters.ashx
+Api/WF_NotificationCounters.ashx.cs
+WF_Notificaciones.aspx
+WF_Notificaciones.aspx.cs
+WF_Notificaciones.aspx.designer.cs
+WF_Tarea_Detalle.aspx
+WF_Tarea_Detalle.aspx.cs
+WF_Tarea_Detalle.aspx.designer.cs
+Controls/WsTopbar.ascx
+Intranet.WorkflowStudio.WebForms.csproj
+```
+
+También revisar cualquier helper o función de roles usada por:
+
+```text
+WF_Notificaciones.aspx.cs
+WF_Tarea_Detalle.aspx.cs
+Api/WF_NotificationCounters.ashx.cs
+```
+
+## Forma de entrega esperada
+
+Entregar ZIP correctivo:
+
+```text
+fix19_notificaciones_lectura_por_usuario.zip
+```
+
+Con estructura real:
+
+```text
+LEEME_FIX19_NOTIFICACIONES_LECTURA_USUARIO.txt
+Sql/FIX19_WF_NotificacionLectura.sql
+WF_Notificaciones.aspx
+WF_Notificaciones.aspx.cs
+WF_Notificaciones.aspx.designer.cs
+WF_Tarea_Detalle.aspx
+WF_Tarea_Detalle.aspx.cs
+WF_Tarea_Detalle.aspx.designer.cs
+Api/WF_NotificationCounters.ashx.cs
+```
+
+Incluir solo lo necesario según revisión real del ZIP.
+
+## Prueba esperada para fix19
+
+1. Crear notificación al rol COMPRAS:
+
+```text
+Quiero iniciar un flujo, notificar internamente al rol Compras con asunto Aviso para Compras y mensaje Hay una revisión pendiente para el sector Compras, mandar la tarea a Compras para revisión, registrar un log y finalizar.
+```
+
+2. Entrar como:
+
+```text
+OMARD\USUARIO1
+```
+
+Debe ver notificación.
+
+3. Si existe otro usuario con rol COMPRAS o se agrega uno, ese otro usuario también debe verla aunque `OMARD\USUARIO1` la marque como leída.
+
+4. Marcar como leída desde `WF_Notificaciones.aspx`.
+
+5. Confirmar:
+
+```text
+OMARD\USUARIO1 ya no la ve como pendiente.
+Otro usuario del mismo rol todavía la ve pendiente.
+```
+
+6. Abrir tarea relacionada:
+
+```text
+WF_Tarea_Detalle.aspx
+```
+
+Debe mostrar alertas pendientes solo si ese usuario todavía no leyó la notificación.
+
+## Criterio final
+
+No alcanza con que compile.
+
+Debe servir operativamente:
+
+```text
+quién recibe
+dónde lo ve
+cómo se marca
+cómo no afecta a otros usuarios
+cómo queda auditado
+cómo se relaciona con instancia/tarea
+```
+
+Primero cerrar bien notificaciones.
+
+Después recién seguir agregando nodos o nuevas capacidades IA.
