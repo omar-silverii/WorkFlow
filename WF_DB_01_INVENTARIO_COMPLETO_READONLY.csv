@@ -1,0 +1,556 @@
+﻿1;00_BASE;DATABASE;"DB=Workflow; Fecha=2026-06-18 17:34:23; Usuario=OMARD\omard; Server=omard\SQLEXPRESS; Version=16.0.1180.1; Edition=Express Edition (64-bit)"
+2;01_TABLAS;[dbo].[sysdiagrams];"object_id=34099162; create_date=2025-12-12 16:57:52; modify_date=2025-12-12 16:57:52"
+3;01_TABLAS;[dbo].[WF_Definicion];"object_id=901578250; create_date=2025-10-30 12:43:12; modify_date=2026-01-16 10:08:11"
+4;01_TABLAS;[dbo].[WF_Demo_Log];"object_id=750625717; create_date=2026-02-26 14:42:44; modify_date=2026-02-26 14:42:44"
+5;01_TABLAS;[dbo].[WF_DocTipo];"object_id=194099732; create_date=2025-12-12 17:00:41; modify_date=2026-06-11 09:50:56"
+6;01_TABLAS;[dbo].[WF_DocTipoReglaExtract];"object_id=290100074; create_date=2025-12-13 17:52:14; modify_date=2025-12-14 21:25:48"
+7;01_TABLAS;[dbo].[WF_DocumentoPlantilla];"object_id=1909581841; create_date=2025-12-10 11:06:10; modify_date=2025-12-10 11:06:10"
+8;01_TABLAS;[dbo].[WF_DocumentoTipo];"object_id=1845581613; create_date=2025-12-10 11:03:10; modify_date=2025-12-10 11:06:10"
+9;01_TABLAS;[dbo].[WF_Entidad];"object_id=574625090; create_date=2026-02-24 16:45:11; modify_date=2026-03-07 23:00:44"
+10;01_TABLAS;[dbo].[WF_EntidadIndice];"object_id=526624919; create_date=2026-02-24 16:22:01; modify_date=2026-02-24 16:22:01"
+11;01_TABLAS;[dbo].[WF_EntidadItem];"object_id=478624748; create_date=2026-02-24 16:22:01; modify_date=2026-02-24 16:22:01"
+12;01_TABLAS;[dbo].[WF_EscalamientoRegla];"object_id=1506104406; create_date=2025-12-29 21:39:54; modify_date=2025-12-29 21:39:54"
+13;01_TABLAS;[dbo].[WF_Instancia];"object_id=981578535; create_date=2025-10-30 12:43:12; modify_date=2026-02-10 00:11:43"
+14;01_TABLAS;[dbo].[WF_InstanciaDocumento];"object_id=110623437; create_date=2026-02-10 00:11:43; modify_date=2026-02-10 00:11:43"
+15;01_TABLAS;[dbo].[WF_InstanciaLog];"object_id=1061578820; create_date=2025-10-30 12:43:12; modify_date=2025-12-11 08:00:37"
+16;01_TABLAS;[dbo].[WF_Notificacion];"object_id=203147769; create_date=2026-06-17 21:51:58; modify_date=2026-06-18 12:08:35"
+17;01_TABLAS;[dbo].[WF_NotificacionLectura];"object_id=523148909; create_date=2026-06-18 12:08:35; modify_date=2026-06-18 12:08:35"
+18;01_TABLAS;[dbo].[WF_Permiso];"object_id=1182627256; create_date=2026-02-28 19:24:00; modify_date=2026-03-13 18:17:05"
+19;01_TABLAS;[dbo].[WF_Queue];"object_id=1749581271; create_date=2025-12-02 20:11:21; modify_date=2025-12-02 20:11:21"
+20;01_TABLAS;[dbo].[WF_QueueMessage];"object_id=1573580644; create_date=2025-12-01 14:38:05; modify_date=2025-12-01 14:38:05"
+21;01_TABLAS;[dbo].[WF_Rol];"object_id=798625888; create_date=2026-02-28 02:30:59; modify_date=2026-03-13 18:17:05"
+22;01_TABLAS;[dbo].[WF_RolPermiso];"object_id=1038626743; create_date=2026-02-28 16:23:02; modify_date=2026-02-28 19:12:11"
+23;01_TABLAS;[dbo].[WF_RolPermisoAlcance];"object_id=1486628339; create_date=2026-03-13 18:17:05; modify_date=2026-03-13 18:17:05"
+24;01_TABLAS;[dbo].[WF_SchemaVersion];"object_id=430624577; create_date=2026-02-24 16:22:01; modify_date=2026-02-24 16:22:01"
+25;01_TABLAS;[dbo].[WF_ScopeRegla];"object_id=786101841; create_date=2025-12-26 20:57:50; modify_date=2025-12-26 20:57:50"
+26;01_TABLAS;[dbo].[WF_Setting];"object_id=1618104805; create_date=2025-12-30 09:00:03; modify_date=2025-12-30 09:00:03"
+27;01_TABLAS;[dbo].[WF_Tarea];"object_id=1525580473; create_date=2025-11-22 23:30:32; modify_date=2026-01-01 21:24:59"
+28;01_TABLAS;[dbo].[WF_User];"object_id=834102012; create_date=2025-12-26 21:41:35; modify_date=2026-02-28 19:28:39"
+29;01_TABLAS;[dbo].[WF_UserPermiso];"object_id=898102240; create_date=2025-12-26 21:42:20; modify_date=2026-02-28 19:30:42"
+30;01_TABLAS;[dbo].[WF_UsuarioRol];"object_id=1230627427; create_date=2026-02-28 19:28:08; modify_date=2026-02-28 19:28:39"
+31;01_TABLAS;[dbo].[WF_UsuarioScope];"object_id=690101499; create_date=2025-12-26 12:16:51; modify_date=2025-12-26 12:16:51"
+32;01_TABLAS;[dbo].[Workflow];"object_id=1141579105; create_date=2025-10-30 15:05:24; modify_date=2025-10-30 15:05:24"
+33;01_TABLAS;[dbo].[WorkflowEdge];"object_id=1317579732; create_date=2025-10-30 15:05:24; modify_date=2025-10-30 15:05:24"
+34;01_TABLAS;[dbo].[WorkflowNode];"object_id=1269579561; create_date=2025-10-30 15:05:24; modify_date=2025-10-30 15:05:24"
+35;01_TABLAS;[dbo].[WorkflowVersion];"object_id=1205579333; create_date=2025-10-30 15:05:24; modify_date=2025-10-30 15:05:24"
+36;02_COLUMNAS;[dbo].[sysdiagrams].[name];"column_id=1; type=sysname; nullable=NO; identity=NO"
+37;02_COLUMNAS;[dbo].[sysdiagrams].[principal_id];"column_id=2; type=int; nullable=NO; identity=NO"
+38;02_COLUMNAS;[dbo].[sysdiagrams].[diagram_id];"column_id=3; type=int; nullable=NO; identity=SI"
+39;02_COLUMNAS;[dbo].[sysdiagrams].[version];"column_id=4; type=int; nullable=SI; identity=NO"
+40;02_COLUMNAS;[dbo].[sysdiagrams].[definition];"column_id=5; type=varbinary(MAX); nullable=SI; identity=NO"
+41;02_COLUMNAS;[dbo].[WF_Definicion].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+42;02_COLUMNAS;[dbo].[WF_Definicion].[Codigo];"column_id=2; type=nvarchar(50); nullable=NO; identity=NO"
+43;02_COLUMNAS;[dbo].[WF_Definicion].[Nombre];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+44;02_COLUMNAS;[dbo].[WF_Definicion].[Version];"column_id=4; type=int; nullable=NO; identity=NO; default=((1))"
+45;02_COLUMNAS;[dbo].[WF_Definicion].[JsonDef];"column_id=5; type=nvarchar(MAX); nullable=NO; identity=NO"
+46;02_COLUMNAS;[dbo].[WF_Definicion].[Activo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((1))"
+47;02_COLUMNAS;[dbo].[WF_Definicion].[FechaCreacion];"column_id=7; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+48;02_COLUMNAS;[dbo].[WF_Definicion].[CreadoPor];"column_id=8; type=nvarchar(100); nullable=SI; identity=NO"
+49;02_COLUMNAS;[dbo].[WF_Definicion].[Key];"column_id=9; type=nvarchar(80); nullable=SI; identity=NO"
+50;02_COLUMNAS;[dbo].[WF_Demo_Log].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+51;02_COLUMNAS;[dbo].[WF_Demo_Log].[InstanceId];"column_id=2; type=int; nullable=NO; identity=NO"
+52;02_COLUMNAS;[dbo].[WF_Demo_Log].[DocTipo];"column_id=3; type=nvarchar(50); nullable=SI; identity=NO"
+53;02_COLUMNAS;[dbo].[WF_Demo_Log].[FileName];"column_id=4; type=nvarchar(255); nullable=SI; identity=NO"
+54;02_COLUMNAS;[dbo].[WF_Demo_Log].[Fecha];"column_id=5; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+55;02_COLUMNAS;[dbo].[WF_DocTipo].[DocTipoId];"column_id=1; type=int; nullable=NO; identity=SI"
+56;02_COLUMNAS;[dbo].[WF_DocTipo].[Codigo];"column_id=2; type=nvarchar(50); nullable=NO; identity=NO"
+57;02_COLUMNAS;[dbo].[WF_DocTipo].[Nombre];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+58;02_COLUMNAS;[dbo].[WF_DocTipo].[ContextPrefix];"column_id=4; type=nvarchar(30); nullable=NO; identity=NO"
+59;02_COLUMNAS;[dbo].[WF_DocTipo].[PlantillaPath];"column_id=5; type=nvarchar(500); nullable=SI; identity=NO"
+60;02_COLUMNAS;[dbo].[WF_DocTipo].[RutaBase];"column_id=6; type=nvarchar(500); nullable=SI; identity=NO"
+61;02_COLUMNAS;[dbo].[WF_DocTipo].[EsActivo];"column_id=7; type=bit; nullable=NO; identity=NO; default=((1))"
+62;02_COLUMNAS;[dbo].[WF_DocTipo].[CreatedAt];"column_id=8; type=datetime2; nullable=NO; identity=NO; default=(sysutcdatetime())"
+63;02_COLUMNAS;[dbo].[WF_DocTipo].[UpdatedAt];"column_id=9; type=datetime2; nullable=SI; identity=NO"
+64;02_COLUMNAS;[dbo].[WF_DocTipo].[RulesJson];"column_id=10; type=nvarchar(MAX); nullable=SI; identity=NO"
+65;02_COLUMNAS;[dbo].[WF_DocTipo].[MotorExtraccion];"column_id=11; type=nvarchar(30); nullable=NO; identity=NO; default=('REGLAS')"
+66;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+67;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[DocTipoId];"column_id=2; type=int; nullable=NO; identity=NO"
+68;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Campo];"column_id=3; type=nvarchar(100); nullable=NO; identity=NO"
+69;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Regex];"column_id=4; type=nvarchar(1000); nullable=NO; identity=NO"
+70;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Grupo];"column_id=5; type=int; nullable=NO; identity=NO; default=((1))"
+71;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Orden];"column_id=6; type=int; nullable=NO; identity=NO; default=((1))"
+72;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Activo];"column_id=7; type=bit; nullable=NO; identity=NO; default=((1))"
+73;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[CreatedAt];"column_id=8; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+74;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[UpdatedAt];"column_id=9; type=datetime; nullable=SI; identity=NO"
+75;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[TipoDato];"column_id=10; type=nvarchar(30); nullable=SI; identity=NO"
+76;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Ejemplo];"column_id=11; type=nvarchar(500); nullable=SI; identity=NO"
+77;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[HintLabel];"column_id=12; type=nvarchar(100); nullable=SI; identity=NO"
+78;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[HintContext];"column_id=13; type=nvarchar(500); nullable=SI; identity=NO"
+79;02_COLUMNAS;[dbo].[WF_DocTipoReglaExtract].[Modo];"column_id=14; type=nvarchar(20); nullable=SI; identity=NO"
+80;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+81;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[DocumentoTipoId];"column_id=2; type=int; nullable=NO; identity=NO"
+82;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[Version];"column_id=3; type=int; nullable=NO; identity=NO; default=((1))"
+83;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[RegexPattern];"column_id=4; type=nvarchar(MAX); nullable=SI; identity=NO"
+84;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[RegexOptions];"column_id=5; type=varchar(200); nullable=SI; identity=NO"
+85;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[CamposJson];"column_id=6; type=nvarchar(MAX); nullable=SI; identity=NO"
+86;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[FechaCreacion];"column_id=7; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+87;02_COLUMNAS;[dbo].[WF_DocumentoPlantilla].[Activa];"column_id=8; type=bit; nullable=NO; identity=NO; default=((1))"
+88;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+89;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Codigo];"column_id=2; type=varchar(50); nullable=NO; identity=NO"
+90;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Nombre];"column_id=3; type=varchar(200); nullable=NO; identity=NO"
+91;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Formato];"column_id=4; type=varchar(10); nullable=NO; identity=NO"
+92;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Descripcion];"column_id=5; type=varchar(500); nullable=SI; identity=NO"
+93;02_COLUMNAS;[dbo].[WF_DocumentoTipo].[Activo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((1))"
+94;02_COLUMNAS;[dbo].[WF_Entidad].[EntidadId];"column_id=1; type=bigint; nullable=NO; identity=SI"
+95;02_COLUMNAS;[dbo].[WF_Entidad].[TenantId];"column_id=2; type=nvarchar(50); nullable=SI; identity=NO"
+96;02_COLUMNAS;[dbo].[WF_Entidad].[TipoEntidad];"column_id=3; type=nvarchar(80); nullable=NO; identity=NO"
+97;02_COLUMNAS;[dbo].[WF_Entidad].[EstadoActual];"column_id=4; type=nvarchar(50); nullable=SI; identity=NO"
+98;02_COLUMNAS;[dbo].[WF_Entidad].[InstanciaId];"column_id=5; type=bigint; nullable=SI; identity=NO"
+99;02_COLUMNAS;[dbo].[WF_Entidad].[DataJson];"column_id=6; type=nvarchar(MAX); nullable=SI; identity=NO"
+100;02_COLUMNAS;[dbo].[WF_Entidad].[Total];"column_id=7; type=decimal(18,2); nullable=SI; identity=NO"
+101;02_COLUMNAS;[dbo].[WF_Entidad].[DocumentoOriginalId];"column_id=8; type=bigint; nullable=SI; identity=NO"
+102;02_COLUMNAS;[dbo].[WF_Entidad].[DocumentoProcesadoId];"column_id=9; type=bigint; nullable=SI; identity=NO"
+103;02_COLUMNAS;[dbo].[WF_Entidad].[DocumentoFirmadoId];"column_id=10; type=bigint; nullable=SI; identity=NO"
+104;02_COLUMNAS;[dbo].[WF_Entidad].[CreadoUtc];"column_id=11; type=datetime2; nullable=NO; identity=NO; default=(sysutcdatetime())"
+105;02_COLUMNAS;[dbo].[WF_Entidad].[ActualizadoUtc];"column_id=12; type=datetime2; nullable=NO; identity=NO; default=(sysutcdatetime())"
+106;02_COLUMNAS;[dbo].[WF_Entidad].[CreadoPor];"column_id=13; type=nvarchar(100); nullable=SI; identity=NO"
+107;02_COLUMNAS;[dbo].[WF_Entidad].[ActualizadoPor];"column_id=14; type=nvarchar(100); nullable=SI; identity=NO"
+108;02_COLUMNAS;[dbo].[WF_Entidad].[RowVer];"column_id=15; type=timestamp; nullable=NO; identity=NO"
+109;02_COLUMNAS;[dbo].[WF_Entidad].[EstadoNegocio];"column_id=16; type=nvarchar(80); nullable=SI; identity=NO"
+110;02_COLUMNAS;[dbo].[WF_EntidadIndice].[EntidadIndiceId];"column_id=1; type=bigint; nullable=NO; identity=SI"
+111;02_COLUMNAS;[dbo].[WF_EntidadIndice].[EntidadId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+112;02_COLUMNAS;[dbo].[WF_EntidadIndice].[Key];"column_id=3; type=nvarchar(100); nullable=NO; identity=NO"
+113;02_COLUMNAS;[dbo].[WF_EntidadIndice].[Value];"column_id=4; type=nvarchar(400); nullable=SI; identity=NO"
+114;02_COLUMNAS;[dbo].[WF_EntidadIndice].[ValueNorm];"column_id=5; type=nvarchar(400); nullable=SI; identity=NO"
+115;02_COLUMNAS;[dbo].[WF_EntidadIndice].[TipoDato];"column_id=6; type=nvarchar(30); nullable=SI; identity=NO"
+116;02_COLUMNAS;[dbo].[WF_EntidadIndice].[SourcePath];"column_id=7; type=nvarchar(200); nullable=SI; identity=NO"
+117;02_COLUMNAS;[dbo].[WF_EntidadItem].[EntidadItemId];"column_id=1; type=bigint; nullable=NO; identity=SI"
+118;02_COLUMNAS;[dbo].[WF_EntidadItem].[EntidadId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+119;02_COLUMNAS;[dbo].[WF_EntidadItem].[ItemIndex];"column_id=3; type=int; nullable=NO; identity=NO"
+120;02_COLUMNAS;[dbo].[WF_EntidadItem].[Path];"column_id=4; type=nvarchar(200); nullable=SI; identity=NO"
+121;02_COLUMNAS;[dbo].[WF_EntidadItem].[DataJson];"column_id=5; type=nvarchar(MAX); nullable=NO; identity=NO"
+122;02_COLUMNAS;[dbo].[WF_EntidadItem].[Descripcion];"column_id=6; type=nvarchar(400); nullable=SI; identity=NO"
+123;02_COLUMNAS;[dbo].[WF_EntidadItem].[Cantidad];"column_id=7; type=decimal(18,4); nullable=SI; identity=NO"
+124;02_COLUMNAS;[dbo].[WF_EntidadItem].[Importe];"column_id=8; type=decimal(18,2); nullable=SI; identity=NO"
+125;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+126;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[ProcesoKey];"column_id=2; type=nvarchar(50); nullable=NO; identity=NO"
+127;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[RolOrigen];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+128;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[RolDestino];"column_id=4; type=nvarchar(200); nullable=NO; identity=NO"
+129;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[MinutosVencida];"column_id=5; type=int; nullable=NO; identity=NO; default=((0))"
+130;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[Activo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((1))"
+131;02_COLUMNAS;[dbo].[WF_EscalamientoRegla].[CreatedAt];"column_id=7; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+132;02_COLUMNAS;[dbo].[WF_Instancia].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+133;02_COLUMNAS;[dbo].[WF_Instancia].[WF_DefinicionId];"column_id=2; type=int; nullable=NO; identity=NO"
+134;02_COLUMNAS;[dbo].[WF_Instancia].[Estado];"column_id=3; type=nvarchar(30); nullable=NO; identity=NO; default=('Pendiente')"
+135;02_COLUMNAS;[dbo].[WF_Instancia].[DatosEntrada];"column_id=4; type=nvarchar(MAX); nullable=SI; identity=NO"
+136;02_COLUMNAS;[dbo].[WF_Instancia].[DatosContexto];"column_id=5; type=nvarchar(MAX); nullable=SI; identity=NO"
+137;02_COLUMNAS;[dbo].[WF_Instancia].[FechaInicio];"column_id=6; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+138;02_COLUMNAS;[dbo].[WF_Instancia].[FechaFin];"column_id=7; type=datetime; nullable=SI; identity=NO"
+139;02_COLUMNAS;[dbo].[WF_Instancia].[CreadoPor];"column_id=8; type=nvarchar(100); nullable=SI; identity=NO"
+140;02_COLUMNAS;[dbo].[WF_Instancia].[TenantId];"column_id=9; type=int; nullable=SI; identity=NO"
+141;02_COLUMNAS;[dbo].[WF_Instancia].[ProcesoKey];"column_id=10; type=nvarchar(50); nullable=SI; identity=NO"
+142;02_COLUMNAS;[dbo].[WF_Instancia].[DocTipoId];"column_id=11; type=int; nullable=SI; identity=NO"
+143;02_COLUMNAS;[dbo].[WF_Instancia].[ScopeKey];"column_id=12; type=nvarchar(100); nullable=SI; identity=NO"
+144;02_COLUMNAS;[dbo].[WF_Instancia].[EmpresaKey];"column_id=13; type=nvarchar(100); nullable=SI; identity=NO"
+145;02_COLUMNAS;[dbo].[WF_Instancia].[ParentInstanciaId];"column_id=14; type=bigint; nullable=SI; identity=NO"
+146;02_COLUMNAS;[dbo].[WF_Instancia].[ParentNodoId];"column_id=15; type=nvarchar(50); nullable=SI; identity=NO"
+147;02_COLUMNAS;[dbo].[WF_Instancia].[RootInstanciaId];"column_id=16; type=bigint; nullable=SI; identity=NO"
+148;02_COLUMNAS;[dbo].[WF_Instancia].[Depth];"column_id=17; type=int; nullable=SI; identity=NO"
+149;02_COLUMNAS;[dbo].[WF_Instancia].[CorrelationId];"column_id=18; type=uniqueidentifier; nullable=SI; identity=NO"
+150;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+151;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[WF_InstanciaId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+152;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[DocumentoId];"column_id=3; type=nvarchar(100); nullable=SI; identity=NO"
+153;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[CarpetaId];"column_id=4; type=nvarchar(100); nullable=SI; identity=NO"
+154;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[FicheroId];"column_id=5; type=nvarchar(100); nullable=SI; identity=NO"
+155;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[Tipo];"column_id=6; type=nvarchar(100); nullable=SI; identity=NO"
+156;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[IndicesJson];"column_id=7; type=nvarchar(MAX); nullable=SI; identity=NO"
+157;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[ViewerUrl];"column_id=8; type=nvarchar(1000); nullable=SI; identity=NO"
+158;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[EsRoot];"column_id=9; type=bit; nullable=NO; identity=NO; default=((0))"
+159;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[TareaId];"column_id=10; type=nvarchar(100); nullable=SI; identity=NO"
+160;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[NodoId];"column_id=11; type=nvarchar(100); nullable=SI; identity=NO"
+161;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[NodoTipo];"column_id=12; type=nvarchar(100); nullable=SI; identity=NO"
+162;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[Accion];"column_id=13; type=nvarchar(30); nullable=NO; identity=NO; default=('ATTACH')"
+163;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[FechaAlta];"column_id=14; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+164;02_COLUMNAS;[dbo].[WF_InstanciaDocumento].[Usuario];"column_id=15; type=nvarchar(100); nullable=SI; identity=NO"
+165;02_COLUMNAS;[dbo].[WF_InstanciaLog].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+166;02_COLUMNAS;[dbo].[WF_InstanciaLog].[WF_InstanciaId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+167;02_COLUMNAS;[dbo].[WF_InstanciaLog].[FechaLog];"column_id=3; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+168;02_COLUMNAS;[dbo].[WF_InstanciaLog].[Nivel];"column_id=4; type=nvarchar(20); nullable=NO; identity=NO; default=('Info')"
+169;02_COLUMNAS;[dbo].[WF_InstanciaLog].[Mensaje];"column_id=5; type=nvarchar(4000); nullable=SI; identity=NO"
+170;02_COLUMNAS;[dbo].[WF_InstanciaLog].[NodoId];"column_id=6; type=nvarchar(100); nullable=SI; identity=NO"
+171;02_COLUMNAS;[dbo].[WF_InstanciaLog].[NodoTipo];"column_id=7; type=nvarchar(100); nullable=SI; identity=NO"
+172;02_COLUMNAS;[dbo].[WF_InstanciaLog].[Datos];"column_id=8; type=nvarchar(MAX); nullable=SI; identity=NO"
+173;02_COLUMNAS;[dbo].[WF_Notificacion].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+174;02_COLUMNAS;[dbo].[WF_Notificacion].[FechaCreacion];"column_id=2; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+175;02_COLUMNAS;[dbo].[WF_Notificacion].[WF_InstanciaId];"column_id=3; type=bigint; nullable=SI; identity=NO"
+176;02_COLUMNAS;[dbo].[WF_Notificacion].[WF_DefinicionId];"column_id=4; type=int; nullable=SI; identity=NO"
+177;02_COLUMNAS;[dbo].[WF_Notificacion].[NodoId];"column_id=5; type=nvarchar(50); nullable=SI; identity=NO"
+178;02_COLUMNAS;[dbo].[WF_Notificacion].[NodoTipo];"column_id=6; type=nvarchar(100); nullable=SI; identity=NO"
+179;02_COLUMNAS;[dbo].[WF_Notificacion].[Tipo];"column_id=7; type=nvarchar(30); nullable=NO; identity=NO; default=(N'sistema')"
+180;02_COLUMNAS;[dbo].[WF_Notificacion].[Canal];"column_id=8; type=nvarchar(30); nullable=NO; identity=NO; default=(N'sistema')"
+181;02_COLUMNAS;[dbo].[WF_Notificacion].[Prioridad];"column_id=9; type=nvarchar(20); nullable=NO; identity=NO; default=(N'normal')"
+182;02_COLUMNAS;[dbo].[WF_Notificacion].[Titulo];"column_id=10; type=nvarchar(200); nullable=NO; identity=NO"
+183;02_COLUMNAS;[dbo].[WF_Notificacion].[Mensaje];"column_id=11; type=nvarchar(MAX); nullable=SI; identity=NO"
+184;02_COLUMNAS;[dbo].[WF_Notificacion].[UsuarioDestino];"column_id=12; type=nvarchar(200); nullable=SI; identity=NO"
+185;02_COLUMNAS;[dbo].[WF_Notificacion].[RolDestino];"column_id=13; type=nvarchar(100); nullable=SI; identity=NO"
+186;02_COLUMNAS;[dbo].[WF_Notificacion].[Destino];"column_id=14; type=nvarchar(300); nullable=SI; identity=NO"
+187;02_COLUMNAS;[dbo].[WF_Notificacion].[UrlAccion];"column_id=15; type=nvarchar(500); nullable=SI; identity=NO"
+188;02_COLUMNAS;[dbo].[WF_Notificacion].[Leido];"column_id=16; type=bit; nullable=NO; identity=NO; default=((0))"
+189;02_COLUMNAS;[dbo].[WF_Notificacion].[FechaLeido];"column_id=17; type=datetime; nullable=SI; identity=NO"
+190;02_COLUMNAS;[dbo].[WF_Notificacion].[LeidoPor];"column_id=18; type=nvarchar(200); nullable=SI; identity=NO"
+191;02_COLUMNAS;[dbo].[WF_Notificacion].[CreadoPor];"column_id=19; type=nvarchar(200); nullable=SI; identity=NO"
+192;02_COLUMNAS;[dbo].[WF_Notificacion].[DatosJson];"column_id=20; type=nvarchar(MAX); nullable=SI; identity=NO"
+193;02_COLUMNAS;[dbo].[WF_NotificacionLectura].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+194;02_COLUMNAS;[dbo].[WF_NotificacionLectura].[NotificacionId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+195;02_COLUMNAS;[dbo].[WF_NotificacionLectura].[Usuario];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+196;02_COLUMNAS;[dbo].[WF_NotificacionLectura].[FechaLeido];"column_id=4; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+197;02_COLUMNAS;[dbo].[WF_Permiso].[PermisoKey];"column_id=1; type=nvarchar(80); nullable=NO; identity=NO"
+198;02_COLUMNAS;[dbo].[WF_Permiso].[Nombre];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+199;02_COLUMNAS;[dbo].[WF_Permiso].[Descripcion];"column_id=3; type=nvarchar(400); nullable=SI; identity=NO"
+200;02_COLUMNAS;[dbo].[WF_Permiso].[Activo];"column_id=4; type=bit; nullable=NO; identity=NO; default=((1))"
+201;02_COLUMNAS;[dbo].[WF_Queue].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+202;02_COLUMNAS;[dbo].[WF_Queue].[Queue];"column_id=2; type=nvarchar(100); nullable=NO; identity=NO"
+203;02_COLUMNAS;[dbo].[WF_Queue].[CorrelationId];"column_id=3; type=nvarchar(100); nullable=SI; identity=NO"
+204;02_COLUMNAS;[dbo].[WF_Queue].[Payload];"column_id=4; type=nvarchar(MAX); nullable=NO; identity=NO"
+205;02_COLUMNAS;[dbo].[WF_Queue].[CreatedAt];"column_id=5; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+206;02_COLUMNAS;[dbo].[WF_Queue].[DueAt];"column_id=6; type=datetime; nullable=SI; identity=NO"
+207;02_COLUMNAS;[dbo].[WF_Queue].[Priority];"column_id=7; type=int; nullable=NO; identity=NO; default=((0))"
+208;02_COLUMNAS;[dbo].[WF_Queue].[Processed];"column_id=8; type=bit; nullable=NO; identity=NO; default=((0))"
+209;02_COLUMNAS;[dbo].[WF_Queue].[ProcessedAt];"column_id=9; type=datetime; nullable=SI; identity=NO"
+210;02_COLUMNAS;[dbo].[WF_Queue].[Attempts];"column_id=10; type=int; nullable=NO; identity=NO; default=((0))"
+211;02_COLUMNAS;[dbo].[WF_Queue].[LastError];"column_id=11; type=nvarchar(4000); nullable=SI; identity=NO"
+212;02_COLUMNAS;[dbo].[WF_QueueMessage].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+213;02_COLUMNAS;[dbo].[WF_QueueMessage].[Broker];"column_id=2; type=nvarchar(50); nullable=NO; identity=NO"
+214;02_COLUMNAS;[dbo].[WF_QueueMessage].[Queue];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+215;02_COLUMNAS;[dbo].[WF_QueueMessage].[Payload];"column_id=4; type=nvarchar(MAX); nullable=NO; identity=NO"
+216;02_COLUMNAS;[dbo].[WF_QueueMessage].[Estado];"column_id=5; type=nvarchar(20); nullable=NO; identity=NO; default=('Pendiente')"
+217;02_COLUMNAS;[dbo].[WF_QueueMessage].[Intentos];"column_id=6; type=int; nullable=NO; identity=NO; default=((0))"
+218;02_COLUMNAS;[dbo].[WF_QueueMessage].[FechaCreacion];"column_id=7; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+219;02_COLUMNAS;[dbo].[WF_Rol].[RolKey];"column_id=1; type=nvarchar(100); nullable=NO; identity=NO"
+220;02_COLUMNAS;[dbo].[WF_Rol].[Nombre];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+221;02_COLUMNAS;[dbo].[WF_Rol].[Activo];"column_id=3; type=bit; nullable=NO; identity=NO; default=((1))"
+222;02_COLUMNAS;[dbo].[WF_Rol].[FechaAlta];"column_id=4; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+223;02_COLUMNAS;[dbo].[WF_RolPermiso].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+224;02_COLUMNAS;[dbo].[WF_RolPermiso].[RolKey];"column_id=2; type=nvarchar(50); nullable=NO; identity=NO"
+225;02_COLUMNAS;[dbo].[WF_RolPermiso].[PermisoKey];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+226;02_COLUMNAS;[dbo].[WF_RolPermiso].[ProcesoKey];"column_id=4; type=nvarchar(50); nullable=SI; identity=NO"
+227;02_COLUMNAS;[dbo].[WF_RolPermiso].[ScopeKey];"column_id=5; type=nvarchar(50); nullable=SI; identity=NO"
+228;02_COLUMNAS;[dbo].[WF_RolPermiso].[VerTodo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((0))"
+229;02_COLUMNAS;[dbo].[WF_RolPermiso].[Activo];"column_id=7; type=bit; nullable=NO; identity=NO; default=((1))"
+230;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+231;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[RolKey];"column_id=2; type=nvarchar(100); nullable=NO; identity=NO"
+232;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[PermisoKey];"column_id=3; type=nvarchar(80); nullable=NO; identity=NO"
+233;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[ProcesoKey];"column_id=4; type=nvarchar(50); nullable=SI; identity=NO"
+234;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[ScopeKey];"column_id=5; type=nvarchar(100); nullable=SI; identity=NO"
+235;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[VerTodo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((0))"
+236;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[Activo];"column_id=7; type=bit; nullable=NO; identity=NO; default=((1))"
+237;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[FechaAlta];"column_id=8; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+238;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[UsuarioAlta];"column_id=9; type=nvarchar(200); nullable=SI; identity=NO"
+239;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[FechaMod];"column_id=10; type=datetime; nullable=SI; identity=NO"
+240;02_COLUMNAS;[dbo].[WF_RolPermisoAlcance].[UsuarioMod];"column_id=11; type=nvarchar(200); nullable=SI; identity=NO"
+241;02_COLUMNAS;[dbo].[WF_SchemaVersion].[VersionId];"column_id=1; type=int; nullable=NO; identity=NO"
+242;02_COLUMNAS;[dbo].[WF_SchemaVersion].[Nombre];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+243;02_COLUMNAS;[dbo].[WF_SchemaVersion].[AppliedUtc];"column_id=3; type=datetime2; nullable=NO; identity=NO; default=(sysutcdatetime())"
+244;02_COLUMNAS;[dbo].[WF_ScopeRegla].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+245;02_COLUMNAS;[dbo].[WF_ScopeRegla].[WF_DefinicionId];"column_id=2; type=int; nullable=SI; identity=NO"
+246;02_COLUMNAS;[dbo].[WF_ScopeRegla].[CampoJson];"column_id=3; type=nvarchar(200); nullable=NO; identity=NO"
+247;02_COLUMNAS;[dbo].[WF_ScopeRegla].[MatchTipo];"column_id=4; type=nvarchar(20); nullable=NO; identity=NO"
+248;02_COLUMNAS;[dbo].[WF_ScopeRegla].[MatchValor];"column_id=5; type=nvarchar(200); nullable=NO; identity=NO"
+249;02_COLUMNAS;[dbo].[WF_ScopeRegla].[ScopeKey];"column_id=6; type=nvarchar(50); nullable=NO; identity=NO"
+250;02_COLUMNAS;[dbo].[WF_Setting].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+251;02_COLUMNAS;[dbo].[WF_Setting].[SettingKey];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+252;02_COLUMNAS;[dbo].[WF_Setting].[ScopeKey];"column_id=3; type=nvarchar(100); nullable=SI; identity=NO"
+253;02_COLUMNAS;[dbo].[WF_Setting].[Value];"column_id=4; type=nvarchar(MAX); nullable=NO; identity=NO"
+254;02_COLUMNAS;[dbo].[WF_Setting].[Activo];"column_id=5; type=bit; nullable=NO; identity=NO; default=((1))"
+255;02_COLUMNAS;[dbo].[WF_Setting].[UpdatedAt];"column_id=6; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+256;02_COLUMNAS;[dbo].[WF_Tarea].[Id];"column_id=1; type=bigint; nullable=NO; identity=SI"
+257;02_COLUMNAS;[dbo].[WF_Tarea].[WF_InstanciaId];"column_id=2; type=bigint; nullable=NO; identity=NO"
+258;02_COLUMNAS;[dbo].[WF_Tarea].[NodoId];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+259;02_COLUMNAS;[dbo].[WF_Tarea].[NodoTipo];"column_id=4; type=nvarchar(100); nullable=NO; identity=NO"
+260;02_COLUMNAS;[dbo].[WF_Tarea].[Titulo];"column_id=5; type=nvarchar(200); nullable=NO; identity=NO"
+261;02_COLUMNAS;[dbo].[WF_Tarea].[Descripcion];"column_id=6; type=nvarchar(MAX); nullable=SI; identity=NO"
+262;02_COLUMNAS;[dbo].[WF_Tarea].[RolDestino];"column_id=7; type=nvarchar(100); nullable=SI; identity=NO"
+263;02_COLUMNAS;[dbo].[WF_Tarea].[UsuarioAsignado];"column_id=8; type=nvarchar(100); nullable=SI; identity=NO"
+264;02_COLUMNAS;[dbo].[WF_Tarea].[Estado];"column_id=9; type=nvarchar(20); nullable=NO; identity=NO"
+265;02_COLUMNAS;[dbo].[WF_Tarea].[Resultado];"column_id=10; type=nvarchar(50); nullable=SI; identity=NO"
+266;02_COLUMNAS;[dbo].[WF_Tarea].[FechaCreacion];"column_id=11; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+267;02_COLUMNAS;[dbo].[WF_Tarea].[FechaVencimiento];"column_id=12; type=datetime; nullable=SI; identity=NO"
+268;02_COLUMNAS;[dbo].[WF_Tarea].[FechaCierre];"column_id=13; type=datetime; nullable=SI; identity=NO"
+269;02_COLUMNAS;[dbo].[WF_Tarea].[Datos];"column_id=14; type=nvarchar(MAX); nullable=SI; identity=NO"
+270;02_COLUMNAS;[dbo].[WF_Tarea].[ScopeKey];"column_id=15; type=nvarchar(100); nullable=SI; identity=NO"
+271;02_COLUMNAS;[dbo].[WF_Tarea].[AsignadoA];"column_id=16; type=nvarchar(100); nullable=SI; identity=NO"
+272;02_COLUMNAS;[dbo].[WF_Tarea].[OrigenTareaId];"column_id=17; type=bigint; nullable=SI; identity=NO"
+273;02_COLUMNAS;[dbo].[WF_User].[UserKey];"column_id=1; type=nvarchar(200); nullable=NO; identity=NO"
+274;02_COLUMNAS;[dbo].[WF_User].[DisplayName];"column_id=2; type=nvarchar(200); nullable=SI; identity=NO"
+275;02_COLUMNAS;[dbo].[WF_User].[Activo];"column_id=3; type=bit; nullable=NO; identity=NO; default=((1))"
+276;02_COLUMNAS;[dbo].[WF_User].[FechaAlta];"column_id=4; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+277;02_COLUMNAS;[dbo].[WF_UserPermiso].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+278;02_COLUMNAS;[dbo].[WF_UserPermiso].[UserKey];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+279;02_COLUMNAS;[dbo].[WF_UserPermiso].[PermisoKey];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+280;02_COLUMNAS;[dbo].[WF_UserPermiso].[ProcesoKey];"column_id=4; type=nvarchar(50); nullable=SI; identity=NO"
+281;02_COLUMNAS;[dbo].[WF_UserPermiso].[ScopeKey];"column_id=5; type=nvarchar(50); nullable=SI; identity=NO"
+282;02_COLUMNAS;[dbo].[WF_UserPermiso].[VerTodo];"column_id=6; type=bit; nullable=NO; identity=NO; default=((0))"
+283;02_COLUMNAS;[dbo].[WF_UserPermiso].[Activo];"column_id=7; type=bit; nullable=NO; identity=NO; default=((1))"
+284;02_COLUMNAS;[dbo].[WF_UsuarioRol].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+285;02_COLUMNAS;[dbo].[WF_UsuarioRol].[Usuario];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+286;02_COLUMNAS;[dbo].[WF_UsuarioRol].[RolKey];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+287;02_COLUMNAS;[dbo].[WF_UsuarioRol].[Activo];"column_id=4; type=bit; nullable=NO; identity=NO; default=((1))"
+288;02_COLUMNAS;[dbo].[WF_UsuarioScope].[Usuario];"column_id=1; type=nvarchar(100); nullable=NO; identity=NO"
+289;02_COLUMNAS;[dbo].[WF_UsuarioScope].[ScopeKey];"column_id=2; type=nvarchar(100); nullable=NO; identity=NO"
+290;02_COLUMNAS;[dbo].[Workflow].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+291;02_COLUMNAS;[dbo].[Workflow].[Name];"column_id=2; type=nvarchar(200); nullable=NO; identity=NO"
+292;02_COLUMNAS;[dbo].[Workflow].[IsActive];"column_id=3; type=bit; nullable=NO; identity=NO; default=((1))"
+293;02_COLUMNAS;[dbo].[Workflow].[CreatedAt];"column_id=4; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+294;02_COLUMNAS;[dbo].[Workflow].[CreatedBy];"column_id=5; type=nvarchar(100); nullable=SI; identity=NO"
+295;02_COLUMNAS;[dbo].[WorkflowEdge].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+296;02_COLUMNAS;[dbo].[WorkflowEdge].[WorkflowVersionId];"column_id=2; type=int; nullable=NO; identity=NO"
+297;02_COLUMNAS;[dbo].[WorkflowEdge].[FromNodeId];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+298;02_COLUMNAS;[dbo].[WorkflowEdge].[ToNodeId];"column_id=4; type=nvarchar(50); nullable=NO; identity=NO"
+299;02_COLUMNAS;[dbo].[WorkflowEdge].[Condition];"column_id=5; type=nvarchar(50); nullable=NO; identity=NO; default=('always')"
+300;02_COLUMNAS;[dbo].[WorkflowNode].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+301;02_COLUMNAS;[dbo].[WorkflowNode].[WorkflowVersionId];"column_id=2; type=int; nullable=NO; identity=NO"
+302;02_COLUMNAS;[dbo].[WorkflowNode].[NodeId];"column_id=3; type=nvarchar(50); nullable=NO; identity=NO"
+303;02_COLUMNAS;[dbo].[WorkflowNode].[NodeType];"column_id=4; type=nvarchar(200); nullable=NO; identity=NO"
+304;02_COLUMNAS;[dbo].[WorkflowNode].[Label];"column_id=5; type=nvarchar(200); nullable=SI; identity=NO"
+305;02_COLUMNAS;[dbo].[WorkflowNode].[ParamsJson];"column_id=6; type=nvarchar(MAX); nullable=SI; identity=NO"
+306;02_COLUMNAS;[dbo].[WorkflowVersion].[Id];"column_id=1; type=int; nullable=NO; identity=SI"
+307;02_COLUMNAS;[dbo].[WorkflowVersion].[WorkflowId];"column_id=2; type=int; nullable=NO; identity=NO"
+308;02_COLUMNAS;[dbo].[WorkflowVersion].[VersionNumber];"column_id=3; type=int; nullable=NO; identity=NO"
+309;02_COLUMNAS;[dbo].[WorkflowVersion].[JsonPayload];"column_id=4; type=nvarchar(MAX); nullable=NO; identity=NO"
+310;02_COLUMNAS;[dbo].[WorkflowVersion].[CreatedAt];"column_id=5; type=datetime; nullable=NO; identity=NO; default=(getdate())"
+311;02_COLUMNAS;[dbo].[WorkflowVersion].[CreatedBy];"column_id=6; type=nvarchar(100); nullable=SI; identity=NO"
+312;03_PK;[dbo].[sysdiagrams].[PK__sysdiagr__C2B05B619E0E1C0D];[diagram_id]
+313;03_PK;[dbo].[WF_Definicion].[PK__WF_Defin__3214EC075542E884];[Id]
+314;03_PK;[dbo].[WF_Demo_Log].[PK__WF_Demo___3214EC07621278E7];[Id]
+315;03_PK;[dbo].[WF_DocTipo].[PK_WF_DocTipo];[DocTipoId]
+316;03_PK;[dbo].[WF_DocTipoReglaExtract].[PK_WF_DocTipoReglaExtract];[Id]
+317;03_PK;[dbo].[WF_DocumentoPlantilla].[PK__WF_Docum__3214EC0734BEE5A5];[Id]
+318;03_PK;[dbo].[WF_DocumentoTipo].[PK__WF_Docum__3214EC071B5EE0CF];[Id]
+319;03_PK;[dbo].[WF_Entidad].[PK__WF_Entid__92A286C1259BB61B];[EntidadId]
+320;03_PK;[dbo].[WF_EntidadIndice].[PK__WF_Entid__23DAAA6D02546CF1];[EntidadIndiceId]
+321;03_PK;[dbo].[WF_EntidadItem].[PK__WF_Entid__598A61096A726599];[EntidadItemId]
+322;03_PK;[dbo].[WF_EscalamientoRegla].[PK__WF_Escal__3214EC07F3A748B7];[Id]
+323;03_PK;[dbo].[WF_Instancia].[PK__WF_Insta__3214EC078E5FF3D1];[Id]
+324;03_PK;[dbo].[WF_InstanciaDocumento].[PK__WF_Insta__3214EC07924EF938];[Id]
+325;03_PK;[dbo].[WF_InstanciaLog].[PK__WF_Insta__3214EC07B462A7A8];[Id]
+326;03_PK;[dbo].[WF_Notificacion].[PK__WF_Notif__3214EC07B400BE42];[Id]
+327;03_PK;[dbo].[WF_NotificacionLectura].[PK_WF_NotificacionLectura];[Id]
+328;03_PK;[dbo].[WF_Permiso].[PK_WF_Permiso];[PermisoKey]
+329;03_PK;[dbo].[WF_Queue].[PK__WF_Queue__3214EC0718D7A93B];[Id]
+330;03_PK;[dbo].[WF_QueueMessage].[PK__WF_Queue__3214EC07D807AEE3];[Id]
+331;03_PK;[dbo].[WF_Rol].[PK_WF_Rol];[RolKey]
+332;03_PK;[dbo].[WF_RolPermiso].[PK__WF_RolPe__3214EC07ECC578F4];[Id]
+333;03_PK;[dbo].[WF_RolPermisoAlcance].[PK_WF_RolPermisoAlcance];[Id]
+334;03_PK;[dbo].[WF_SchemaVersion].[PK__WF_Schem__16C6400FED170723];[VersionId]
+335;03_PK;[dbo].[WF_ScopeRegla].[PK__WF_Scope__3214EC075F39F09D];[Id]
+336;03_PK;[dbo].[WF_Setting].[PK__WF_Setti__3214EC079B573FFF];[Id]
+337;03_PK;[dbo].[WF_Tarea].[PK__WF_Tarea__3214EC07FACC7CF4];[Id]
+338;03_PK;[dbo].[WF_User].[PK__WF_User__296ADCF19AA255E8];[UserKey]
+339;03_PK;[dbo].[WF_UserPermiso].[PK__WF_UserP__3214EC07EFDF13BC];[Id]
+340;03_PK;[dbo].[WF_UsuarioRol].[PK_WF_UsuarioRol];[Id]
+341;03_PK;[dbo].[WF_UsuarioScope].[PK_WF_UsuarioScope];[Usuario], [ScopeKey]
+342;03_PK;[dbo].[Workflow].[PK__Workflow__3214EC0771E53C2B];[Id]
+343;03_PK;[dbo].[WorkflowEdge].[PK__Workflow__3214EC07A39357AB];[Id]
+344;03_PK;[dbo].[WorkflowNode].[PK__Workflow__3214EC07BC638BB6];[Id]
+345;03_PK;[dbo].[WorkflowVersion].[PK__Workflow__3214EC07DF4C49C9];[Id]
+346;04_FK;[dbo].[WF_DocumentoPlantilla].[FK__WF_Docume__Docum__73BA3083];"referencia=[dbo].[WF_DocumentoTipo]; columnas=[DocumentoTipoId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+347;04_FK;[dbo].[WF_Instancia].[FK_WF_Instancia_Def];"referencia=[dbo].[WF_Definicion]; columnas=[WF_DefinicionId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+348;04_FK;[dbo].[WF_InstanciaDocumento].[FK_WF_InstanciaDocumento_Inst];"referencia=[dbo].[WF_Instancia]; columnas=[WF_InstanciaId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+349;04_FK;[dbo].[WF_InstanciaLog].[FK_WF_InstanciaLog_Inst];"referencia=[dbo].[WF_Instancia]; columnas=[WF_InstanciaId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+350;04_FK;[dbo].[WF_NotificacionLectura].[FK_WF_NotificacionLectura_WF_Notificacion];"referencia=[dbo].[WF_Notificacion]; columnas=[NotificacionId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+351;04_FK;[dbo].[WF_RolPermisoAlcance].[FK_WF_RolPermisoAlcance_Permiso];"referencia=[dbo].[WF_Permiso]; columnas=[PermisoKey]->[PermisoKey]; delete=NO_ACTION; update=NO_ACTION"
+352;04_FK;[dbo].[WF_RolPermisoAlcance].[FK_WF_RolPermisoAlcance_Rol];"referencia=[dbo].[WF_Rol]; columnas=[RolKey]->[RolKey]; delete=NO_ACTION; update=NO_ACTION"
+353;04_FK;[dbo].[WF_UserPermiso].[FK_WF_UserPermiso_User];"referencia=[dbo].[WF_User]; columnas=[UserKey]->[UserKey]; delete=NO_ACTION; update=NO_ACTION"
+354;04_FK;[dbo].[WF_UsuarioRol].[FK_WF_UsuarioRol_User];"referencia=[dbo].[WF_User]; columnas=[Usuario]->[UserKey]; delete=NO_ACTION; update=NO_ACTION"
+355;04_FK;[dbo].[WorkflowEdge].[FK_WorkflowEdge_WorkflowVersion];"referencia=[dbo].[WorkflowVersion]; columnas=[WorkflowVersionId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+356;04_FK;[dbo].[WorkflowNode].[FK_WorkflowNode_WorkflowVersion];"referencia=[dbo].[WorkflowVersion]; columnas=[WorkflowVersionId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+357;04_FK;[dbo].[WorkflowVersion].[FK_WorkflowVersion_Workflow];"referencia=[dbo].[Workflow]; columnas=[WorkflowId]->[Id]; delete=NO_ACTION; update=NO_ACTION"
+358;05_INDICES;[dbo].[sysdiagrams].[PK__sysdiagr__C2B05B619E0E1C0D];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[diagram_id] ASC; include="
+359;05_INDICES;[dbo].[sysdiagrams].[UK_principal_name];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[principal_id] ASC, [name] ASC; include="
+360;05_INDICES;[dbo].[WF_Definicion].[IX_WF_Definicion_Codigo_Version];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[Codigo] ASC, [Version] ASC; include="
+361;05_INDICES;[dbo].[WF_Definicion].[PK__WF_Defin__3214EC075542E884];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+362;05_INDICES;[dbo].[WF_Definicion].[UX_WF_Definicion_Key];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[Key] ASC; include="
+363;05_INDICES;[dbo].[WF_Demo_Log].[PK__WF_Demo___3214EC07621278E7];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+364;05_INDICES;[dbo].[WF_DocTipo].[IX_WF_DocTipo_EsActivo];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[EsActivo] ASC, [Codigo] ASC; include="
+365;05_INDICES;[dbo].[WF_DocTipo].[PK_WF_DocTipo];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[DocTipoId] ASC; include="
+366;05_INDICES;[dbo].[WF_DocTipo].[UQ_WF_DocTipo_Codigo];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[Codigo] ASC; include="
+367;05_INDICES;[dbo].[WF_DocTipo].[UQ_WF_DocTipo_ContextPrefix];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[ContextPrefix] ASC; include="
+368;05_INDICES;[dbo].[WF_DocTipoReglaExtract].[IX_WF_DocTipoReglaExtract_DocTipoId_Activo_Orden];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[DocTipoId] ASC, [Activo] ASC, [Orden] ASC; include="
+369;05_INDICES;[dbo].[WF_DocTipoReglaExtract].[PK_WF_DocTipoReglaExtract];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+370;05_INDICES;[dbo].[WF_DocumentoPlantilla].[PK__WF_Docum__3214EC0734BEE5A5];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+371;05_INDICES;[dbo].[WF_DocumentoTipo].[PK__WF_Docum__3214EC071B5EE0CF];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+372;05_INDICES;[dbo].[WF_DocumentoTipo].[UQ__WF_Docum__06370DAC16DD7A49];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[Codigo] ASC; include="
+373;05_INDICES;[dbo].[WF_Entidad].[IX_WF_Entidad_CreadoUtc];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[CreadoUtc] ASC; include="
+374;05_INDICES;[dbo].[WF_Entidad].[IX_WF_Entidad_TipoEntidad_Estado];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[TipoEntidad] ASC, [EstadoActual] ASC; include="
+375;05_INDICES;[dbo].[WF_Entidad].[PK__WF_Entid__92A286C1259BB61B];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[EntidadId] ASC; include="
+376;05_INDICES;[dbo].[WF_Entidad].[UX_WF_Entidad_InstanciaId];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[InstanciaId] ASC; include="
+377;05_INDICES;[dbo].[WF_EntidadIndice].[PK__WF_Entid__23DAAA6D02546CF1];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[EntidadIndiceId] ASC; include="
+378;05_INDICES;[dbo].[WF_EntidadItem].[PK__WF_Entid__598A61096A726599];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[EntidadItemId] ASC; include="
+379;05_INDICES;[dbo].[WF_EscalamientoRegla].[IX_WF_EscalamientoRegla_Main];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[ProcesoKey] ASC, [RolOrigen] ASC, [Activo] ASC; include="
+380;05_INDICES;[dbo].[WF_EscalamientoRegla].[PK__WF_Escal__3214EC07F3A748B7];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+381;05_INDICES;[dbo].[WF_Instancia].[IX_WF_Instancia_Estado_Scope];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[Estado] ASC, [ScopeKey] ASC; include=[WF_DefinicionId], [FechaInicio], [FechaFin], [CreadoPor], [ProcesoKey], [DocTipoId]"
+382;05_INDICES;[dbo].[WF_Instancia].[IX_WF_Instancia_Proceso];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[ProcesoKey] ASC, [FechaInicio] ASC; include=[Estado], [ScopeKey], [WF_DefinicionId]"
+383;05_INDICES;[dbo].[WF_Instancia].[PK__WF_Insta__3214EC078E5FF3D1];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+384;05_INDICES;[dbo].[WF_InstanciaDocumento].[IX_WF_InstanciaDocumento_Doc];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[DocumentoId] ASC; include="
+385;05_INDICES;[dbo].[WF_InstanciaDocumento].[IX_WF_InstanciaDocumento_Inst];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WF_InstanciaId] ASC, [FechaAlta] DESC; include="
+386;05_INDICES;[dbo].[WF_InstanciaDocumento].[PK__WF_Insta__3214EC07924EF938];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+387;05_INDICES;[dbo].[WF_InstanciaLog].[PK__WF_Insta__3214EC07B462A7A8];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+388;05_INDICES;[dbo].[WF_Notificacion].[IX_WF_Notificacion_Instancia];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WF_InstanciaId] ASC, [FechaCreacion] DESC; include="
+389;05_INDICES;[dbo].[WF_Notificacion].[IX_WF_Notificacion_Rol_Leido];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[RolDestino] ASC, [Leido] ASC, [FechaCreacion] DESC; include=[Titulo], [Prioridad], [WF_InstanciaId], [WF_DefinicionId]"
+390;05_INDICES;[dbo].[WF_Notificacion].[IX_WF_Notificacion_Usuario_Leido];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[UsuarioDestino] ASC, [Leido] ASC, [FechaCreacion] DESC; include=[Titulo], [Prioridad], [WF_InstanciaId], [WF_DefinicionId]"
+391;05_INDICES;[dbo].[WF_Notificacion].[PK__WF_Notif__3214EC07B400BE42];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+392;05_INDICES;[dbo].[WF_NotificacionLectura].[IX_WF_NotificacionLectura_Usuario];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[Usuario] ASC, [FechaLeido] DESC; include=[NotificacionId]"
+393;05_INDICES;[dbo].[WF_NotificacionLectura].[PK_WF_NotificacionLectura];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+394;05_INDICES;[dbo].[WF_NotificacionLectura].[UX_WF_NotificacionLectura_Notificacion_Usuario];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[NotificacionId] ASC, [Usuario] ASC; include="
+395;05_INDICES;[dbo].[WF_Permiso].[PK_WF_Permiso];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[PermisoKey] ASC; include="
+396;05_INDICES;[dbo].[WF_Queue].[PK__WF_Queue__3214EC0718D7A93B];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+397;05_INDICES;[dbo].[WF_QueueMessage].[PK__WF_Queue__3214EC07D807AEE3];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+398;05_INDICES;[dbo].[WF_Rol].[PK_WF_Rol];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[RolKey] ASC; include="
+399;05_INDICES;[dbo].[WF_RolPermiso].[PK__WF_RolPe__3214EC07ECC578F4];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+400;05_INDICES;[dbo].[WF_RolPermisoAlcance].[IX_WF_RolPermisoAlcance_Permiso];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[PermisoKey] ASC, [Activo] ASC, [ProcesoKey] ASC, [ScopeKey] ASC, [RolKey] ASC; include=[VerTodo]"
+401;05_INDICES;[dbo].[WF_RolPermisoAlcance].[IX_WF_RolPermisoAlcance_Rol];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[RolKey] ASC, [Activo] ASC, [PermisoKey] ASC, [ProcesoKey] ASC, [ScopeKey] ASC; include=[VerTodo]"
+402;05_INDICES;[dbo].[WF_RolPermisoAlcance].[PK_WF_RolPermisoAlcance];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+403;05_INDICES;[dbo].[WF_RolPermisoAlcance].[UX_WF_RolPermisoAlcance_Alcance];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[RolKey] ASC, [PermisoKey] ASC, [ProcesoKey] ASC, [ScopeKey] ASC; include="
+404;05_INDICES;[dbo].[WF_RolPermisoAlcance].[UX_WF_RolPermisoAlcance_VerTodo];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[RolKey] ASC, [PermisoKey] ASC; include="
+405;05_INDICES;[dbo].[WF_SchemaVersion].[PK__WF_Schem__16C6400FED170723];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[VersionId] ASC; include="
+406;05_INDICES;[dbo].[WF_ScopeRegla].[PK__WF_Scope__3214EC075F39F09D];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+407;05_INDICES;[dbo].[WF_Setting].[PK__WF_Setti__3214EC079B573FFF];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+408;05_INDICES;[dbo].[WF_Setting].[UX_WF_Setting_Key_Scope];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[SettingKey] ASC, [ScopeKey] ASC; include="
+409;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_AsignadoA_Estado];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[AsignadoA] ASC, [Estado] ASC, [FechaCreacion] ASC; include=[WF_InstanciaId], [NodoId], [RolDestino], [ScopeKey]"
+410;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_Estado_Rol_Scope];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[Estado] ASC, [RolDestino] ASC, [ScopeKey] ASC; include=[WF_InstanciaId], [NodoId], [FechaCreacion], [FechaVencimiento], [UsuarioAsignado], [AsignadoA]"
+411;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_Instancia_Estado];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WF_InstanciaId] ASC, [Estado] ASC; include="
+412;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_Instancia_Nodo];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WF_InstanciaId] ASC, [NodoId] ASC, [NodoTipo] ASC, [Estado] ASC; include=[FechaCreacion], [FechaCierre], [Resultado]"
+413;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_Rol_Estado];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[RolDestino] ASC, [Estado] ASC; include="
+414;05_INDICES;[dbo].[WF_Tarea].[IX_WF_Tarea_Usuario_Estado];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[UsuarioAsignado] ASC, [Estado] ASC; include="
+415;05_INDICES;[dbo].[WF_Tarea].[PK__WF_Tarea__3214EC07FACC7CF4];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+416;05_INDICES;[dbo].[WF_User].[PK__WF_User__296ADCF19AA255E8];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[UserKey] ASC; include="
+417;05_INDICES;[dbo].[WF_UserPermiso].[PK__WF_UserP__3214EC07EFDF13BC];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+418;05_INDICES;[dbo].[WF_UsuarioRol].[PK_WF_UsuarioRol];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+419;05_INDICES;[dbo].[WF_UsuarioScope].[PK_WF_UsuarioScope];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Usuario] ASC, [ScopeKey] ASC; include="
+420;05_INDICES;[dbo].[Workflow].[PK__Workflow__3214EC0771E53C2B];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+421;05_INDICES;[dbo].[WorkflowEdge].[IX_WorkflowEdge_1];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WorkflowVersionId] ASC; include="
+422;05_INDICES;[dbo].[WorkflowEdge].[PK__Workflow__3214EC07A39357AB];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+423;05_INDICES;[dbo].[WorkflowNode].[IX_WorkflowNode_1];"type=NONCLUSTERED; unique=NO; primary_key=NO; columnas=[WorkflowVersionId] ASC; include="
+424;05_INDICES;[dbo].[WorkflowNode].[PK__Workflow__3214EC07BC638BB6];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+425;05_INDICES;[dbo].[WorkflowVersion].[IX_WorkflowVersion_1];"type=NONCLUSTERED; unique=SI; primary_key=NO; columnas=[WorkflowId] ASC, [VersionNumber] ASC; include="
+426;05_INDICES;[dbo].[WorkflowVersion].[PK__Workflow__3214EC07DF4C49C9];"type=CLUSTERED; unique=SI; primary_key=SI; columnas=[Id] ASC; include="
+427;06_CHECKS;[dbo].[WF_DocTipo].[CK_WF_DocTipo_MotorExtraccion];([MotorExtraccion]='NC_AR' OR [MotorExtraccion]='FACTURA_AR' OR [MotorExtraccion]='REGLAS')
+428;06_CHECKS;[dbo].[WF_RolPermisoAlcance].[CK_WF_RolPermisoAlcance_VerTodo];([VerTodo]=(1) AND [ProcesoKey] IS NULL AND [ScopeKey] IS NULL OR [VerTodo]=(0))
+429;07_DEFAULTS;[dbo].[WF_Definicion].[DF__WF_Defini__Activ__38996AB5];((1))
+430;07_DEFAULTS;[dbo].[WF_Definicion].[DF__WF_Defini__Fecha__398D8EEE];(getdate())
+431;07_DEFAULTS;[dbo].[WF_Definicion].[DF__WF_Defini__Versi__37A5467C];((1))
+432;07_DEFAULTS;[dbo].[WF_Demo_Log].[DF__WF_Demo_L__Fecha__2EA5EC27];(getdate())
+433;07_DEFAULTS;[dbo].[WF_DocTipo].[DF_WF_DocTipo_CreatedAt];(sysutcdatetime())
+434;07_DEFAULTS;[dbo].[WF_DocTipo].[DF_WF_DocTipo_EsActivo];((1))
+435;07_DEFAULTS;[dbo].[WF_DocTipo].[DF_WF_DocTipo_MotorExtraccion];('REGLAS')
+436;07_DEFAULTS;[dbo].[WF_DocTipoReglaExtract].[DF_WF_DocTipoReglaExtract_Activo];((1))
+437;07_DEFAULTS;[dbo].[WF_DocTipoReglaExtract].[DF_WF_DocTipoReglaExtract_CreatedAt];(getdate())
+438;07_DEFAULTS;[dbo].[WF_DocTipoReglaExtract].[DF_WF_DocTipoReglaExtract_Grupo];((1))
+439;07_DEFAULTS;[dbo].[WF_DocTipoReglaExtract].[DF_WF_DocTipoReglaExtract_Orden];((1))
+440;07_DEFAULTS;[dbo].[WF_DocumentoPlantilla].[DF__WF_Docume__Activ__76969D2E];((1))
+441;07_DEFAULTS;[dbo].[WF_DocumentoPlantilla].[DF__WF_Docume__Fecha__75A278F5];(getdate())
+442;07_DEFAULTS;[dbo].[WF_DocumentoPlantilla].[DF__WF_Docume__Versi__74AE54BC];((1))
+443;07_DEFAULTS;[dbo].[WF_DocumentoTipo].[DF__WF_Docume__Activ__70DDC3D8];((1))
+444;07_DEFAULTS;[dbo].[WF_Entidad].[DF__WF_Entida__Actua__251C81ED];(sysutcdatetime())
+445;07_DEFAULTS;[dbo].[WF_Entidad].[DF__WF_Entida__Cread__24285DB4];(sysutcdatetime())
+446;07_DEFAULTS;[dbo].[WF_EscalamientoRegla].[DF__WF_Escala__Activ__5CA1C101];((1))
+447;07_DEFAULTS;[dbo].[WF_EscalamientoRegla].[DF__WF_Escala__Creat__5D95E53A];(getdate())
+448;07_DEFAULTS;[dbo].[WF_EscalamientoRegla].[DF__WF_Escala__Minut__5BAD9CC8];((0))
+449;07_DEFAULTS;[dbo].[WF_Instancia].[DF__WF_Instan__Estad__3C69FB99];('Pendiente')
+450;07_DEFAULTS;[dbo].[WF_Instancia].[DF__WF_Instan__Fecha__3D5E1FD2];(getdate())
+451;07_DEFAULTS;[dbo].[WF_InstanciaDocumento].[DF__WF_Instan__Accio__09746778];('ATTACH')
+452;07_DEFAULTS;[dbo].[WF_InstanciaDocumento].[DF__WF_Instan__EsRoo__0880433F];((0))
+453;07_DEFAULTS;[dbo].[WF_InstanciaDocumento].[DF__WF_Instan__Fecha__0A688BB1];(getdate())
+454;07_DEFAULTS;[dbo].[WF_InstanciaLog].[DF__WF_Instan__Fecha__412EB0B6];(getdate())
+455;07_DEFAULTS;[dbo].[WF_InstanciaLog].[DF__WF_Instan__Nivel__4222D4EF];('Info')
+456;07_DEFAULTS;[dbo].[WF_Notificacion].[DF_WF_Notificacion_Canal];(N'sistema')
+457;07_DEFAULTS;[dbo].[WF_Notificacion].[DF_WF_Notificacion_FechaCreacion];(getdate())
+458;07_DEFAULTS;[dbo].[WF_Notificacion].[DF_WF_Notificacion_Leido];((0))
+459;07_DEFAULTS;[dbo].[WF_Notificacion].[DF_WF_Notificacion_Prioridad];(N'normal')
+460;07_DEFAULTS;[dbo].[WF_Notificacion].[DF_WF_Notificacion_Tipo];(N'sistema')
+461;07_DEFAULTS;[dbo].[WF_NotificacionLectura].[DF_WF_NotificacionLectura_FechaLeido];(getdate())
+462;07_DEFAULTS;[dbo].[WF_Permiso].[DF_WF_Permiso_Activo];((1))
+463;07_DEFAULTS;[dbo].[WF_Queue].[DF__WF_Queue__Attemp__6D0D32F4];((0))
+464;07_DEFAULTS;[dbo].[WF_Queue].[DF__WF_Queue__Create__6A30C649];(getdate())
+465;07_DEFAULTS;[dbo].[WF_Queue].[DF__WF_Queue__Priori__6B24EA82];((0))
+466;07_DEFAULTS;[dbo].[WF_Queue].[DF__WF_Queue__Proces__6C190EBB];((0))
+467;07_DEFAULTS;[dbo].[WF_QueueMessage].[DF_WF_QueueMessage_Estado];('Pendiente')
+468;07_DEFAULTS;[dbo].[WF_QueueMessage].[DF_WF_QueueMessage_FechaCreacion];(getdate())
+469;07_DEFAULTS;[dbo].[WF_QueueMessage].[DF_WF_QueueMessage_Intentos];((0))
+470;07_DEFAULTS;[dbo].[WF_Rol].[DF_WF_Rol_Activo];((1))
+471;07_DEFAULTS;[dbo].[WF_Rol].[DF_WF_Rol_FechaAlta];(getdate())
+472;07_DEFAULTS;[dbo].[WF_RolPermiso].[DF_WF_RolPermiso_Activo];((1))
+473;07_DEFAULTS;[dbo].[WF_RolPermiso].[DF_WF_RolPermiso_VerTodo];((0))
+474;07_DEFAULTS;[dbo].[WF_RolPermisoAlcance].[DF_WF_RolPermisoAlcance_Activo];((1))
+475;07_DEFAULTS;[dbo].[WF_RolPermisoAlcance].[DF_WF_RolPermisoAlcance_FechaAlta];(getdate())
+476;07_DEFAULTS;[dbo].[WF_RolPermisoAlcance].[DF_WF_RolPermisoAlcance_VerTodo];((0))
+477;07_DEFAULTS;[dbo].[WF_SchemaVersion].[DF__WF_Schema__Appli__1B9317B3];(sysutcdatetime())
+478;07_DEFAULTS;[dbo].[WF_Setting].[DF_WF_Setting_Activo];((1))
+479;07_DEFAULTS;[dbo].[WF_Setting].[DF_WF_Setting_UpdatedAt];(getdate())
+480;07_DEFAULTS;[dbo].[WF_Tarea].[DF__WF_Tarea__FechaC__5CD6CB2B];(getdate())
+481;07_DEFAULTS;[dbo].[WF_User].[DF_WF_User_Activo];((1))
+482;07_DEFAULTS;[dbo].[WF_User].[DF_WF_User_FechaAlta];(getdate())
+483;07_DEFAULTS;[dbo].[WF_UserPermiso].[DF_WF_UserPermiso_Activo];((1))
+484;07_DEFAULTS;[dbo].[WF_UserPermiso].[DF_WF_UserPermiso_VerTodo];((0))
+485;07_DEFAULTS;[dbo].[WF_UsuarioRol].[DF_WF_UsuarioRol_Activo];((1))
+486;07_DEFAULTS;[dbo].[Workflow].[DF__Workflow__Create__46E78A0C];(getdate())
+487;07_DEFAULTS;[dbo].[Workflow].[DF__Workflow__IsActi__45F365D3];((1))
+488;07_DEFAULTS;[dbo].[WorkflowEdge].[DF__WorkflowE__Condi__5070F446];('always')
+489;07_DEFAULTS;[dbo].[WorkflowVersion].[DF__WorkflowV__Creat__49C3F6B7];(getdate())
+490;08_PROGRAMABILIDAD;[dbo].[fn_diagramobjects];"type=SQL_SCALAR_FUNCTION  	CREATE FUNCTION dbo.fn_diagramobjects()  	RETURNS int 	WITH EXECUTE AS N'dbo' 	AS 	BEGIN 		declare @id_upgraddiagrams		int 		declare @id_sysdiagrams			int 		declare @id_helpdiagrams		int 		declare @id_helpdiagramdefinition	int 		declare @id_creatediagram	int 		declare @id_renamediagram	int 		declare @id_alterdiagram 	int  		declare @id_dropdiagram		int 		declare @InstalledObjects	int  		select @InstalledObjects = 0  		select 	@id_upgraddiagrams = object_id(N'dbo.sp_upgraddiagrams'), 			@id_sysdiagrams = object_id(N'dbo.sysdiagrams'), 			@id_helpdiagrams = object_id(N'dbo.sp_helpdiagrams'), 			@id_helpdiagramdefinition = object_id(N'dbo.sp_helpdiagramdefinition'), 			@id_creatediagram = object_id(N'dbo.sp_creatediagram'), 			@id_renamediagram = object_id(N'dbo.sp_renamediagram'), 			@id_alterdiagram = object_id(N'dbo.sp_alterdiagram'),  			@id_dropdiagram = object_id(N'dbo.sp_dropdiagram')  		if @id_upgraddiagrams is not null 			select @InstalledObjects = @InstalledObjects + 1 		if @id_sysdiagrams is not null 			select @InstalledObjects = @InstalledObjects + 2 		if @id_helpdiagrams is not null 			select @InstalledObjects = @InstalledObjects + 4 		if @id_helpdiagramdefinition is not null 			select @InstalledObjects = @InstalledObjects + 8 		if @id_creatediagram is not null 			select @InstalledObjects = @InstalledObjects + 16 		if @id_renamediagram is not null 			select @InstalledObjects = @InstalledObjects + 32 		if @id_alterdiagram  is not null 			select @InstalledObjects = @InstalledObjects + 64 		if @id_dropdiagram is not null 			select @InstalledObjects = @InstalledObjects + 128 		 		return @InstalledObjects  	END 	"
+491;08_PROGRAMABILIDAD;[dbo].[WF_IsAdmin];"type=SQL_SCALAR_FUNCTION  CREATE FUNCTION [dbo].[WF_IsAdmin](@UserKey nvarchar(200)) RETURNS bit AS BEGIN     DECLARE @uFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     DECLARE @uShort nvarchar(200) = dbo.WF_UserKeyShort(@uFull);      IF NULLIF(@uFull,'') IS NULL         RETURN 0;      -- ADMIN = admin global (VerTodo NO define admin)     IF EXISTS (         SELECT 1         FROM dbo.WF_UserPermiso p         WHERE p.Activo = 1           AND p.PermisoKey = 'ADMIN'           AND p.UserKey IN (@uFull, @uShort)     ) RETURN 1;      RETURN 0; END"
+492;08_PROGRAMABILIDAD;[dbo].[WF_UserHasPermiso];"type=SQL_SCALAR_FUNCTION  -- ====== Permiso por usuario/rol (scope/proceso opcional) ====== CREATE   FUNCTION [dbo].[WF_UserHasPermiso] (     @UserKey    nvarchar(200),     @PermisoKey nvarchar(50),     @ProcesoKey nvarchar(50) = NULL,     @ScopeKey   nvarchar(50) = NULL ) RETURNS bit AS BEGIN     DECLARE @uFull nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     DECLARE @uShort nvarchar(200) = dbo.WF_UserKeyShort(@uFull);      -- Admin pisa todo     IF dbo.WF_IsAdmin(@uFull) = 1 RETURN 1;      -- Permisos directos por usuario     IF EXISTS (         SELECT 1         FROM dbo.WF_UserPermiso p         WHERE p.Activo=1           AND p.PermisoKey=@PermisoKey           AND p.UserKey IN (@uFull, @uShort)           AND (                 p.VerTodo=1              OR (                     (p.ProcesoKey IS NULL OR p.ProcesoKey=@ProcesoKey)                 AND (p.ScopeKey   IS NULL OR p.ScopeKey=@ScopeKey)                 )           )     ) RETURN 1;      -- Permisos por rol (WF_UsuarioRol)     IF OBJECT_ID('dbo.WF_UsuarioRol','U') IS NOT NULL     BEGIN         IF EXISTS (             SELECT 1             FROM dbo.WF_UsuarioRol ur             JOIN dbo.WF_RolPermiso rp ON rp.RolKey = ur.RolKey AND rp.Activo=1             WHERE ur.Usuario IN (@uFull, @uShort)               AND rp.PermisoKey=@PermisoKey               AND (                     rp.VerTodo=1                  OR (                         (rp.ProcesoKey IS NULL OR rp.ProcesoKey=@ProcesoKey)                     AND (rp.ScopeKey   IS NULL OR rp.ScopeKey=@ScopeKey)                     )               )         ) RETURN 1;     END      RETURN 0; END "
+493;08_PROGRAMABILIDAD;[dbo].[WF_UserKeyShort];"type=SQL_SCALAR_FUNCTION  -- ====== Normalizar userKey (OMARD\USUARIO => USUARIO) ====== CREATE   FUNCTION dbo.WF_UserKeyShort(@UserKey nvarchar(200)) RETURNS nvarchar(200) AS BEGIN     DECLARE @u nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     IF CHARINDEX('\', @u) > 0         SET @u = RIGHT(@u, LEN(@u) - CHARINDEX('\', @u));     RETURN @u; END "
+494;08_PROGRAMABILIDAD;[dbo].[sp_alterdiagram];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_alterdiagram 	( 		@diagramname 	sysname, 		@owner_id	int	= null, 		@version 	int, 		@definition 	varbinary(max) 	) 	WITH EXECUTE AS 'dbo' 	AS 	BEGIN 		set nocount on 	 		declare @theId 			int 		declare @retval 		int 		declare @IsDbo 			int 		 		declare @UIDFound 		int 		declare @DiagId			int 		declare @ShouldChangeUID	int 	 		if(@diagramname is null) 		begin 			RAISERROR ('Invalid ARG', 16, 1) 			return -1 		end 	 		execute as caller; 		select @theId = DATABASE_PRINCIPAL_ID();	  		select @IsDbo = IS_MEMBER(N'db_owner');  		if(@owner_id is null) 			select @owner_id = @theId; 		revert; 	 		select @ShouldChangeUID = 0 		select @DiagId = diagram_id, @UIDFound = principal_id from dbo.sysdiagrams where principal_id = @owner_id and name = @diagramname  		 		if(@DiagId IS NULL or (@IsDbo = 0 and @theId <> @UIDFound)) 		begin 			RAISERROR ('Diagram does not exist or you do not have permission.', 16, 1); 			return -3 		end 	 		if(@IsDbo <> 0) 		begin 			if(@UIDFound is null or USER_NAME(@UIDFound) is null) -- invalid principal_id 			begin 				select @ShouldChangeUID = 1 ; 			end 		end  		-- update dds data			 		update dbo.sysdiagrams set definition = @definition where diagram_id = @DiagId ;  		-- change owner 		if(@ShouldChangeUID = 1) 			update dbo.sysdiagrams set principal_id = @theId where diagram_id = @DiagId ;  		-- update dds version 		if(@version is not null) 			update dbo.sysdiagrams set version = @version where diagram_id = @DiagId ;  		return 0 	END 	"
+495;08_PROGRAMABILIDAD;[dbo].[sp_creatediagram];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_creatediagram 	( 		@diagramname 	sysname, 		@owner_id		int	= null, 	 		@version 		int, 		@definition 	varbinary(max) 	) 	WITH EXECUTE AS 'dbo' 	AS 	BEGIN 		set nocount on 	 		declare @theId int 		declare @retval int 		declare @IsDbo	int 		declare @userName sysname 		if(@version is null or @diagramname is null) 		begin 			RAISERROR (N'E_INVALIDARG', 16, 1); 			return -1 		end 	 		execute as caller; 		select @theId = DATABASE_PRINCIPAL_ID();  		select @IsDbo = IS_MEMBER(N'db_owner'); 		revert;  		 		if @owner_id is null 		begin 			select @owner_id = @theId; 		end 		else 		begin 			if @theId <> @owner_id 			begin 				if @IsDbo = 0 				begin 					RAISERROR (N'E_INVALIDARG', 16, 1); 					return -1 				end 				select @theId = @owner_id 			end 		end 		-- next 2 line only for test, will be removed after define name unique 		if EXISTS(select diagram_id from dbo.sysdiagrams where principal_id = @theId and name = @diagramname) 		begin 			RAISERROR ('The name is already used.', 16, 1); 			return -2 		end 	 		insert into dbo.sysdiagrams(name, principal_id , version, definition) 				VALUES(@diagramname, @theId, @version, @definition) ; 		 		select @retval = @@IDENTITY  		return @retval 	END 	"
+496;08_PROGRAMABILIDAD;[dbo].[sp_dropdiagram];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_dropdiagram 	( 		@diagramname 	sysname, 		@owner_id	int	= null 	) 	WITH EXECUTE AS 'dbo' 	AS 	BEGIN 		set nocount on 		declare @theId 			int 		declare @IsDbo 			int 		 		declare @UIDFound 		int 		declare @DiagId			int 	 		if(@diagramname is null) 		begin 			RAISERROR ('Invalid value', 16, 1); 			return -1 		end 	 		EXECUTE AS CALLER; 		select @theId = DATABASE_PRINCIPAL_ID(); 		select @IsDbo = IS_MEMBER(N'db_owner');  		if(@owner_id is null) 			select @owner_id = @theId; 		REVERT;  		 		select @DiagId = diagram_id, @UIDFound = principal_id from dbo.sysdiagrams where principal_id = @owner_id and name = @diagramname  		if(@DiagId IS NULL or (@IsDbo = 0 and @UIDFound <> @theId)) 		begin 			RAISERROR ('Diagram does not exist or you do not have permission.', 16, 1) 			return -3 		end 	 		delete from dbo.sysdiagrams where diagram_id = @DiagId; 	 		return 0; 	END 	"
+497;08_PROGRAMABILIDAD;[dbo].[sp_helpdiagramdefinition];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_helpdiagramdefinition 	( 		@diagramname 	sysname, 		@owner_id	int	= null 		 	) 	WITH EXECUTE AS N'dbo' 	AS 	BEGIN 		set nocount on  		declare @theId 		int 		declare @IsDbo 		int 		declare @DiagId		int 		declare @UIDFound	int 	 		if(@diagramname is null) 		begin 			RAISERROR (N'E_INVALIDARG', 16, 1); 			return -1 		end 	 		execute as caller; 		select @theId = DATABASE_PRINCIPAL_ID(); 		select @IsDbo = IS_MEMBER(N'db_owner'); 		if(@owner_id is null) 			select @owner_id = @theId; 		revert;  	 		select @DiagId = diagram_id, @UIDFound = principal_id from dbo.sysdiagrams where principal_id = @owner_id and name = @diagramname; 		if(@DiagId IS NULL or (@IsDbo = 0 and @UIDFound <> @theId )) 		begin 			RAISERROR ('Diagram does not exist or you do not have permission.', 16, 1); 			return -3 		end  		select version, definition FROM dbo.sysdiagrams where diagram_id = @DiagId ;  		return 0 	END 	"
+498;08_PROGRAMABILIDAD;[dbo].[sp_helpdiagrams];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_helpdiagrams 	( 		@diagramname sysname = NULL, 		@owner_id int = NULL 	) 	WITH EXECUTE AS N'dbo' 	AS 	BEGIN 		DECLARE @user sysname 		DECLARE @dboLogin bit 		EXECUTE AS CALLER; 			SET @user = USER_NAME(); 			SET @dboLogin = CONVERT(bit,IS_MEMBER('db_owner')); 		REVERT; 		SELECT 			[Database] = DB_NAME(), 			[Name] = name, 			[ID] = diagram_id, 			[Owner] = USER_NAME(principal_id), 			[OwnerID] = principal_id 		FROM 			sysdiagrams 		WHERE 			(@dboLogin = 1 OR USER_NAME(principal_id) = @user) AND 			(@diagramname IS NULL OR name = @diagramname) AND 			(@owner_id IS NULL OR principal_id = @owner_id) 		ORDER BY 			4, 5, 1 	END 	"
+499;08_PROGRAMABILIDAD;[dbo].[sp_renamediagram];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_renamediagram 	( 		@diagramname 		sysname, 		@owner_id		int	= null, 		@new_diagramname	sysname 	 	) 	WITH EXECUTE AS 'dbo' 	AS 	BEGIN 		set nocount on 		declare @theId 			int 		declare @IsDbo 			int 		 		declare @UIDFound 		int 		declare @DiagId			int 		declare @DiagIdTarg		int 		declare @u_name			sysname 		if((@diagramname is null) or (@new_diagramname is null)) 		begin 			RAISERROR ('Invalid value', 16, 1); 			return -1 		end 	 		EXECUTE AS CALLER; 		select @theId = DATABASE_PRINCIPAL_ID(); 		select @IsDbo = IS_MEMBER(N'db_owner');  		if(@owner_id is null) 			select @owner_id = @theId; 		REVERT; 	 		select @u_name = USER_NAME(@owner_id) 	 		select @DiagId = diagram_id, @UIDFound = principal_id from dbo.sysdiagrams where principal_id = @owner_id and name = @diagramname  		if(@DiagId IS NULL or (@IsDbo = 0 and @UIDFound <> @theId)) 		begin 			RAISERROR ('Diagram does not exist or you do not have permission.', 16, 1) 			return -3 		end 	 		-- if((@u_name is not null) and (@new_diagramname = @diagramname))	-- nothing will change 		--	return 0; 	 		if(@u_name is null) 			select @DiagIdTarg = diagram_id from dbo.sysdiagrams where principal_id = @theId and name = @new_diagramname 		else 			select @DiagIdTarg = diagram_id from dbo.sysdiagrams where principal_id = @owner_id and name = @new_diagramname 	 		if((@DiagIdTarg is not null) and  @DiagId <> @DiagIdTarg) 		begin 			RAISERROR ('The name is already used.', 16, 1); 			return -2 		end		 	 		if(@u_name is null) 			update dbo.sysdiagrams set [name] = @new_diagramname, principal_id = @theId where diagram_id = @DiagId 		else 			update dbo.sysdiagrams set [name] = @new_diagramname where diagram_id = @DiagId 		return 0 	END 	"
+500;08_PROGRAMABILIDAD;[dbo].[sp_upgraddiagrams];"type=SQL_STORED_PROCEDURE  	CREATE PROCEDURE dbo.sp_upgraddiagrams 	AS 	BEGIN 		IF OBJECT_ID(N'dbo.sysdiagrams') IS NOT NULL 			return 0; 	 		CREATE TABLE dbo.sysdiagrams 		( 			name sysname NOT NULL, 			principal_id int NOT NULL,	-- we may change it to varbinary(85) 			diagram_id int PRIMARY KEY IDENTITY, 			version int, 	 			definition varbinary(max) 			CONSTRAINT UK_principal_name UNIQUE 			( 				principal_id, 				name 			) 		);   		/* Add this if we need to have some form of extended properties for diagrams */ 		/* 		IF OBJECT_ID(N'dbo.sysdiagram_properties') IS NULL 		BEGIN 			CREATE TABLE dbo.sysdiagram_properties 			( 				diagram_id int, 				name sysname, 				value varbinary(max) NOT NULL 			) 		END 		*/  		IF OBJECT_ID(N'dbo.dtproperties') IS NOT NULL 		begin 			insert into dbo.sysdiagrams 			( 				[name], 				[principal_id], 				[version], 				[definition] 			) 			select	  				convert(sysname, dgnm.[uvalue]), 				DATABASE_PRINCIPAL_ID(N'dbo'),			-- will change to the sid of sa 				0,							-- zero for old format, dgdef.[version], 				dgdef.[lvalue] 			from dbo.[dtproperties] dgnm 				inner join dbo.[dtproperties] dggd on dggd.[property] = 'DtgSchemaGUID' and dggd.[objectid] = dgnm.[objectid]	 				inner join dbo.[dtproperties] dgdef on dgdef.[property] = 'DtgSchemaDATA' and dgdef.[objectid] = dgnm.[objectid] 				 			where dgnm.[property] = 'DtgSchemaNAME' and dggd.[uvalue] like N'_EA3E6268-D998-11CE-9454-00AA00A3F36E_'  			return 2; 		end 		return 1; 	END 	"
+501;08_PROGRAMABILIDAD;[dbo].[WF_Escalamiento_ConsumirYAplicar];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Escalamiento_ConsumirYAplicar]     @Take int = 20 AS BEGIN     SET NOCOUNT ON;      DECLARE @Ahora datetime = GETDATE();      -- 1) Claim atómico (evita doble consumo)     DECLARE @msgs TABLE (         Id bigint NOT NULL,         Payload nvarchar(max) NULL     );      ;WITH cte AS (         SELECT TOP (@Take)             q.Id,             q.Payload         FROM dbo.WF_Queue q WITH (ROWLOCK, READPAST, UPDLOCK)         WHERE q.Queue = 'wf.escalamiento'           AND q.Processed = 0           AND (q.DueAt IS NULL OR q.DueAt <= @Ahora)         ORDER BY q.Priority DESC, q.CreatedAt, q.Id     )     UPDATE q         SET Processed   = 1,             ProcessedAt = @Ahora,             Attempts    = Attempts + 1,             LastError   = NULL     OUTPUT inserted.Id, inserted.Payload     INTO @msgs(Id, Payload)     FROM dbo.WF_Queue q     JOIN cte ON cte.Id = q.Id;      IF NOT EXISTS (SELECT 1 FROM @msgs)         RETURN;      -- 2) Payload inválido → marcar error (sin reintentar infinito)     ;WITH bad AS (         SELECT m.Id         FROM @msgs m         WHERE m.Payload IS NULL OR ISJSON(m.Payload) <> 1     )     UPDATE q         SET LastError = 'Payload inválido (no JSON)'     FROM dbo.WF_Queue q     JOIN bad b ON b.Id = q.Id;      -- 3) Aplicar escalamiento (solo payload válido)     ;WITH src AS (         SELECT             m.Id AS MsgId,             TRY_CONVERT(bigint, JSON_VALUE(m.Payload, '$.tareaId')) AS TareaId         FROM @msgs m         WHERE m.Payload IS NOT NULL AND ISJSON(m.Payload) = 1     ),     pend AS (         SELECT             s.MsgId,             t.Id AS TareaId,             i.ProcesoKey,             t.RolDestino AS RolActual,             t.FechaVencimiento         FROM src s         JOIN dbo.WF_Tarea t ON t.Id = s.TareaId         JOIN dbo.WF_Instancia i ON i.Id = t.WF_InstanciaId         WHERE s.TareaId IS NOT NULL           AND t.Estado = 'Pendiente'     ),     regla AS (         SELECT             p.MsgId,             p.TareaId,             p.ProcesoKey,             p.RolActual,             p.FechaVencimiento,             r.RolDestino AS NuevoRol,             r.MinutosVencida         FROM pend p         OUTER APPLY (             SELECT TOP 1 r.*             FROM dbo.WF_EscalamientoRegla r             WHERE r.Activo = 1               AND r.ProcesoKey = p.ProcesoKey               AND r.RolOrigen  = p.RolActual               AND p.FechaVencimiento IS NOT NULL               AND r.MinutosVencida <= DATEDIFF(minute, p.FechaVencimiento, @Ahora)             ORDER BY r.MinutosVencida DESC         ) r     )     UPDATE t         SET RolDestino = r.NuevoRol,             Datos = JSON_MODIFY(                         JSON_MODIFY(                             JSON_MODIFY(ISNULL(t.Datos,'{}'), '$.escaladoRol', r.NuevoRol),                             '$.escaladoDesdeRol', r.RolActual                         ),                         '$.escaladoEn', CONVERT(varchar(19), @Ahora, 126)                    )     FROM dbo.WF_Tarea t     JOIN regla r ON r.TareaId = t.Id     WHERE r.NuevoRol IS NOT NULL       AND r.NuevoRol <> r.RolActual;      -- 4) Si tareaId era NULL o no estaba pendiente, dejar marca (para diagnóstico)     UPDATE q         SET LastError = ISNULL(q.LastError, 'No se aplicó escalamiento (tareaId nulo/no existe/no pendiente o no vencida)')     FROM dbo.WF_Queue q     JOIN @msgs m ON m.Id = q.Id     WHERE q.LastError IS NULL       AND NOT EXISTS (           SELECT 1           FROM @msgs m2           WHERE m2.Id = q.Id             AND m2.Payload IS NOT NULL AND ISJSON(m2.Payload) = 1             AND TRY_CONVERT(bigint, JSON_VALUE(m2.Payload, '$.tareaId')) IS NOT NULL       ); END"
+502;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_EnCurso_MiAlcance];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_EnCurso_MiAlcance]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));      -- Requiere permiso de gerencia (modelo nuevo)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Instancia;         RETURN;     END      -- En curso (mi alcance): respeta scope/proceso configurado     SELECT TOP 200         i.Id,         i.ProcesoKey,         i.EmpresaKey,         i.ScopeKey,         i.Estado,         i.FechaInicio,         i.CreadoPor     FROM dbo.WF_Instancia i     WHERE i.Estado = 'EnCurso'       AND dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', i.ProcesoKey, i.ScopeKey) = 1     ORDER BY i.FechaInicio DESC;  END"
+503;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_Historial];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_Historial]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));      -- Validación correcta (modelo nuevo)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Instancia;         RETURN;     END      -- Historial (gerencia ve según scope/proceso configurado)     SELECT TOP 200         i.Id,         i.ProcesoKey,         i.EmpresaKey,         i.ScopeKey,         i.Estado,         i.FechaInicio,         i.FechaFin,         i.CreadoPor     FROM dbo.WF_Instancia i     WHERE i.Estado IN ('Finalizado','Error')       AND dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', i.ProcesoKey, i.ScopeKey) = 1     ORDER BY ISNULL(i.FechaFin, i.FechaInicio) DESC;  END"
+504;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_Tareas_Cerradas_Mis];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_Tareas_Cerradas_Mis]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));      -- Solo controla acceso gerencial     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Tarea;         RETURN;     END;      ;WITH UltimaCerrada AS     (         SELECT             t.Id,             t.WF_InstanciaId,             t.Titulo,             t.Descripcion,             t.RolDestino,             t.AsignadoA,             t.UsuarioAsignado,             COALESCE(NULLIF(t.AsignadoA,''), NULLIF(t.UsuarioAsignado,''), t.RolDestino) AS ResponsableActual,             t.ScopeKey,             t.Estado      AS TareaEstado,             t.Resultado   AS TareaResultado,             t.FechaCreacion,             t.FechaVencimiento,             t.FechaCierre,             ROW_NUMBER() OVER             (                 PARTITION BY t.WF_InstanciaId                 ORDER BY t.FechaCierre DESC, t.Id DESC             ) AS rn         FROM dbo.WF_Tarea t         INNER JOIN dbo.WF_Instancia i             ON i.Id = t.WF_InstanciaId         WHERE t.Estado = 'Completada'           AND i.Estado = 'Finalizado'     )     SELECT TOP 200         u.Id,         u.WF_InstanciaId,         u.Titulo,         u.Descripcion,         u.RolDestino,         u.AsignadoA,         u.UsuarioAsignado,         u.ResponsableActual,         u.ScopeKey,         u.TareaEstado,         u.TareaResultado,         u.FechaCreacion,         u.FechaVencimiento,         u.FechaCierre     FROM UltimaCerrada u     WHERE u.rn = 1     ORDER BY u.FechaCierre DESC, u.FechaCreacion DESC; END"
+505;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_Tareas_MisTareas];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_Tareas_MisTareas]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     DECLARE @UserKeyShort nvarchar(200) = dbo.WF_UserKeyShort(@UserKeyFull);      -- Requiere permiso de gerencia (o admin)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Tarea;         RETURN;     END      SELECT TOP 200         t.Id,         t.WF_InstanciaId,         t.Titulo,         t.Descripcion,         t.RolDestino,         t.AsignadoA,         t.UsuarioAsignado,         t.ScopeKey,         t.Estado AS TareaEstado,         t.FechaCreacion,         t.FechaVencimiento,         t.FechaCierre AS FechaCierre,         t.Datos     FROM dbo.WF_Tarea t     JOIN dbo.WF_Instancia i ON i.Id = t.WF_InstanciaId     WHERE t.Estado = 'Pendiente'       AND (             -- Asignación directa (si la tarea fue ""tomada"" o asignada)             t.AsignadoA IN (@UserKeyFull, @UserKeyShort)          OR t.UsuarioAsignado IN (@UserKeyFull, @UserKeyShort)              -- Por mi rol (pero VALIDADO por alcance Proceso/Scope)          OR (                 EXISTS (                     SELECT 1                     FROM dbo.WF_UsuarioRol ur                     WHERE ur.Activo = 1                       AND ur.Usuario IN (@UserKeyFull, @UserKeyShort)                       AND ur.RolKey = t.RolDestino                 )                 AND dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', i.ProcesoKey, t.ScopeKey) = 1             )       )     ORDER BY t.FechaVencimiento ASC, t.FechaCreacion DESC; END"
+506;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_Tareas_Pendientes_MiAlcance];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_Tareas_Pendientes_MiAlcance]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));      -- Requiere permiso de gerencia (modelo nuevo)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Tarea;         RETURN;     END      SELECT TOP 200         t.Id,         t.WF_InstanciaId,         i.ProcesoKey,         i.EmpresaKey,         t.ScopeKey,         t.Titulo,         t.RolDestino,         t.AsignadoA,         t.UsuarioAsignado,         t.Estado AS TareaEstado,         t.FechaCreacion,         t.FechaVencimiento,         t.FechaCierre AS FechaCierre,         t.Datos     FROM dbo.WF_Tarea t     JOIN dbo.WF_Instancia i ON i.Id = t.WF_InstanciaId     WHERE t.Estado = 'Pendiente'       AND dbo.WF_UserHasPermiso(             @UserKeyFull,             'TAREAS_GERENCIA',             i.ProcesoKey,             ISNULL(NULLIF(LTRIM(RTRIM(t.ScopeKey)), ''), i.ScopeKey)           ) = 1     ORDER BY t.FechaVencimiento ASC, t.FechaCreacion DESC;  END"
+507;08_PROGRAMABILIDAD;[dbo].[WF_Gerente_Tareas_PorMiRol];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Gerente_Tareas_PorMiRol]     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     DECLARE @UserKeyShort nvarchar(200) = dbo.WF_UserKeyShort(@UserKeyFull);      -- Requiere permiso de gerencia (modelo nuevo)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', NULL, NULL) = 0     BEGIN         SELECT TOP 0 * FROM dbo.WF_Tarea;         RETURN;     END      SELECT TOP 200         t.Id,         t.WF_InstanciaId,         t.Titulo,         t.Descripcion,         t.RolDestino,         t.AsignadoA,         t.UsuarioAsignado,         t.ScopeKey,         t.Estado AS TareaEstado,         t.FechaCreacion,         t.FechaVencimiento,         t.FechaCierre AS FechaCierre,         t.Datos     FROM dbo.WF_Tarea t     JOIN dbo.WF_Instancia i ON i.Id = t.WF_InstanciaId     WHERE t.Estado = 'Pendiente'       -- pool por rol (no asignada a un usuario puntual)       AND (t.AsignadoA IS NULL OR LTRIM(RTRIM(t.AsignadoA)) = '')       -- el usuario tiene ese rol       AND EXISTS (           SELECT 1           FROM dbo.WF_UsuarioRol ur           WHERE ur.Activo = 1             AND ur.Usuario IN (@UserKeyFull, @UserKeyShort)             AND ur.RolKey = t.RolDestino       )       -- dentro de su alcance (proceso/scope) según RBAC       AND dbo.WF_UserHasPermiso(             @UserKeyFull,             'TAREAS_GERENCIA',             i.ProcesoKey,             ISNULL(NULLIF(LTRIM(RTRIM(t.ScopeKey)), ''), i.ScopeKey)           ) = 1     ORDER BY t.FechaVencimiento ASC, t.FechaCreacion DESC;  END"
+508;08_PROGRAMABILIDAD;[dbo].[WF_Instancia_ActualizarBandejas];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Instancia_ActualizarBandejas]     @InstanciaId bigint AS BEGIN     SET NOCOUNT ON;      DECLARE @DefId int;     DECLARE @ProcesoKey nvarchar(50);     DECLARE @Empresa nvarchar(200);     DECLARE @DatosContexto nvarchar(max);      SELECT         @DefId = i.WF_DefinicionId,         @DatosContexto = i.DatosContexto     FROM dbo.WF_Instancia i     WHERE i.Id = @InstanciaId;      -- Instancia inexistente     IF @DefId IS NULL         RETURN;      -- ProcesoKey = WF_Definicion.Codigo (genérico)     SELECT         @ProcesoKey = d.Codigo     FROM dbo.WF_Definicion d     WHERE d.Id = @DefId;      -- Empresa desde JSON (solo si es JSON válido)     IF ISJSON(@DatosContexto) = 1     BEGIN         SET @Empresa = JSON_VALUE(@DatosContexto, '$.estado.input.empresa');         IF (@Empresa IS NULL OR LTRIM(RTRIM(@Empresa)) = '')             SET @Empresa = JSON_VALUE(@DatosContexto, '$.estado.input.empresaKey');         IF (@Empresa IS NULL OR LTRIM(RTRIM(@Empresa)) = '')             SET @Empresa = JSON_VALUE(@DatosContexto, '$.estado.biz.empresa');     END      -- Resolver ScopeKey por reglas     DECLARE @ScopeKey nvarchar(50) = NULL;      IF ISJSON(@DatosContexto) = 1     BEGIN         SELECT TOP 1             @ScopeKey = r.ScopeKey         FROM dbo.WF_ScopeRegla r         WHERE (r.WF_DefinicionId IS NULL OR r.WF_DefinicionId = @DefId)           AND (                 (r.MatchTipo = 'equals'   AND JSON_VALUE(@DatosContexto, r.CampoJson) = r.MatchValor)              OR (r.MatchTipo = 'contains' AND JSON_VALUE(@DatosContexto, r.CampoJson) LIKE '%' + r.MatchValor + '%')           )         ORDER BY r.Id DESC;     END      IF (@ScopeKey IS NULL OR LTRIM(RTRIM(@ScopeKey)) = '')         SET @ScopeKey = 'GLOBAL';      UPDATE dbo.WF_Instancia     SET ProcesoKey = @ProcesoKey,         EmpresaKey = @Empresa,         ScopeKey   = @ScopeKey     WHERE Id = @InstanciaId; END"
+509;08_PROGRAMABILIDAD;[dbo].[WF_Setting_Get];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Setting_Get]     @SettingKey nvarchar(200),     @ScopeKey   nvarchar(100) = NULL AS BEGIN     SET NOCOUNT ON;      DECLARE @Scope nvarchar(100) = NULLIF(LTRIM(RTRIM(@ScopeKey)), '');     DECLARE @Key   nvarchar(200) = NULLIF(LTRIM(RTRIM(@SettingKey)), '');      -- Si no hay key válida, devolver vacío     IF @Key IS NULL     BEGIN         SELECT CAST(NULL AS nvarchar(max)) AS Value;         RETURN;     END      -- 1) Si hay valor específico por ScopeKey, gana     IF @Scope IS NOT NULL     BEGIN         SELECT TOP 1             Value         FROM dbo.WF_Setting         WHERE Activo = 1           AND SettingKey = @Key           AND ScopeKey = @Scope         ORDER BY UpdatedAt DESC;          IF @@ROWCOUNT > 0 RETURN;     END      -- 2) Fallback global (ScopeKey NULL)     SELECT TOP 1         Value     FROM dbo.WF_Setting     WHERE Activo = 1       AND SettingKey = @Key       AND ScopeKey IS NULL     ORDER BY UpdatedAt DESC; END"
+510;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Escalar_CrearNueva];"type=SQL_STORED_PROCEDURE CREATE PROCEDURE [dbo].[WF_Tarea_Escalar_CrearNueva]     @TareaIdOriginal  bigint,     @NuevoRolDestino  nvarchar(200),     @Motivo           nvarchar(200) = NULL,     @Usuario          nvarchar(200) = NULL AS BEGIN     SET NOCOUNT ON;     SET XACT_ABORT ON;      DECLARE @Ahora datetime = GETDATE();      BEGIN TRAN;      DECLARE         @WF_InstanciaId bigint,         @NodoId nvarchar(100),         @NodoTipo nvarchar(200),         @Titulo nvarchar(400),         @Descripcion nvarchar(max),         @ScopeKey nvarchar(200),         @FechaVencimiento datetime,         @Datos nvarchar(max),         @RolDestinoOriginal nvarchar(200);      -- Tomo la tarea y la bloqueo; exijo Pendiente acá (una sola validación)     SELECT         @WF_InstanciaId = t.WF_InstanciaId,         @NodoId = t.NodoId,         @NodoTipo = t.NodoTipo,         @Titulo = t.Titulo,         @Descripcion = t.Descripcion,         @ScopeKey = t.ScopeKey,         @FechaVencimiento = t.FechaVencimiento,         @Datos = t.Datos,         @RolDestinoOriginal = t.RolDestino     FROM dbo.WF_Tarea t WITH (UPDLOCK, ROWLOCK)     WHERE t.Id = @TareaIdOriginal       AND t.Estado = 'Pendiente';      IF @WF_InstanciaId IS NULL     BEGIN         ROLLBACK;         RAISERROR('Tarea no encontrada o ya no está Pendiente: %d', 16, 1, @TareaIdOriginal);         RETURN;     END      IF NULLIF(LTRIM(RTRIM(ISNULL(@NodoId,''))), '') IS NULL        OR NULLIF(LTRIM(RTRIM(ISNULL(@NodoTipo,''))), '') IS NULL     BEGIN         ROLLBACK;         RAISERROR('La tarea original no tiene NodoId/NodoTipo válidos.', 16, 1);         RETURN;     END      DECLARE @JsonBase nvarchar(max) =         CASE WHEN ISJSON(@Datos) = 1 THEN @Datos ELSE N'{}' END;      -- 1) Cerrar original     UPDATE dbo.WF_Tarea        SET Estado = 'Completada',            Resultado = 'Escalada',            FechaCierre = @Ahora,            Datos = JSON_MODIFY(                     JSON_MODIFY(                       JSON_MODIFY(                         JSON_MODIFY(                           JSON_MODIFY(                             JSON_MODIFY(@JsonBase, '$.escalado', 'true'),                             '$.escaladoEn', CONVERT(varchar(33), @Ahora, 126)                           ),                           '$.escaladoMotivo', ISNULL(@Motivo,'SLA vencido')                         ),                         '$.escaladoPor', ISNULL(@Usuario,'system')                       ),                       '$.escaladoRolOriginal', ISNULL(@RolDestinoOriginal,'')                     ),                     '$.escaladoRolNuevo', ISNULL(@NuevoRolDestino,'')                   )      WHERE Id = @TareaIdOriginal;      -- 2) JSON nueva tarea (base = json original “limpio”)     DECLARE @JsonNueva nvarchar(max) = @JsonBase;      -- limpiar flags del original     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalado', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoEn', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoMotivo', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoPor', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoRolOriginal', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escaladoRolNuevo', NULL);      -- NO heredar “encolado” del original     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncolado', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncoladoEn', NULL);     SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.escalamientoEncoladoMotivo', NULL);      -- ✅ ORIGEN como objeto completo     DECLARE @OrigenObj nvarchar(max) =         N'{' +         N'""tareaId"":""' + CONVERT(nvarchar(50), @TareaIdOriginal) + N'"",' +         N'""motivo"":""' + STRING_ESCAPE(ISNULL(@Motivo,'SLA vencido'), 'json') + N'"",' +         N'""rolOriginal"":""' + STRING_ESCAPE(ISNULL(@RolDestinoOriginal,''), 'json') + N'"",' +         N'""rolNuevo"":""' + STRING_ESCAPE(ISNULL(@NuevoRolDestino,''), 'json') + N'"",' +         N'""creadaEn"":""' + CONVERT(nvarchar(33), @Ahora, 126) + N'"",' +         N'""creadaPor"":""' + STRING_ESCAPE(ISNULL(@Usuario,'system'), 'json') + N'""' +         N'}';      SET @JsonNueva = JSON_MODIFY(@JsonNueva, '$.origenEscalamiento', JSON_QUERY(@OrigenObj));      IF ISJSON(@JsonNueva) <> 1     BEGIN         ROLLBACK;         RAISERROR('JsonNueva inválido luego de construir origenEscalamiento.', 16, 1);         RETURN;     END      -- 3) Crear nueva tarea     DECLARE @NuevaTareaId bigint;      INSERT INTO dbo.WF_Tarea         (WF_InstanciaId, NodoId, NodoTipo, Titulo, Descripcion,          RolDestino, UsuarioAsignado, Estado, Resultado,          FechaCreacion, FechaVencimiento, FechaCierre, Datos, ScopeKey, AsignadoA,          OrigenTareaId)     VALUES         (@WF_InstanciaId, @NodoId, @NodoTipo, @Titulo, @Descripcion,          @NuevoRolDestino, NULL, 'Pendiente', NULL,          @Ahora, @FechaVencimiento, NULL,          -- ✅ NO perder vencimiento          @JsonNueva,          @ScopeKey, NULL,          @TareaIdOriginal);      SET @NuevaTareaId = CAST(SCOPE_IDENTITY() AS bigint);      COMMIT;      SELECT         @TareaIdOriginal AS TareaOriginalId,         @NuevaTareaId    AS TareaNuevaId,         @RolDestinoOriginal AS RolOriginal,         @NuevoRolDestino AS RolNuevo; END"
+511;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Escalar_Pendientes];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Tarea_Escalar_Pendientes] AS BEGIN     SET NOCOUNT ON;     SET XACT_ABORT ON;      DECLARE @Ahora datetime = GETDATE();      BEGIN TRAN;      -- 1) Claim atómico de tareas “vencidas” que aún no fueron encoladas     DECLARE @Escalar TABLE (         Id bigint NOT NULL,         WF_InstanciaId bigint NULL,         Titulo nvarchar(400) NULL,         RolDestino nvarchar(200) NULL,         ScopeKey nvarchar(200) NULL,         FechaVencimiento datetime NULL     );      ;WITH cte AS (         SELECT TOP (50)             t.Id         FROM dbo.WF_Tarea t WITH (ROWLOCK, READPAST, UPDLOCK)         WHERE t.Estado = 'Pendiente'           AND t.FechaVencimiento IS NOT NULL           AND t.FechaVencimiento < @Ahora           AND (t.AsignadoA IS NULL OR LTRIM(RTRIM(t.AsignadoA)) = '')           AND ISNULL(JSON_VALUE(CASE WHEN ISJSON(t.Datos)=1 THEN t.Datos ELSE N'{}' END, '$.escalamientoEncolado'),'') <> 'true'         ORDER BY t.FechaVencimiento ASC, t.Id ASC     )     UPDATE t        SET Datos =             JSON_MODIFY(               JSON_MODIFY(                 JSON_MODIFY(                   CASE WHEN ISJSON(t.Datos)=1 THEN t.Datos ELSE N'{}' END,                   '$.escalamientoEncolado', 'true'                 ),                 '$.escalamientoEncoladoEn', CONVERT(varchar(33), @Ahora, 126)               ),               '$.escalamientoEncoladoMotivo', 'SLA vencido'             )     OUTPUT         inserted.Id,         inserted.WF_InstanciaId,         inserted.Titulo,         inserted.RolDestino,         inserted.ScopeKey,         inserted.FechaVencimiento     INTO @Escalar(Id, WF_InstanciaId, Titulo, RolDestino, ScopeKey, FechaVencimiento)     FROM dbo.WF_Tarea t     JOIN cte ON cte.Id = t.Id;      IF NOT EXISTS (SELECT 1 FROM @Escalar)     BEGIN         COMMIT;         RETURN;     END      -- 2) Encolar evento en WF_Queue (idempotencia por CorrelationId pendiente)     INSERT INTO dbo.WF_Queue         (Queue, CorrelationId, Payload, CreatedAt, DueAt, Priority, Processed, Attempts)     SELECT         'wf.escalamiento' AS Queue,         CAST(c.Id AS nvarchar(100)) AS CorrelationId,         CONCAT(             '{',               '""tipo"":""SLA_ESCALADO"",',               '""tareaId"":', c.Id, ',',               '""instanciaId"":', ISNULL(CONVERT(nvarchar(50), c.WF_InstanciaId),'null'), ',',               '""rolDestino"":""', ISNULL(REPLACE(c.RolDestino,'""','\""'), ''), '"",',               '""scopeKey"":""', ISNULL(REPLACE(c.ScopeKey,'""','\""'), ''), '"",',               '""titulo"":""', ISNULL(REPLACE(REPLACE(c.Titulo,'""','\""'), CHAR(10),' '), ''), '"",',               '""fechaVencimiento"":""', ISNULL(CONVERT(varchar(33), c.FechaVencimiento, 126), ''), '"",',               '""escaladoEn"":""', CONVERT(varchar(33), @Ahora, 126), '""',             '}'         ) AS Payload,         @Ahora AS CreatedAt,         NULL AS DueAt,         10 AS Priority,         0 AS Processed,         0 AS Attempts     FROM @Escalar c     WHERE NOT EXISTS (         SELECT 1         FROM dbo.WF_Queue q WITH (UPDLOCK, HOLDLOCK, READPAST)         WHERE q.Queue = 'wf.escalamiento'           AND q.Processed = 0           AND q.CorrelationId = CAST(c.Id AS nvarchar(100))     );      COMMIT; END"
+512;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Get];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Tarea_Get]     @TareaId bigint AS BEGIN     SET NOCOUNT ON;      SELECT         -- WF_Tarea         t.Id                 AS TareaId,         t.WF_InstanciaId     AS InstanciaId,         t.NodoId,         t.NodoTipo,         t.Titulo,         t.Descripcion,         t.RolDestino,         t.UsuarioAsignado,         t.AsignadoA,         t.OrigenTareaId,                 -- ✅ NUEVO         t.Estado             AS TareaEstado,         t.Resultado          AS TareaResultado,         t.FechaCreacion,         t.FechaVencimiento,         t.FechaCierre        AS TareaFechaCierre,         t.Datos              AS DatosTareaJson,         t.ScopeKey           AS TareaScopeKey,          -- WF_Instancia         i.WF_DefinicionId    AS DefinicionId,       -- ✅ NUEVO         i.Estado             AS InstanciaEstado,         i.FechaInicio,         i.FechaFin,         i.CreadoPor,         i.DatosEntrada       AS DatosEntradaJson,         i.DatosContexto      AS DatosContextoJson,         i.ProcesoKey,         i.ScopeKey           AS InstanciaScopeKey,         i.EmpresaKey,         i.DocTipoId,          -- WF_Definicion (Proceso)         d.Codigo             AS DefCodigo,         d.Nombre             AS DefNombre,         d.Version            AS DefVersion     FROM dbo.WF_Tarea t     JOIN dbo.WF_Instancia i   ON i.Id = t.WF_InstanciaId     JOIN dbo.WF_Definicion d  ON d.Id = i.WF_DefinicionId     WHERE t.Id = @TareaId; END"
+513;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Historial];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Tarea_Historial]     @TareaId bigint AS BEGIN     SET NOCOUNT ON;      IF @TareaId IS NULL OR @TareaId <= 0     BEGIN         SELECT CAST(0 AS int) AS ok, 'TareaId inválido' AS error;         RETURN;     END      DECLARE @InstanciaId bigint;      SELECT @InstanciaId = t.WF_InstanciaId     FROM dbo.WF_Tarea t     WHERE t.Id = @TareaId;      IF @InstanciaId IS NULL     BEGIN         SELECT CAST(0 AS int) AS ok, 'Tarea no encontrada' AS error;         RETURN;     END      ;WITH BackChain AS (         -- arrancamos desde la tarea indicada         SELECT             t.Id,             t.OrigenTareaId,             0 AS lvl,             CAST(CONCAT('|', CONVERT(varchar(20), t.Id), '|') AS varchar(max)) AS path         FROM dbo.WF_Tarea t         WHERE t.Id = @TareaId           AND t.WF_InstanciaId = @InstanciaId          UNION ALL          -- subimos hacia la raíz (misma instancia + evitar ciclos)         SELECT             t2.Id,             t2.OrigenTareaId,             bc.lvl + 1,             CAST(bc.path + CONVERT(varchar(20), t2.Id) + '|' AS varchar(max)) AS path         FROM dbo.WF_Tarea t2         INNER JOIN BackChain bc ON bc.OrigenTareaId = t2.Id         WHERE t2.WF_InstanciaId = @InstanciaId           AND bc.path NOT LIKE '%|' + CONVERT(varchar(20), t2.Id) + '|%'     ),     Root AS (         SELECT TOP (1) Id AS RootId         FROM BackChain         ORDER BY lvl DESC     ),     FwdChain AS (         -- desde raíz hacia adelante         SELECT             t.Id,             t.OrigenTareaId,             0 AS nivel,             CAST(CONCAT('|', CONVERT(varchar(20), t.Id), '|') AS varchar(max)) AS path         FROM dbo.WF_Tarea t         CROSS JOIN Root r         WHERE t.Id = r.RootId           AND t.WF_InstanciaId = @InstanciaId          UNION ALL          -- siguiente tarea (misma instancia + evitar ciclos)         SELECT             t2.Id,             t2.OrigenTareaId,             fc.nivel + 1,             CAST(fc.path + CONVERT(varchar(20), t2.Id) + '|' AS varchar(max)) AS path         FROM dbo.WF_Tarea t2         INNER JOIN FwdChain fc ON t2.OrigenTareaId = fc.Id         WHERE t2.WF_InstanciaId = @InstanciaId           AND fc.path NOT LIKE '%|' + CONVERT(varchar(20), t2.Id) + '|%'     )     SELECT         1 AS ok,         t.Id,         t.WF_InstanciaId,         t.NodoId,         t.NodoTipo,         t.Titulo,         t.RolDestino,         t.Estado,         t.Resultado,         t.FechaCreacion,         t.FechaVencimiento,         t.FechaCierre,         t.AsignadoA,         t.ScopeKey,         t.OrigenTareaId,         fc.nivel AS Nivel,         CASE WHEN ISJSON(t.Datos) = 1 THEN JSON_QUERY(t.Datos, '$.origenEscalamiento') END AS OrigenEscalamientoObj,         t.Datos     FROM FwdChain fc     JOIN dbo.WF_Tarea t ON t.Id = fc.Id     ORDER BY fc.nivel ASC     OPTION (MAXRECURSION 100); END"
+514;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Liberar];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Tarea_Liberar]     @TareaId bigint,     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey, '')));     DECLARE @UserKeyShort nvarchar(200) = dbo.WF_UserKeyShort(@UserKeyFull);      -- Permiso mínimo: tareas propias o admin     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_MIS', NULL, NULL) = 0        AND dbo.WF_IsAdmin(@UserKeyFull) = 0     BEGIN         RAISERROR('Sin permiso para liberar tareas.', 16, 1);         RETURN;     END      -- Solo el asignado (o admin) puede liberar.     -- Liberar = soltar el lock (AsignadoA). No borrar UsuarioAsignado salvo que sea el mismo lock.     UPDATE dbo.WF_Tarea     SET         AsignadoA = NULL,         UsuarioAsignado = CASE             WHEN UsuarioAsignado IN (@UserKeyFull, @UserKeyShort) THEN NULL             ELSE UsuarioAsignado         END     WHERE Id = @TareaId       AND Estado = 'Pendiente'       AND (             dbo.WF_IsAdmin(@UserKeyFull) = 1          OR AsignadoA IN (@UserKeyFull, @UserKeyShort)          OR UsuarioAsignado IN (@UserKeyFull, @UserKeyShort)       );      IF @@ROWCOUNT = 0         RAISERROR('No se pudo liberar la tarea (no sos el asignado o no está pendiente).', 16, 1); END"
+515;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_PuedeAbrir];"type=SQL_STORED_PROCEDURE  CREATE   PROCEDURE [dbo].[WF_Tarea_PuedeAbrir]     @TareaId bigint,     @UserKey nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey,'')));     DECLARE @UserKeyShort nvarchar(200) = dbo.WF_UserKeyShort(@UserKeyFull);      -- Admin global     IF dbo.WF_IsAdmin(@UserKeyFull) = 1     BEGIN         SELECT CAST(1 AS bit);         RETURN;     END      DECLARE @InstanciaId bigint, @ScopeKey nvarchar(50), @ProcesoKey nvarchar(50), @RolDestino nvarchar(200);      SELECT         @InstanciaId = t.WF_InstanciaId,         @ScopeKey    = t.ScopeKey,         @RolDestino  = t.RolDestino     FROM dbo.WF_Tarea t     WHERE t.Id = @TareaId;      IF @InstanciaId IS NULL     BEGIN         SELECT CAST(0 AS bit);         RETURN;     END      SELECT @ProcesoKey = i.ProcesoKey     FROM dbo.WF_Instancia i     WHERE i.Id = @InstanciaId;      -- 1) asignación directa     IF EXISTS (         SELECT 1         FROM dbo.WF_Tarea t         WHERE t.Id = @TareaId           AND (                 t.AsignadoA IN (@UserKeyFull, @UserKeyShort)              OR t.UsuarioAsignado IN (@UserKeyFull, @UserKeyShort)           )     )     BEGIN         SELECT CAST(1 AS bit);         RETURN;     END      -- 2) gerencia por alcance     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', @ProcesoKey, @ScopeKey) = 1        AND EXISTS (             SELECT 1             FROM dbo.WF_UsuarioRol ur             WHERE ur.Activo = 1               AND ur.Usuario IN (@UserKeyFull, @UserKeyShort)               AND ur.RolKey = @RolDestino        )     BEGIN         SELECT CAST(1 AS bit);         RETURN;     END      -- 3) operador por rol (mis tareas)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_MIS', @ProcesoKey, @ScopeKey) = 1        AND EXISTS (             SELECT 1             FROM dbo.WF_UsuarioRol ur             WHERE ur.Activo = 1               AND ur.Usuario IN (@UserKeyFull, @UserKeyShort)               AND ur.RolKey = @RolDestino        )     BEGIN         SELECT CAST(1 AS bit);         RETURN;     END  	-- 4) alcance puro (lo que ve en ""Mi alcance"") 	IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_GERENCIA', @ProcesoKey, @ScopeKey) = 1 		BEGIN 			SELECT CAST(1 AS bit); 			RETURN; 		END      SELECT CAST(0 AS bit); END"
+516;08_PROGRAMABILIDAD;[dbo].[WF_Tarea_Tomar];"type=SQL_STORED_PROCEDURE  CREATE PROCEDURE [dbo].[WF_Tarea_Tomar]     @TareaId   bigint,     @UserKey   nvarchar(200) AS BEGIN     SET NOCOUNT ON;      DECLARE @UserKeyFull  nvarchar(200) = LTRIM(RTRIM(ISNULL(@UserKey, '')));     DECLARE @UserKeyShort nvarchar(200) = dbo.WF_UserKeyShort(@UserKeyFull);      -- Validación mínima (tareas propias o admin)     IF dbo.WF_UserHasPermiso(@UserKeyFull, 'TAREAS_MIS', NULL, NULL) = 0        AND dbo.WF_IsAdmin(@UserKeyFull) = 0     BEGIN         RAISERROR('Sin permiso para tomar tareas.', 16, 1);         RETURN;     END      ;WITH T AS (         SELECT TOP 1             t.Id,             t.RolDestino,             t.UsuarioAsignado,             t.AsignadoA,             t.Estado         FROM dbo.WF_Tarea t         WHERE t.Id = @TareaId     )     UPDATE t     SET         -- lock/reserva         AsignadoA = @UserKeyFull,         -- NO pisar UsuarioAsignado si ya había target; solo setearlo si estaba vacío         UsuarioAsignado = CASE             WHEN (t.UsuarioAsignado IS NULL OR LTRIM(RTRIM(t.UsuarioAsignado)) = '')                 THEN @UserKeyShort             ELSE t.UsuarioAsignado         END     FROM dbo.WF_Tarea t     JOIN T x ON x.Id = t.Id     WHERE t.Id = @TareaId       AND t.Estado = 'Pendiente'       AND (t.AsignadoA IS NULL OR LTRIM(RTRIM(t.AsignadoA)) = '')       AND (             dbo.WF_IsAdmin(@UserKeyFull) = 1              -- tarea dirigida a usuario (target)          OR t.UsuarioAsignado IN (@UserKeyFull, @UserKeyShort)              -- tarea por rol (pool): el usuario tiene ese rol activo          OR EXISTS (                 SELECT 1                 FROM dbo.WF_UsuarioRol ur                 WHERE ur.Activo = 1                   AND ur.Usuario IN (@UserKeyFull, @UserKeyShort)                   AND ur.RolKey = t.RolDestino             )       );      IF @@ROWCOUNT = 0     BEGIN         RAISERROR('La tarea ya fue tomada, no está disponible o no estás autorizado para tomarla.', 16, 1);         RETURN;     END END"
+517;09_CONTEOS;[dbo].[WF_Definicion];rows=159
+518;09_CONTEOS;[dbo].[WF_Demo_Log];rows=1
+519;09_CONTEOS;[dbo].[WF_DocTipo];rows=7
+520;09_CONTEOS;[dbo].[WF_DocTipoReglaExtract];rows=52
+521;09_CONTEOS;[dbo].[WF_DocumentoPlantilla];rows=1
+522;09_CONTEOS;[dbo].[WF_DocumentoTipo];rows=3
+523;09_CONTEOS;[dbo].[WF_Entidad];rows=119
+524;09_CONTEOS;[dbo].[WF_EntidadIndice];rows=98
+525;09_CONTEOS;[dbo].[WF_EntidadItem];rows=94
+526;09_CONTEOS;[dbo].[WF_EscalamientoRegla];rows=2
+527;09_CONTEOS;[dbo].[WF_Instancia];rows=334
+528;09_CONTEOS;[dbo].[WF_InstanciaDocumento];rows=8
+529;09_CONTEOS;[dbo].[WF_InstanciaLog];rows=6683
+530;09_CONTEOS;[dbo].[WF_Notificacion];rows=6
+531;09_CONTEOS;[dbo].[WF_NotificacionLectura];rows=5
+532;09_CONTEOS;[dbo].[WF_Permiso];rows=10
+533;09_CONTEOS;[dbo].[WF_Queue];rows=72
+534;09_CONTEOS;[dbo].[WF_QueueMessage];rows=1
+535;09_CONTEOS;[dbo].[WF_Rol];rows=21
+536;09_CONTEOS;[dbo].[WF_RolPermiso];rows=48
+537;09_CONTEOS;[dbo].[WF_RolPermisoAlcance];rows=0
+538;09_CONTEOS;[dbo].[WF_SchemaVersion];rows=1
+539;09_CONTEOS;[dbo].[WF_ScopeRegla];rows=3
+540;09_CONTEOS;[dbo].[WF_Setting];rows=1
+541;09_CONTEOS;[dbo].[WF_Tarea];rows=285
+542;09_CONTEOS;[dbo].[WF_User];rows=6
+543;09_CONTEOS;[dbo].[WF_UserPermiso];rows=28
+544;09_CONTEOS;[dbo].[WF_UsuarioRol];rows=7
+545;09_CONTEOS;[dbo].[WF_UsuarioScope];rows=2
+546;09_CONTEOS;[dbo].[Workflow];rows=0
+547;09_CONTEOS;[dbo].[WorkflowEdge];rows=0
+548;09_CONTEOS;[dbo].[WorkflowNode];rows=0
+549;09_CONTEOS;[dbo].[WorkflowVersion];rows=0
+550;10_VALIDACION_OBJETOS;WF_Notificacion;EXISTE
+551;10_VALIDACION_OBJETOS;WF_NotificacionLectura;EXISTE
+552;10_VALIDACION_OBJETOS;WF_Tarea;EXISTE
+553;10_VALIDACION_OBJETOS;WF_Rol;EXISTE
+554;10_VALIDACION_OBJETOS;WF_UsuarioRol;EXISTE
+555;10_VALIDACION_OBJETOS;WF_DocTipo;EXISTE
+556;10_VALIDACION_OBJETOS;WF_Definicion;EXISTE

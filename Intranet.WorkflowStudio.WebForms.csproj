@@ -470,6 +470,7 @@
     <Content Include="Api\WF_AiAssistant.ashx" />
     <Content Include="App_Data\WF_AI\workflow_intent_model.zip" />
     <Content Include="Api\WF_NotificationCounters.ashx" />
+    <Content Include="Api\WF_AiCatalog.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -540,6 +541,9 @@
     </Compile>
     <Compile Include="Api\WF_AiAssistant.ashx.cs">
       <DependentUpon>WF_AiAssistant.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_AiCatalog.ashx.cs">
+      <DependentUpon>WF_AiCatalog.ashx</DependentUpon>
     </Compile>
     <Compile Include="Api\WF_NotificationCounters.ashx.cs">
       <DependentUpon>WF_NotificationCounters.ashx</DependentUpon>

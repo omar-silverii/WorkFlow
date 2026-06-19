@@ -131,6 +131,8 @@ namespace Intranet.WorkflowStudio.WebForms
             string role = ResolveRole(norm, catalog);
             string userKey = ResolveUser(norm, catalog);
             string amount = ExtractAmount(norm);
+            List<GuidedConditionRequest> guidedConditions = AnalyzeGuidedConditions(userText);
+            bool hasGuidedConditions = guidedConditions.Count > 0;
             List<EmailRequest> emailRequests = AnalyzeEmailRequests(userText, norm, catalog);
             EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
             NotifyRequest notifyRequest = AnalyzeNotifyRequest(userText, norm);
@@ -152,7 +154,13 @@ namespace Intranet.WorkflowStudio.WebForms
                 userKey = "";
             }
 
-            bool wantsCaeValidation = ContainsToken(norm, "cae") || ContainsToken(norm, "cai");
+            bool wantsCaeValidation = !hasGuidedConditions && (ContainsToken(norm, "cae") || ContainsToken(norm, "cai"));
+            if (hasGuidedConditions)
+            {
+                // Si el constructor guiado armó un IF explícito por campo, evitamos duplicar
+                // condiciones legacy por CAE/total detectadas por palabras sueltas o importes.
+                amount = "";
+            }
 
             // No alcanza con que ML.NET prediga CARGAR_DOCUMENTO:
             // frases de variables como "quitar variable" pueden clasificarse mal.
@@ -186,9 +194,11 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (wantsDocument)
             {
+                string docPath = ExtractDocumentPath(userText);
+
                 var p = new JObject();
                 if (docTipo.Length > 0) p["docTipoCodigo"] = docTipo;
-                p["path"] = "${input.filePath}";
+                p["path"] = string.IsNullOrWhiteSpace(docPath) ? "${input.filePath}" : docPath;
                 p["mode"] = "auto";
 
                 actions.Add(AddNode("doc.load", DocLoadLabel(docTipo), p));
@@ -217,6 +227,12 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 actions.Add(AddNode("human.task", HumanTaskTitle(preBranchRole, ""), HumanTaskParams(preBranchRole, HumanTaskTitle(preBranchRole, ""), "Revisión previa generada por el Asistente IA.")));
                 preBranchTaskCreated = true;
+            }
+
+            if (guidedConditions.Count > 0)
+            {
+                foreach (GuidedConditionRequest condition in guidedConditions)
+                    AddGuidedConditionAction(actions, missing, condition);
             }
 
             if (wantsCaeValidation)
@@ -440,6 +456,112 @@ namespace Intranet.WorkflowStudio.WebForms
             JObject node = AddNode("human.task", title, HumanTaskParams(role, title, description));
             actions.Add(node);
             return node;
+        }
+
+
+        private static List<GuidedConditionRequest> AnalyzeGuidedConditions(string userText)
+        {
+            var result = new List<GuidedConditionRequest>();
+            if (string.IsNullOrWhiteSpace(userText)) return result;
+
+            // Frases generadas por el constructor fix24:
+            // "validar el campo biz.notaCredito.total con operador > valor 100000"
+            var re = new Regex(
+                @"validar\s+el\s+campo\s+(?<field>[A-Za-z0-9_\.\[\]<>]+)\s+con\s+operador\s+(?<op>>=|<=|!=|==|>|<|=|not_empty|empty|contains|not_contains|true|false)(?:\s+valor\s+(?<value>.*?))?(?=\s*,|\s+luego\s+|\s+si\s+|\s*\.\s*$|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            foreach (Match m in re.Matches(userText))
+            {
+                string field = (m.Groups["field"].Value ?? "").Trim();
+                string opRaw = (m.Groups["op"].Value ?? "").Trim();
+                string value = m.Groups["value"].Success ? (m.Groups["value"].Value ?? "").Trim() : "";
+                if (field.Length == 0) continue;
+
+                string op = NormalizeGuidedOperator(opRaw, ref value);
+                result.Add(new GuidedConditionRequest
+                {
+                    Field = field,
+                    Op = op,
+                    Value = value,
+                    Label = FriendlyFieldName(field)
+                });
+            }
+
+            return result;
+        }
+
+        private static string NormalizeGuidedOperator(string opRaw, ref string value)
+        {
+            string op = (opRaw ?? "").Trim().ToLowerInvariant();
+            if (op == "=") return "==";
+            if (op == "true")
+            {
+                value = "true";
+                return "==";
+            }
+            if (op == "false")
+            {
+                value = "false";
+                return "==";
+            }
+            if (op == "not_empty" || op == "empty" || op == "contains" || op == "not_contains") return op;
+            if (op == "==" || op == "!=" || op == ">" || op == "<" || op == ">=" || op == "<=") return op;
+            return "not_empty";
+        }
+
+        private static void AddGuidedConditionAction(JArray actions, JArray missing, GuidedConditionRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Field)) return;
+
+            var p = new JObject
+            {
+                ["field"] = request.Field,
+                ["op"] = request.Op
+            };
+
+            if (GuidedOperatorNeedsValue(request.Op))
+                p["value"] = request.Value ?? "";
+
+            actions.Add(AddNode("control.if", GuidedConditionLabel(request), p));
+
+            if (GuidedOperatorNeedsValue(request.Op) && string.IsNullOrWhiteSpace(request.Value))
+            {
+                missing.Add(new JObject
+                {
+                    ["key"] = "valorCondicion",
+                    ["question"] = "Falta indicar el valor para validar el campo " + request.Field + "."
+                });
+            }
+        }
+
+        private static bool GuidedOperatorNeedsValue(string op)
+        {
+            string o = (op ?? "").Trim().ToLowerInvariant();
+            return !(o == "not_empty" || o == "empty" || o == "exists" || o == "not_exists");
+        }
+
+        private static string GuidedConditionLabel(GuidedConditionRequest request)
+        {
+            if (request == null) return "Validar condición";
+            string label = string.IsNullOrWhiteSpace(request.Label) ? request.Field : request.Label;
+            string op = request.Op ?? "";
+            string value = request.Value ?? "";
+
+            if (op == "not_empty") return "Validar " + label + " informado";
+            if (op == "empty") return "Validar " + label + " vacío";
+            if (GuidedOperatorNeedsValue(op) && !string.IsNullOrWhiteSpace(value))
+                return "Validar " + label + " " + op + " " + value;
+            return "Validar " + label;
+        }
+
+        private static string FriendlyFieldName(string field)
+        {
+            string f = (field ?? "").Trim();
+            if (f.Length == 0) return "campo";
+            int idx = f.LastIndexOf('.');
+            string name = idx >= 0 && idx < f.Length - 1 ? f.Substring(idx + 1) : f;
+            name = name.Replace("_", " ").Replace("[]", "");
+            return name;
         }
 
         private static void AddEmailRequestAction(JArray actions, JArray missing, EmailRequest request, int ordinal)
@@ -1294,6 +1416,35 @@ namespace Intranet.WorkflowStudio.WebForms
             return best;
         }
 
+        private static string ExtractDocumentPath(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            // El constructor guiado puede generar frases como:
+            // "cargar una NC desde C:\Temp\NC_00002.pdf, luego ..."
+            // Antes el proveedor siempre usaba ${input.filePath}; con esto respeta
+            // una ruta explícita cuando fue cargada por el usuario.
+            var m = Regex.Match(text,
+                @"\b(?:cargar|leer|dar\s+de\s+alta|alta)\b.+?\b(?:desde|archivo|ruta)\b\s*[:\-]?\s*(?<path>.+?)(?=(?:,|\.)\s*\b(?:luego|despues|después|verificar|validar|si|mandar|enviar|notificar|avisar|registrar|esperar|finalizar|terminar)\b|[\r\n]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!m.Success) return "";
+
+            string path = (m.Groups["path"].Value ?? "").Trim();
+            path = Regex.Replace(path, @"\s+", " ").Trim();
+            path = path.Trim(' ', ',', ';', ':', '-', '.', '\'', '"');
+
+            if (path.Length == 0) return "";
+
+            // Convención del motor: input.filePath se expande como template.
+            if (string.Equals(path, "input.filePath", StringComparison.OrdinalIgnoreCase))
+                return "${input.filePath}";
+            if (string.Equals(path, "${input.filePath}", StringComparison.OrdinalIgnoreCase))
+                return "${input.filePath}";
+
+            return path;
+        }
+
         private static List<string> ExtractEmailAddresses(string text)
         {
             var list = new List<string>();
@@ -2027,6 +2178,22 @@ namespace Intranet.WorkflowStudio.WebForms
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out n)) return n;
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.CurrentCulture, out n)) return n;
             return fallback;
+        }
+
+        private class GuidedConditionRequest
+        {
+            public string Field { get; set; }
+            public string Op { get; set; }
+            public string Value { get; set; }
+            public string Label { get; set; }
+
+            public GuidedConditionRequest()
+            {
+                Field = "";
+                Op = "not_empty";
+                Value = "";
+                Label = "";
+            }
         }
 
         private class NotifyRequest
