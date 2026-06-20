@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
@@ -108,10 +109,73 @@ namespace Intranet.WorkflowStudio.Runtime
                     }
 
                     await cn.OpenAsync(ct);
-                    int rows = await cmd.ExecuteNonQueryAsync(ct);
 
-                    ctx.Estado["sql.rows"] = rows;
-                    ctx.Log($"[data.sql] SQL ejecutado. Filas afectadas: {rows}");
+                    // fix28b: si es una consulta que devuelve filas, leer el resultado
+                    // y dejarlo visible en DatosContexto para que pueda verse desde
+                    // WF_Instancias -> Datos y usarse luego en IFs.
+                    if (EsConsultaConResultado(sql))
+                    {
+                        int maxRows = LeerEnteroParametro(p, "maxRows", 100);
+                        if (maxRows <= 0) maxRows = 100;
+                        if (maxRows > 500) maxRows = 500;
+
+                        using (var dr = await cmd.ExecuteReaderAsync(ct))
+                        {
+                            var rowsJson = new JArray();
+                            bool truncated = false;
+
+                            while (await dr.ReadAsync(ct))
+                            {
+                                if (rowsJson.Count >= maxRows)
+                                {
+                                    truncated = true;
+                                    break;
+                                }
+
+                                var row = new JObject();
+                                for (int i = 0; i < dr.FieldCount; i++)
+                                {
+                                    string col = dr.GetName(i);
+                                    if (string.IsNullOrWhiteSpace(col)) col = "Col" + (i + 1).ToString();
+
+                                    object val = dr.IsDBNull(i) ? null : dr.GetValue(i);
+                                    row[col] = ToJToken(val);
+                                }
+
+                                rowsJson.Add(row);
+                            }
+
+                            ctx.Estado["sql.rows"] = rowsJson;
+                            ctx.Estado["sql.rowCount"] = rowsJson.Count;
+                            ctx.Estado["sql.truncated"] = truncated;
+
+                            if (rowsJson.Count > 0)
+                            {
+                                var first = rowsJson[0] as JObject;
+                                ctx.Estado["sql.first"] = first;
+
+                                if (first != null && first.Properties().Any())
+                                    ctx.Estado["sql.scalar"] = first.Properties().First().Value;
+                            }
+                            else
+                            {
+                                ctx.Estado["sql.first"] = null;
+                                ctx.Estado["sql.scalar"] = null;
+                            }
+
+                            ctx.Log($"[data.sql] SELECT ejecutado. Filas devueltas: {rowsJson.Count}" + (truncated ? $" (truncado a {maxRows})" : ""));
+                        }
+                    }
+                    else
+                    {
+                        int rows = await cmd.ExecuteNonQueryAsync(ct);
+
+                        // Mantener compatibilidad: para INSERT/UPDATE/DELETE, sql.rows sigue siendo número.
+                        ctx.Estado["sql.rows"] = rows;
+                        ctx.Estado["sql.rowsAffected"] = rows;
+                        ctx.Estado["sql.rowCount"] = rows;
+                        ctx.Log($"[data.sql] SQL ejecutado. Filas afectadas: {rows}");
+                    }
                 }
 
                 // Éxito: seguimos por "always"
@@ -125,6 +189,42 @@ namespace Intranet.WorkflowStudio.Runtime
                 // importante: devolvemos "error" para que el grafo pueda cablear a util.error
                 return new ResultadoEjecucion { Etiqueta = "error" };
             }
+        }
+
+        private static bool EsConsultaConResultado(string sql)
+        {
+            if (string.IsNullOrWhiteSpace(sql)) return false;
+
+            string t = sql.TrimStart();
+
+            // Quitar comentarios de línea iniciales simples.
+            while (t.StartsWith("--", StringComparison.Ordinal))
+            {
+                int nl = t.IndexOf('\n');
+                if (nl < 0) return false;
+                t = t.Substring(nl + 1).TrimStart();
+            }
+
+            return t.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                || t.StartsWith("WITH", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int LeerEnteroParametro(Dictionary<string, object> p, string key, int defaultValue)
+        {
+            if (p == null || !p.ContainsKey(key) || p[key] == null) return defaultValue;
+            int v;
+            return int.TryParse(Convert.ToString(p[key]), out v) ? v : defaultValue;
+        }
+
+        private static JToken ToJToken(object value)
+        {
+            if (value == null || value == DBNull.Value) return JValue.CreateNull();
+
+            if (value is DateTime dt) return new JValue(dt);
+            if (value is Guid gd) return new JValue(gd.ToString());
+            if (value is byte[] bytes) return new JValue(Convert.ToBase64String(bytes));
+
+            return JToken.FromObject(value);
         }
 
         // ============================================================

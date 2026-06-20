@@ -1,0 +1,329 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Asistente IA Constructor / fix24f y fix25
+
+Voy a pasarte:
+
+1. Este ContextPack.
+2. El ZIP actualizado del proyecto Workflow Studio WebForms, con todos los fixes aplicados hasta fix24e.
+3. Si corresponde, cualquier ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre trabajar sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora, salvo que yo lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+
+## Estado estable actual
+
+Está cerrado y validado:
+
+```text
+fix19  — Notificaciones por usuario
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+```
+
+## No tocar salvo bug real
+
+```text
+notificaciones fix19
+canvas
+aristas
+zoom
+minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+SMTP
+email.send/HEmailSend
+```
+
+## Base de trabajo
+
+Tomar como base el ZIP nuevo que voy a pasar en la próxima sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta fix24e.
+
+No uses fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+## Próximo objetivo inmediato
+
+Empezar por:
+
+```text
+fix24f — selector buscable de usuarios y mejoras chicas del constructor
+```
+
+### Problema detectado
+
+En el constructor, para `Notificación interna`:
+
+```text
+Destino = Rol
+```
+
+muestra correctamente un combo de roles.
+
+Pero para:
+
+```text
+Destino = Usuario
+```
+
+hoy deja escribir manualmente.
+
+Eso puede generar errores.
+
+### Resultado esperado
+
+Cuando el usuario elige:
+
+```text
+Destino = Usuario
+```
+
+debe mostrarse un combo buscable/autocomplete con usuarios reales.
+
+Debe permitir escribir una parte del usuario y filtrar.
+
+Ejemplos:
+
+```text
+OMARD\OMARD
+OMARD\USUARIO1
+OMARD\USUARIO2
+OMARD\USUARIO3
+OMARD\USUARIO4
+OMARD\USUARIO5
+```
+
+El usuario debería poder escribir:
+
+```text
+oma
+usuario
+OMARD
+```
+
+y seleccionar de la lista.
+
+### Revisar si aplica también a
+
+```text
+Tarea humana asignada a Usuario
+```
+
+Pero hacerlo con cuidado y sobre código real.
+
+### También considerar en fix24f
+
+Mejorar frase cuando hay un paso común después de un IF.
+
+Ejemplo actual:
+
+```text
+si se cumple → tarea COMPRAS
+si no se cumple → enviar correo
+luego notificar a OMARD\OMARD
+```
+
+Ese `luego notificar` es un paso común después del IF.
+
+La frase debería dejar más claro que se ejecuta después de cualquiera de las ramas, por ejemplo:
+
+```text
+luego de cualquiera de las dos ramas notificar internamente...
+```
+
+No implementar todavía un validador funcional completo.
+
+Solo mejorar si es simple y seguro.
+
+### Sugerencia de finalizar
+
+El sistema ya sugiere:
+
+```text
+Sugerencia: agregá "Finalizar flujo" como último paso.
+```
+
+Evaluar si conviene hacerlo más visible o más fuerte, sin molestar.
+
+## Después de fix24f
+
+Seguir con:
+
+```text
+fix25 — ramas por resultado de tarea humana
+```
+
+## Concepto clave de fix25
+
+Separar dos tipos de decisión:
+
+```text
+IF automático:
+decide el sistema con datos del contexto.
+
+Tarea humana:
+decide una persona al cerrar una tarea.
+```
+
+Ejemplo:
+
+```text
+Si total > 100000 → ADM_FIN
+```
+
+es IF automático.
+
+Pero:
+
+```text
+Si ADM_FIN aprueba → COMPRAS
+Si ADM_FIN rechaza → DIR_GENERAL
+```
+
+es rama por resultado humano.
+
+## Resultado esperado de fix25
+
+En el constructor, cuando se agregue una tarea humana, permitir definir resultados/salidas.
+
+Ejemplo:
+
+```text
+Tarea humana:
+Rol: ADM_FIN
+Objetivo: aprobar nota de crédito
+
+Resultados:
+- Aprobado → mandar tarea a COMPRAS
+- Rechazado → mandar tarea a DIR_GENERAL
+- Observado → notificar a GERENCIA o volver a otro paso
+```
+
+No hace falta resolver todo de golpe. Empezar con una versión mínima profesional:
+
+```text
+Aprobado
+Rechazado
+```
+
+Y permitir indicar qué paso agregar en cada resultado.
+
+## Pendiente futuro
+
+Dejar anotado, pero no implementar todavía salvo que yo lo pida:
+
+```text
+fix26 — Validador funcional del constructor
+```
+
+Ejemplos de validaciones futuras:
+
+```text
+El flujo no tiene Finalizar.
+La rama SI del IF está vacía.
+La rama NO del IF está vacía.
+Este paso quedó después del IF y se ejecutará siempre.
+La ruta "c" parece una ruta de prueba.
+El correo no tiene destinatario válido.
+La notificación tiene usuario escrito manualmente.
+La tarea humana no tiene definido qué pasa después.
+```
+
+## Archivos esperados a revisar
+
+Revisar en el ZIP real antes de tocar nada:
+
+```text
+WorkflowUI.aspx
+Scripts/workflow.ai.assistant.js
+Styles/workflow.ai.assistant.css
+Api/WF_AiCatalog.ashx
+Api/WF_AiCatalog.ashx.cs
+Api/WF_Roles_List.ashx
+Api/WF_Roles_List.ashx.cs
+App_Code/Ai/WfAiMlnetProvider.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+Intranet.WorkflowStudio.WebForms.csproj
+```
+
+También revisar si existe algún API o helper actual que ya devuelva usuarios.
+
+No inventar endpoint nuevo si ya existe uno útil.
+
+Si no existe, proponer uno mínimo y seguro.
+
+## Forma de entrega esperada
+
+Entregar ZIP correctivo, por ejemplo:
+
+```text
+fix24f_selector_usuarios_constructor.zip
+```
+
+Con estructura real del proyecto y LEEME.
+
+Luego, si se avanza con fix25:
+
+```text
+fix25_ramas_resultado_tarea_humana.zip
+```
+
+## Criterio final
+
+No alcanza con que compile.
+
+Debe servir operativamente:
+
+```text
+que el usuario no tenga que memorizar variables
+que pueda elegir campos reales
+que pueda entender ramas SI/NO
+que pueda elegir usuarios sin escribirlos manualmente
+que pueda definir decisiones humanas sin confundirse con IF automático
+que el constructor ayude a armar un flujo real y no solo una frase larga
+```
+
+Primero cerrar bien fix24f.
+
+Después pasar a fix25.

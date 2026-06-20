@@ -32,6 +32,8 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "human.task", Label = "Tarea humana", Params = new List<string> { "rol", "usuarioAsignado", "titulo", "descripcion", "scopeKey", "deadlineMinutes", "estadoNegocioPendiente" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "email.send", Label = "Correo: Enviar", Params = new List<string> { "from", "to", "cc", "bcc", "subject", "body", "html", "modo", "useWebConfig", "isHtml" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.notify", Label = "Notificar", Params = new List<string> { "tipo", "canal", "nivel", "destinoTipo", "usuarioDestino", "rolDestino", "destino", "prioridad", "asunto", "mensaje", "urlAccion" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "http.request", Label = "Solicitud HTTP", Params = new List<string> { "method", "url", "headers", "query", "body", "contentType", "timeoutMs", "failOnStatus", "failStatusMin" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "data.sql", Label = "Consulta SQL", Params = new List<string> { "connectionStringName", "query", "commandText", "parameters" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "state.vars", Label = "Variables", Params = new List<string> { "set", "remove" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.delay", Label = "Demora (Delay)", Params = new List<string> { "ms", "seconds", "message" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.logger", Label = "Logger", Params = new List<string> { "message", "level" } });
@@ -44,7 +46,14 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Fields.Add(new WfAiFieldInfo { Path = "input.filePath", Label = "Ruta de archivo" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "input.text", Label = "Texto extraído" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "input.hasText", Label = "Tiene texto" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "payload.status", Label = "Status HTTP" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "payload.body", Label = "Respuesta HTTP texto" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "payload.json", Label = "Respuesta HTTP JSON" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.rows", Label = "Filas SQL" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.rowCount", Label = "Cantidad de filas SQL" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.first", Label = "Primera fila SQL" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.scalar", Label = "Primer valor SQL" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.rowsAffected", Label = "Filas afectadas SQL" });
         }
 
         private void TryLoadDocTypes(WfAiCatalog catalog)

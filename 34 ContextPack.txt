@@ -1,0 +1,625 @@
+# CONTEXTPACK — Workflow Studio / Asistente IA Constructor / fix19 a fix24e
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora salvo que Omar lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, qué resuelve, qué falta y qué podría confundir al usuario.
+
+## 2. Estado general estable
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una sola conexión `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Uso de `ctx.Estado`.
+* Variables técnicas `wf.*`.
+* Variables de negocio `biz.*`.
+
+Workflow Studio ya funciona en servidores reales de la empresa.
+
+## 3. Base oficial actual
+
+Omar subió y consolidó como última versión completa:
+
+```text
+WorkFlow-main (33xx).zip
+```
+
+Esa versión contiene todos los fixes aplicados hasta ese momento.
+
+Después de esa base se trabajó con:
+
+```text
+fix24e_if_ramas_true_false_constructor.zip
+```
+
+Omar va a volver a guardar el proyecto en GitHub y mañana pasará un nuevo ZIP completo actualizado.
+
+## 4. Líneas cerradas / no tocar salvo bug real
+
+No tocar salvo bug real:
+
+```text
+WorkflowUI dev210 base canvas/aristas/zoom/minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+notificaciones fix19
+SMTP
+email.send/HEmailSend
+```
+
+Canvas, aristas, zoom y minimapa están funcionando bien.
+
+## 5. fix19 — Notificaciones por usuario
+
+Estado:
+
+```text
+CERRADO / VALIDADO / NO TOCAR
+```
+
+Se implementó lectura individual por usuario con:
+
+```text
+WF_NotificacionLectura
+```
+
+Resultado validado:
+
+* Notificación a rol COMPRAS visible para usuarios del rol.
+* OMARD\USUARIO1 puede marcarla como leída.
+* OMARD\USUARIO5, también del rol COMPRAS, la sigue viendo hasta marcarla él.
+* Cuando OMARD\USUARIO5 la marca como leída, desaparece solo para él.
+* Si un usuario recibe notificación pero no tiene permiso para abrir instancia/tarea, puede marcarla como leída y listo.
+* No hacer ahora fix sobre UrlAccion/permisos.
+
+Decisión tomada:
+
+```text
+La notificación es aviso individual.
+No se marca automáticamente como leída para todos.
+No implementar fix20 sobre UrlAccion/permisos por ahora.
+```
+
+## 6. Asistente IA — Estado previo
+
+La IA usa:
+
+```text
+ML.NET + CSV + modelo externo
+```
+
+No usar:
+
+```text
+Ollama
+OpenAI API
+dependencias externas
+```
+
+Ruta del modelo:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+Nodos ya probados / habilitados en IA:
+
+```text
+util.start
+util.end
+util.logger
+doc.load
+control.if
+human.task
+email.send
+state.vars
+control.delay
+util.notify
+```
+
+No agregar más nodos todavía.
+
+## 7. fix20 / fix21 — Guía inicial y cambio de dirección
+
+Primero se hizo una guía por escenarios:
+
+```text
+Condición + autorizaciones
+Condición simple
+```
+
+Omar detectó correctamente que eso era demasiado rígido.
+
+Decisión tomada:
+
+```text
+No seguir con guía por escenarios cerrados.
+Pasar a constructor interactivo incremental por pasos.
+```
+
+La idea correcta:
+
+```text
+El usuario no elige una plantilla cerrada.
+El usuario va agregando pasos:
+- Cargar documento
+- Validar condición
+- Tarea humana
+- Enviar correo
+- Notificación interna
+- Guardar variable
+- Quitar variable
+- Demora
+- Logger
+- Finalizar flujo
+```
+
+## 8. fix22 — Constructor amplio
+
+Se implementó modo amplio:
+
+```text
+Abrir modo amplio
+```
+
+Objetivo:
+
+* No encerrar al usuario en la columna derecha.
+* Dar más espacio para diseñar.
+* Evitar que el scroll del inspector lo maree.
+* Permitir construir más cómodo.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+Omar indicó que visualmente está mejor y que el modo amplio es el camino correcto.
+
+## 9. fix22b — Modificar pasos
+
+Se agregó:
+
+```text
+Modificar
+Quitar
+Subir / bajar paso
+Guardar cambios
+Cancelar modificación
+```
+
+Resultado:
+
+* Al modificar un paso, el formulario se carga con los datos anteriores.
+* El paso editado queda marcado.
+* Ya no hay que borrar y volver a crear.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+## 10. fix22c — Frase segura y datos respetados
+
+Problemas corregidos:
+
+1. El correo absorbía texto de pasos posteriores.
+2. `doc.load` podía volver a usar `${input.filePath}` aunque el constructor indicara una ruta explícita.
+
+Corrección:
+
+* Separar pasos con `luego`.
+* Respetar rutas explícitas como:
+
+```text
+C:\Temp\NC_00002_00000001.pdf
+```
+
+* Mantener `${input.filePath}` solo cuando corresponde.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+Omar usa a veces `c` como ruta corta solo para probar rápido. Eso está entendido.
+
+## 11. fix23 — Catálogo de salidas por nodo / campos disponibles
+
+Se agregó sección:
+
+```text
+Datos disponibles para próximos pasos
+```
+
+Objetivo:
+
+```text
+El usuario no tiene que memorizar variables internas.
+El sistema muestra qué datos existen según los pasos agregados.
+```
+
+Ejemplos visibles después de cargar NC:
+
+```text
+biz.notaCredito.total
+biz.notaCredito.cae
+biz.notaCredito.itemsCount
+biz.notaCredito.validacionBasicaOk
+biz.notaCredito.emisor.cuit
+biz.notaCredito.receptor.razonSocial
+```
+
+Ejemplos visibles después de email.send:
+
+```text
+email.sent
+email.lastError
+email.lastTo
+email.lastSubject
+```
+
+Ejemplos visibles después de util.notify:
+
+```text
+notify.last.id
+notify.last.persisted
+notify.last.destino
+notify.last.error
+```
+
+Omar validó que este punto es clave, porque es imposible que un usuario aprenda todos los campos antes de usar el workflow.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+## 12. fix24 — IF guiado con FieldPicker y operadores por tipo
+
+Se cambió el IF para que no sea fijo por:
+
+```text
+Total mayor que
+Tiene CAE
+```
+
+Ahora el usuario puede elegir:
+
+```text
+Campo a validar
+Operador
+Valor, cuando corresponde
+```
+
+Ejemplos:
+
+```text
+biz.notaCredito.total > 100000
+biz.notaCredito.cae no está vacío
+biz.notaCredito.itemsCount > 0
+biz.notaCredito.emisor.cuit igual a 12222112212
+biz.notaCredito.receptor.razonSocial no está vacío
+```
+
+Problemas corregidos:
+
+* fix24b: los campos tipo `número` con acento no mostraban operadores numéricos.
+* fix24c: al agregar IF se producía recursión `Maximum call stack size exceeded`.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+## 13. fix24d — Datos disponibles último arriba
+
+Omar propuso que en “Datos disponibles para próximos pasos” aparezca primero el último nodo agregado.
+
+Antes:
+
+```text
+Entrada del workflow
+1. Cargar documento
+2. Enviar correo
+3. Notificar
+```
+
+Ahora:
+
+```text
+3. Notificar
+2. Enviar correo
+1. Cargar documento
+Entrada del workflow
+```
+
+También aplica al selector de campos del IF para tener a mano lo más reciente.
+
+Estado:
+
+```text
+VALIDADO
+```
+
+## 14. fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+
+Se implementó que cuando se agrega una condición, el constructor muestre:
+
+```text
+SI CUMPLE
+NO CUMPLE
+```
+
+Y luego, al agregar pasos posteriores, se pueda elegir en “Cuándo”:
+
+```text
+Rama SI de la última condición
+Rama NO de la última condición
+Luego / paso normal
+```
+
+Resultado visual validado por Omar:
+
+```text
+Condición: total mayor que 12
+
+SI CUMPLE:
+    Tarea humana: COMPRAS / revisión
+
+NO CUMPLE:
+    Enviar correo: destinatario@empresa.com
+```
+
+Luego se agregó una notificación común posterior al IF:
+
+```text
+Notificar: OMARD\OMARD
+```
+
+Esto quedó como paso común después del IF.
+
+Estado:
+
+```text
+EN BUEN CAMINO / VISUALMENTE VALIDADO
+```
+
+Punto conceptual detectado:
+
+```text
+Un paso común después del IF se ejecuta después de cualquiera de las dos ramas.
+```
+
+El constructor debería avisarlo en el futuro.
+
+## 15. Observación importante — Validador funcional futuro
+
+Omar detectó que el usuario podría armar un flujo que técnicamente se interpreta pero funcionalmente no tiene sentido.
+
+Ejemplos de advertencias deseables:
+
+```text
+El flujo no tiene Finalizar.
+La rama SI del IF está vacía.
+La rama NO del IF está vacía.
+Este paso quedó después del IF y se ejecutará siempre.
+La ruta "c" parece una ruta de prueba.
+El correo no tiene destinatario válido.
+La notificación tiene usuario escrito manualmente.
+La tarea humana no tiene definido qué pasa después.
+```
+
+Decisión:
+
+```text
+No hacerlo ahora.
+Dejarlo como fix26 — Validador funcional del constructor.
+```
+
+## 16. Próximo fix inmediato
+
+Siguiente paso acordado:
+
+```text
+fix24f — selector buscable de usuarios y mejoras chicas de frase
+```
+
+Motivo:
+
+En notificación interna:
+
+```text
+Destino = Rol
+```
+
+ya muestra combo de roles.
+
+Pero cuando:
+
+```text
+Destino = Usuario
+```
+
+hoy se escribe manualmente.
+
+Omar propuso correctamente:
+
+```text
+Debe ser un combo buscable/autocomplete de usuarios.
+```
+
+Ejemplo de usuarios reales detectados en base:
+
+```text
+OMARD\OMARD
+OMARD\USUARIO1
+OMARD\USUARIO2
+OMARD\USUARIO3
+OMARD\USUARIO4
+OMARD\USUARIO5
+```
+
+El combo debería permitir escribir:
+
+```text
+oma
+usuario
+OMARD
+```
+
+y filtrar.
+
+Aplicar inicialmente en:
+
+```text
+Notificación interna destino Usuario
+```
+
+Evaluar si también conviene aplicarlo a:
+
+```text
+Tarea humana asignada a Usuario
+```
+
+No tocar roles, porque roles ya funcionan.
+
+También dentro de fix24f considerar:
+
+* Mejorar frase cuando hay paso común después de IF.
+* Sugerir “Finalizar flujo” de forma más fuerte.
+* No implementar todavía el validador funcional completo.
+
+## 17. Próximo fix grande después
+
+Luego de fix24f, seguir con:
+
+```text
+fix25 — Ramas por resultado de tarea humana
+```
+
+Concepto clave:
+
+Diferenciar:
+
+```text
+IF automático:
+decisión tomada por el sistema con datos del contexto.
+
+Tarea humana:
+decisión tomada por una persona al cerrar la tarea.
+```
+
+Ejemplos:
+
+```text
+Si ADM_FIN aprueba → COMPRAS
+Si ADM_FIN rechaza → DIR_GENERAL
+```
+
+Esto no es igual a:
+
+```text
+Si total > 100000
+```
+
+El constructor debería permitir que una tarea humana tenga resultados/salidas configurables.
+
+Ejemplo esperado:
+
+```text
+Tarea humana: ADM_FIN / aprobar nota de crédito
+
+Resultados:
+- Aprobado → mandar a COMPRAS
+- Rechazado → mandar a DIR_GENERAL
+- Observado → volver a Compras
+```
+
+Esto todavía no está implementado.
+
+## 18. Pendiente futuro
+
+Después de fix25, considerar:
+
+```text
+fix26 — Validador funcional del constructor
+```
+
+Y más adelante:
+
+* Mejorar vista visual del constructor.
+* Reordenar ramas.
+* Permitir editar destinos de ramas.
+* Sincronizar constructor con canvas ya aplicado.
+* Evaluar si el constructor debe generar estructura interna además de frase.
+* Evaluar si el usuario puede guardar una “plantilla guiada” reutilizable.
+
+## 19. Qué NO hacer mañana
+
+No arrancar tocando:
+
+```text
+notificaciones fix19
+canvas/aristas/zoom/minimapa
+motor de ejecución
+NC_AR
+FACTURA_AR
+SMTP
+email.send
+nodos nuevos no probados
+```
+
+No reabrir discusión de notificaciones salvo bug real.
+
+No volver a guía por escenarios cerrados.
+
+No hacer validador funcional completo todavía.
+
+## 20. Estado emocional/productivo
+
+Omar está muy conforme y entusiasmado. Se validó que el camino correcto es:
+
+```text
+Constructor amplio
++ pasos editables
++ datos disponibles por contexto
++ IF con campos reales
++ ramas visuales
++ luego ramas humanas
++ luego validador funcional
+```
+
+El objetivo ya no es solo “hacer frases”, sino ayudar a usuarios administrativos a construir workflows reales sin conocer nodos, JSON ni variables técnicas.
