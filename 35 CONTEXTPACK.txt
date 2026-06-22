@@ -1,0 +1,785 @@
+# CONTEXTPACK — Workflow Studio / Asistente IA Constructor / Estado al 19-06-2026
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora salvo que Omar lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, qué resuelve, qué falta y qué podría confundir al usuario.
+
+## 2. Procedimiento habitual de Omar
+
+Cuando Omar cierre sesión y pida:
+
+```text
+haceme el ContextPack y el Prompt
+```
+
+se debe generar en el chat:
+
+1. ContextPack completo con estado actual, fixes validados, pendientes, decisiones y reglas.
+2. Prompt de arranque para la próxima sesión.
+3. Omar luego generará un ZIP actualizado del proyecto desde GitHub y lo pasará en la próxima sesión junto con el ContextPack y Prompt.
+
+En la próxima sesión no se debe proponer código hasta recibir y revisar el ZIP actualizado.
+
+## 3. Estado general estable
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una sola conexión `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Uso de `ctx.Estado`.
+* Variables técnicas `wf.*`.
+* Variables de negocio `biz.*`.
+
+El sistema ya funciona en servidores reales de la empresa.
+
+## 4. Base de trabajo
+
+La última base usada en esta sesión fue:
+
+```text
+WorkFlow-main (34).zip
+```
+
+Sobre esa base se aplicaron y validaron nuevos fixes:
+
+```text
+fix24f_selector_usuarios_constructor.zip
+fix25_ramas_resultado_tarea_humana.zip
+fix26_validador_funcional_constructor.zip
+fix27_constructor_http_request.zip
+fix28_constructor_sql_query.zip
+fix28b_sql_select_resultados_visibles.zip
+```
+
+Para la próxima sesión, Omar va a generar un ZIP completo actualizado del proyecto y subirlo a GitHub.
+
+Ese nuevo ZIP será la única base válida.
+
+No usar fixes sueltos anteriores si el ZIP actualizado ya los contiene.
+
+## 5. Líneas cerradas / no tocar salvo bug real
+
+No tocar salvo bug real:
+
+```text
+WorkflowUI dev210 base canvas/aristas/zoom/minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+notificaciones fix19
+SMTP
+email.send/HEmailSend
+```
+
+Canvas, aristas, zoom y minimapa están funcionando bien.
+
+## 6. Notificaciones fix19
+
+Estado:
+
+```text
+CERRADO / VALIDADO / NO TOCAR
+```
+
+Se implementó lectura individual por usuario con:
+
+```text
+WF_NotificacionLectura
+```
+
+Resultado validado:
+
+* Notificación a rol COMPRAS visible para usuarios del rol.
+* OMARD\USUARIO1 puede marcarla como leída.
+* OMARD\USUARIO5, también del rol COMPRAS, la sigue viendo hasta marcarla él.
+* Cuando OMARD\USUARIO5 la marca como leída, desaparece solo para él.
+* Si un usuario recibe notificación pero no tiene permiso para abrir instancia/tarea, puede marcarla como leída y listo.
+* No hacer ahora fix sobre UrlAccion/permisos.
+
+Decisión tomada:
+
+```text
+La notificación es aviso individual.
+No se marca automáticamente como leída para todos.
+No implementar fix20 sobre UrlAccion/permisos por ahora.
+```
+
+## 7. Asistente IA — Arquitectura
+
+La IA usa:
+
+```text
+ML.NET + CSV + modelo externo
+```
+
+No usar:
+
+```text
+Ollama
+OpenAI API
+dependencias externas
+```
+
+Ruta del modelo:
+
+```text
+App_Data/WF_AI/workflow_intent_model.zip
+```
+
+El sistema debe estar pensado para intranet/offline.
+
+## 8. Constructor IA — Estado validado hasta fix24e
+
+Ya estaban cerrados y validados:
+
+```text
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+```
+
+Concepto validado:
+
+```text
+Constructor amplio
++ pasos editables
++ datos disponibles por contexto
++ IF con campos reales
++ ramas SI/NO
++ ramas humanas
++ validador funcional
+```
+
+## 9. fix24f — Selector buscable de usuarios
+
+Estado:
+
+```text
+VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix24f_selector_usuarios_constructor.zip
+```
+
+Qué se hizo:
+
+* Selector buscable/autocomplete de usuarios para `Notificación interna → Destino = Usuario`.
+* Validación para no aceptar usuario inexistente o ambiguo.
+* También se aplicó a `Tarea humana → Destino = Usuario`.
+* Se reutilizó `Api/WF_AiCatalog.ashx`, porque ya devolvía `users`.
+* No se creó endpoint nuevo.
+* Se mejoró frase para pasos comunes después de ramas IF:
+
+```text
+luego de cualquiera de las dos ramas...
+```
+
+* Se hizo más visible la sugerencia de “Finalizar flujo”.
+* Se actualizó versionado de cache JS/CSS del asistente.
+* JavaScript verificado con `node --check`.
+
+Validación visual de Omar:
+
+```text
+funciona en notificaciones y tareas humanas
+```
+
+## 10. fix25 — Ramas por resultado de tarea humana
+
+Estado:
+
+```text
+CERRADO / VALIDADO COMPLETO
+```
+
+Archivo entregado:
+
+```text
+fix25_ramas_resultado_tarea_humana.zip
+```
+
+Concepto implementado:
+
+Diferenciar:
+
+```text
+IF automático:
+decisión tomada por el sistema con datos del contexto.
+
+Tarea humana:
+decisión tomada por una persona al cerrar la tarea.
+```
+
+Se agregaron ramas:
+
+```text
+Resultado APROBADO/APTO de la última tarea humana
+Resultado RECHAZADO/NO APTO de la última tarea humana
+```
+
+Internamente genera un `control.if` técnico sobre:
+
+```text
+wf.tarea.resultado == apto
+```
+
+* Rama `true`: aprobado/apto.
+* Rama `false`: no apto/rechazado operativo.
+
+No se tocó el motor.
+
+### Validación real positiva
+
+Instancia:
+
+```text
+150482
+```
+
+Resultado:
+
+```text
+COMPRAS cerró APTO
+wf.tarea.resultado == apto => True
+n8 true → n9 COMPRAS → Fin
+```
+
+Log clave:
+
+```text
+[If] wf.tarea.resultado == apto => True
+[human.task] ejecutando: inst=150482 nodoId=n9 tipo=human.task
+[End]
+```
+
+### Validación real negativa
+
+Instancia:
+
+```text
+150483
+```
+
+Resultado:
+
+```text
+COMPRAS cerró NO APTO
+wf.tarea.resultado == apto => False
+n8 false → n10 DIR_GENERAL → Fin
+```
+
+Log clave:
+
+```text
+[If] wf.tarea.resultado == apto => False
+[human.task] ejecutando: inst=150483 nodoId=n10 tipo=human.task
+[End]
+```
+
+Conclusión:
+
+```text
+fix25 validó de punta a punta:
+Constructor IA → JSON → SQL → motor → tareas reales → reanudación → ramas humanas → Fin
+```
+
+## 11. fix26 — Validador funcional del Constructor IA
+
+Estado:
+
+```text
+CERRADO / VALIDADO VISUALMENTE
+```
+
+Archivo entregado:
+
+```text
+fix26_validador_funcional_constructor.zip
+```
+
+Qué agrega:
+
+* Panel visible: `Validación funcional del constructor`.
+* Advierte si falta `Finalizar flujo`.
+* Advierte ramas SI/NO vacías.
+* Advierte ramas APROBADO/RECHAZADO vacías.
+* Advierte si un paso común se ejecutará después de cualquiera de las ramas.
+* Advierte rutas de prueba como `c`.
+* Advierte correos incompletos o de ejemplo.
+* Advierte usuarios inválidos en tareas/notificaciones.
+* Advierte tareas consecutivas o ramas que vuelven al mismo rol/usuario.
+
+Pruebas visuales de Omar:
+
+* Flujo correcto completo: OK, solo avisos funcionales esperados.
+* Falta finalizar: OK.
+* IF con rama SI vacía: OK.
+* IF con rama NO vacía: OK.
+* Paso común después del IF: OK.
+* Ruta `c`: OK.
+* Correo `destinatario@empresa.com`: OK.
+* Tarea humana sin salida: OK.
+* Rama APROBADO/APTO vacía: OK.
+* Rama RECHAZADO/NO APTO vacía: OK.
+* Dos tareas consecutivas al mismo rol: OK.
+
+Decisión:
+
+```text
+fix26 queda como validador inicial no bloqueante.
+Advierte sin impedir.
+```
+
+## 12. fix27 — Constructor IA: Solicitud HTTP
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix27_constructor_http_request.zip
+```
+
+Qué agrega al Constructor IA:
+
+```text
+Solicitud HTTP
+```
+
+Permite configurar:
+
+```text
+Cuándo
+Método: GET / POST / PUT / PATCH / DELETE
+URL
+Body opcional
+Content-Type
+Timeout ms
+Status mínimo considerado error
+```
+
+Datos disponibles para próximos pasos:
+
+```text
+payload.status
+payload.body
+payload.json
+```
+
+Prueba simple validada:
+
+```text
+Solicitud HTTP
+GET /Api/Ping.ashx
+Finalizar flujo
+```
+
+Instancia:
+
+```text
+150484
+```
+
+Log:
+
+```text
+[Start]
+[HTTP] Client=intranet GET http://localhost:55557/Api/Ping.ashx => 200
+[End]
+```
+
+Prueba con IF posterior validada:
+
+```text
+Solicitud HTTP GET /Api/Ping.ashx
+Condición: payload.status == 200
+SI cumple → Notificar a OMARD\OMARD “Todo OK”
+Finalizar flujo
+```
+
+Instancia:
+
+```text
+150485
+```
+
+Log:
+
+```text
+[HTTP] Client=intranet GET http://localhost:55557/Api/Ping.ashx => 200
+[If] payload.status == 200 => True
+[notify/db/info] #9 usuario=OMARD\OMARD Aviso interno: Todo OK
+[End]
+```
+
+Conclusión:
+
+```text
+Solicitud HTTP + condición sobre payload.status + notificación funciona completo.
+```
+
+## 13. fix28 — Constructor IA: Consulta SQL
+
+Estado inicial:
+
+```text
+AGREGADO / VALIDADO COMO EJECUCIÓN
+```
+
+Archivo entregado:
+
+```text
+fix28_constructor_sql_query.zip
+```
+
+Qué agrega al Constructor IA:
+
+```text
+Consulta SQL
+```
+
+Usa el nodo real existente:
+
+```text
+data.sql / ManejadorSql
+```
+
+Permite configurar:
+
+```text
+Cuándo
+connectionStringName, por defecto DefaultConnection
+SQL
+Parámetros JSON opcionales
+```
+
+Datos disponibles previstos:
+
+```text
+sql.rows
+sql.error
+```
+
+También agrega advertencias funcionales:
+
+```text
+SQL vacío
+parámetros JSON inválidos
+DROP / TRUNCATE / ALTER
+DELETE sin WHERE
+```
+
+Prueba inicial:
+
+```sql
+SELECT 1
+```
+
+Instancia:
+
+```text
+150486
+```
+
+Log:
+
+```text
+[data.sql] usando connectionStringName='DefaultConnection'
+[data.sql] SQL ejecutado. Filas afectadas: -1
+[End]
+```
+
+Observación:
+
+El handler actual ejecutaba `SELECT` con `ExecuteNonQuery`, por eso daba `-1` y no mostraba resultados.
+
+## 14. fix28b — SELECT con resultados visibles
+
+Estado:
+
+```text
+VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix28b_sql_select_resultados_visibles.zip
+```
+
+Qué corrige:
+
+Si la consulta empieza con:
+
+```sql
+SELECT
+```
+
+o:
+
+```sql
+WITH
+```
+
+el nodo `data.sql` lee filas y las guarda en `DatosContexto`.
+
+Datos visibles:
+
+```text
+sql.rows
+sql.rowCount
+sql.first
+sql.scalar
+sql.truncated
+```
+
+Para `INSERT`, `UPDATE`, `DELETE`, mantiene el comportamiento anterior.
+
+Prueba recomendada y validada:
+
+```sql
+SELECT TOP (5) Id, Estado, FechaInicio
+FROM dbo.WF_Instancia
+ORDER BY Id DESC
+```
+
+Instancia:
+
+```text
+150487
+```
+
+En `WF_Instancias.aspx → Datos` se vio:
+
+```text
+sql.rowCount: 5
+sql.truncated: false
+sql.first: {
+  Id: 150487,
+  Estado: ...
+}
+```
+
+Conclusión:
+
+```text
+fix28b validado: SELECT guarda resultados visibles en DatosContexto.
+```
+
+## 15. Bug menor detectado: WF_Definiciones.aspx con defId
+
+Detectado durante fix28b.
+
+Caso:
+
+Al llegar desde canvas a:
+
+```text
+WF_Definiciones.aspx?defId=8152
+```
+
+la grilla puede mostrar más de una fila.
+
+Ejemplo:
+
+Aparecieron:
+
+```text
+6079 — WF-20260127-181522
+8152 — WF-20260619-185957
+```
+
+Causa probable:
+
+La página carga `8152` como texto de filtro y busca por `LIKE` en Código/Nombre. Entonces el código `WF-20260127-181522` también coincide porque contiene `8152`.
+
+No es bug de SQL ni de fix28b.
+
+Fix futuro recomendado:
+
+```text
+Si viene querystring defId → filtrar por Id exacto.
+Si el usuario escribe manualmente en el filtro → mantener búsqueda textual actual.
+```
+
+No corregir todavía salvo que Omar lo pida.
+
+## 16. Futuro: Mapa visual de instancia / expediente
+
+Omar recordó que ya existe:
+
+```text
+WF_Gerente_Tareas.aspx
+```
+
+como vista de seguimiento no gráfica.
+
+Pendiente futuro recomendado:
+
+Crear un:
+
+```text
+Mapa visual de instancia / expediente
+```
+
+Objetivo:
+
+Usar el grafo de la definición como visor de ejecución, no como editor.
+
+Debe mostrar por nodo:
+
+```text
+si pasó o no pasó
+estado del nodo
+rama tomada
+tareas creadas
+responsable / rol / usuario
+fechas
+tiempos
+logs asociados
+documentos asociados
+estado actual de la instancia
+errores
+```
+
+Nombre técnico posible:
+
+```text
+WF_Instancia_Mapa.aspx?id=...
+```
+
+Nombre funcional visible:
+
+```text
+Seguimiento visual del expediente
+Mapa de instancia
+Expediente / Instancia
+```
+
+No implementar ahora.
+
+## 17. Estado final de la sesión
+
+Quedan cerrados / validados:
+
+```text
+fix24f — Selector buscable de usuarios
+fix25  — Ramas por resultado humano APTO/NO APTO
+fix26  — Validador funcional inicial del constructor
+fix27  — Solicitud HTTP en Constructor IA
+fix28  — Consulta SQL en Constructor IA
+fix28b — SELECT con resultados visibles en DatosContexto
+```
+
+## 18. Próximo paso recomendado
+
+Seguir agregando nodos al Constructor IA de a uno, usando nodos reales ya existentes.
+
+Opciones recomendadas:
+
+```text
+1. Logger
+2. Guardar variable / state.vars
+3. Demora / delay
+4. Notificación avanzada
+5. Algún nodo de archivo solo si ya está estable y es útil
+```
+
+Recomendación profesional:
+
+Continuar con nodos simples y útiles para pruebas y operación, preferentemente:
+
+```text
+Logger
+```
+
+o:
+
+```text
+Guardar variable / state.vars
+```
+
+porque ayudan a depurar flujos y a preparar condiciones posteriores.
+
+No agregar varios nodos juntos.
+
+No tocar motor ni canvas salvo bug real.
+
+## 19. Qué NO hacer en la próxima sesión
+
+No arrancar tocando:
+
+```text
+canvas/aristas/zoom/minimapa
+motor de ejecución
+NC_AR
+FACTURA_AR
+extractores documentales
+notificaciones fix19
+SMTP
+email.send
+```
+
+No corregir el bug de `WF_Definiciones.aspx?defId=` salvo que Omar lo pida.
+
+No agregar nodos nuevos sin revisar primero el ZIP actualizado.
+
+No usar fixes viejos si el ZIP actualizado ya los contiene.
+
+## 20. Estado emocional/productivo
+
+Omar está muy conforme con el avance.
+
+Se validó que el Constructor IA ya no es solo una frase larga: ahora ayuda a construir workflows reales con:
+
+```text
+pasos editables
+datos disponibles
+IF guiado
+ramas SI/NO
+ramas humanas APTO/NO APTO
+validación funcional
+HTTP
+SQL con resultados visibles
+```
+
+El objetivo sigue siendo que un usuario administrativo pueda construir flujos reales sin conocer JSON, nodos internos ni variables técnicas.

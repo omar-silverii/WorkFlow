@@ -1,0 +1,324 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Asistente IA Constructor
+
+Voy a pasarte:
+
+1. Este ContextPack.
+2. Este Prompt.
+3. El ZIP actualizado del proyecto Workflow Studio WebForms, generado desde GitHub con todos los fixes aplicados hasta fix28b.
+4. Si corresponde, cualquier ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre trabajar sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora, salvo que yo lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+
+## Estado estable actual
+
+Está cerrado y validado:
+
+```text
+fix19  — Notificaciones por usuario
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+fix24f — Selector buscable de usuarios
+fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+fix26  — Validador funcional del constructor
+fix27  — Solicitud HTTP en Constructor IA
+fix28  — Consulta SQL en Constructor IA
+fix28b — SELECT con resultados visibles en DatosContexto
+```
+
+## No tocar salvo bug real
+
+```text
+notificaciones fix19
+canvas
+aristas
+zoom
+minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+SMTP
+email.send/HEmailSend
+```
+
+## Base de trabajo
+
+Tomar como base el ZIP nuevo que voy a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta fix28b.
+
+No uses fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+## Estado validado más reciente
+
+### fix25
+
+Quedó validado completo con dos instancias reales:
+
+```text
+150482 → rama APTO / true → COMPRAS → Fin
+150483 → rama NO APTO / false → DIR_GENERAL → Fin
+```
+
+Log clave negativo:
+
+```text
+[If] wf.tarea.resultado == apto => False
+[human.task] ejecutando: inst=150483 nodoId=n10 tipo=human.task
+[End]
+```
+
+### fix26
+
+Validador funcional probado visualmente con:
+
+```text
+flujo correcto completo
+falta finalizar
+IF con rama SI vacía
+IF con rama NO vacía
+paso común después del IF
+ruta de prueba c
+correo de ejemplo
+tarea humana sin salida
+rama APTO vacía
+rama NO APTO vacía
+tareas consecutivas al mismo rol
+```
+
+Resultado correcto.
+
+### fix27
+
+Solicitud HTTP validada con:
+
+```text
+GET /Api/Ping.ashx
+payload.status == 200
+notificación
+Fin
+```
+
+Log:
+
+```text
+[HTTP] Client=intranet GET http://localhost:55557/Api/Ping.ashx => 200
+[If] payload.status == 200 => True
+[notify/db/info] #9 usuario=OMARD\OMARD Aviso interno: Todo OK
+[End]
+```
+
+### fix28b
+
+Consulta SQL SELECT validada con resultados visibles en DatosContexto:
+
+```text
+sql.rows
+sql.rowCount
+sql.first
+sql.scalar
+sql.truncated
+```
+
+Prueba:
+
+```sql
+SELECT TOP (5) Id, Estado, FechaInicio
+FROM dbo.WF_Instancia
+ORDER BY Id DESC
+```
+
+Resultado visto:
+
+```text
+sql.rowCount: 5
+sql.truncated: false
+sql.first: {...}
+```
+
+## Pendiente menor detectado
+
+En `WF_Definiciones.aspx`, cuando se llega desde canvas con:
+
+```text
+WF_Definiciones.aspx?defId=8152
+```
+
+pueden aparecer más filas porque el filtro usa texto/LIKE y no Id exacto.
+
+Ejemplo:
+
+```text
+6079 — WF-20260127-181522
+8152 — WF-20260619-185957
+```
+
+Causa probable:
+
+```text
+el código WF-20260127-181522 contiene la secuencia 8152
+```
+
+Fix futuro recomendado:
+
+```text
+Si viene querystring defId → filtrar por Id exacto.
+Si el usuario escribe manualmente → mantener búsqueda textual.
+```
+
+No corregir salvo que yo lo pida.
+
+## Pendiente futuro importante
+
+Crear más adelante:
+
+```text
+Mapa visual de instancia / expediente
+```
+
+Ya existe `WF_Gerente_Tareas.aspx` como seguimiento no gráfico, pero falta una vista gráfica del grafo como seguimiento vivo de una instancia.
+
+No implementar ahora.
+
+## Próximo objetivo recomendado
+
+Seguir agregando nodos al Constructor IA, de a uno y sobre código real.
+
+Recomendación:
+
+```text
+fix29 — agregar Logger al Constructor IA
+```
+
+o:
+
+```text
+fix29 — agregar Guardar variable / state.vars al Constructor IA
+```
+
+Elegir la mejor opción después de revisar el ZIP real.
+
+Criterio:
+
+* Priorizar nodos ya existentes.
+* No inventar handlers nuevos.
+* No tocar motor.
+* No tocar canvas.
+* Agregar un nodo por fix.
+* Probarlo con una instancia real.
+* Si agrega datos al contexto, mostrarlos en “Datos disponibles para próximos pasos”.
+* Si puede generar errores funcionales, integrarlo al validador fix26.
+
+## Archivos esperados a revisar
+
+Antes de tocar, revisar en el ZIP real:
+
+```text
+WorkflowUI.aspx
+Scripts/workflow.ai.assistant.js
+Styles/workflow.ai.assistant.css
+Api/WF_AiCatalog.ashx
+Api/WF_AiCatalog.ashx.cs
+Api/WF_Roles_List.ashx
+Api/WF_Roles_List.ashx.cs
+App_Code/Ai/WfAiMlnetProvider.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+App_Code/Handlers
+Intranet.WorkflowStudio.WebForms.csproj
+```
+
+Para el próximo nodo, revisar primero si ya existe su handler en:
+
+```text
+App_Code/Handlers
+```
+
+No asumir nombres.
+
+## Forma de entrega esperada
+
+Entregar ZIP correctivo con estructura real del proyecto, por ejemplo:
+
+```text
+fix29_constructor_logger.zip
+```
+
+o:
+
+```text
+fix29_constructor_state_vars.zip
+```
+
+Debe incluir:
+
+```text
+archivos completos modificados
+LEEME_fix29.txt
+```
+
+## Criterio final
+
+No alcanza con que compile.
+
+Debe servir operativamente:
+
+```text
+que el usuario no tenga que memorizar variables
+que pueda elegir campos reales
+que pueda entender ramas SI/NO
+que pueda elegir usuarios sin escribirlos manualmente
+que pueda definir decisiones humanas sin confundirse con IF automático
+que pueda validar funcionalmente lo que arma
+que pueda usar HTTP y SQL en flujos reales
+que los resultados útiles queden visibles en DatosContexto
+que el constructor ayude a armar un flujo real y no solo una frase larga
+```
+
+Primero confirmar lectura del ContextPack.
+
+Después esperar el ZIP.
+
+Después revisar código real.
+
+Recién ahí proponer y preparar el próximo fix.

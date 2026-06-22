@@ -1,6 +1,6 @@
 ﻿// Scripts/workflow.ai.assistant.js
 // Asistente IA del editor: interpreta intención con ML.NET local/offline.
-// fix28: constructor IA con nodo Consulta SQL sobre data.sql existente.
+// fix36: Subflujo / Ejecutar otro workflow integrado al Constructor IA sin tocar motor.
 (function () {
     var lastPlan = null;
 
@@ -37,6 +37,7 @@
         roles: [],
         users: [],
         docTipos: [],
+        workflowDefs: [],
         fields: [],
         loaded: false
     };
@@ -90,6 +91,55 @@
         if (codigo && nombre) return codigo + ' - ' + nombre;
         return codigo || nombre;
     }
+
+    function workflowDefKey(item) {
+        return String((item && (item.key || item.Key || item.ref || item.Ref)) || '').trim();
+    }
+
+    function workflowDefLabel(item) {
+        if (!item) return '';
+        var key = workflowDefKey(item);
+        var nombre = String((item && (item.nombre || item.Nombre || item.name || item.Name)) || '').trim();
+        var version = String((item && (item.version || item.Version)) || '').trim();
+        var label = key;
+        if (nombre) label += ' — ' + nombre;
+        if (version && version !== '0') label += ' (v' + version + ')';
+        return label || nombre;
+    }
+
+    function workflowDefOptions(selectedValue) {
+        var selected = normalizeKey(selectedValue);
+        var html = '<option value="">— elegir workflow —</option>';
+        (guideCatalog.workflowDefs || []).forEach(function (item) {
+            var key = workflowDefKey(item);
+            if (!key) return;
+            html += '<option value="' + htmlEncode(key) + '"' + (selected && normalizeKey(key) === selected ? ' selected' : '') + '>' + htmlEncode(workflowDefLabel(item) || key) + '</option>';
+        });
+        return html;
+    }
+
+    function firstWorkflowDef(preferred) {
+        var prefs = preferred || [];
+        for (var p = 0; p < prefs.length; p++) {
+            var pref = normalizeKey(prefs[p]);
+            for (var i = 0; i < guideCatalog.workflowDefs.length; i++) {
+                if (normalizeKey(workflowDefKey(guideCatalog.workflowDefs[i])) === pref) return workflowDefKey(guideCatalog.workflowDefs[i]);
+            }
+        }
+        return guideCatalog.workflowDefs.length ? workflowDefKey(guideCatalog.workflowDefs[0]) : '';
+    }
+
+    function subflowAliasIsValid(alias) {
+        var a = String(alias || '').trim();
+        if (!a) return true;
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(a);
+    }
+
+    function subflowDisplayName(step) {
+        step = step || {};
+        return step.ref || step.workflowRef || '(sin workflow)';
+    }
+
 
     function optionsHtml(items, valueGetter, textGetter, selectedValue) {
         var html = '';
@@ -206,6 +256,7 @@
         guideCatalog.roles = fallbackRoles;
         guideCatalog.users = fallbackUsers;
         guideCatalog.docTipos = fallbackDocs;
+        guideCatalog.workflowDefs = [];
         guideCatalog.fields = fallbackFields;
         renderStepFields();
         renderAvailableFields();
@@ -234,7 +285,14 @@
             })
             .catch(function () { });
 
-        Promise.all([pRoles, pDocs, pCatalog]).then(function () {
+        var pDefs = fetch('Api/WfDefiniciones.ashx?activo=1', { method: 'GET' })
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                if (items && items.length) guideCatalog.workflowDefs = items;
+            })
+            .catch(function () { });
+
+        Promise.all([pRoles, pDocs, pCatalog, pDefs]).then(function () {
             guideCatalog.loaded = true;
             renderStepFields();
             renderAvailableFields();
@@ -318,10 +376,15 @@
         if (step.type === 'notify') return 'Notificar: ' + (step.destType === 'usuario' ? (step.user || '(usuario)') : (step.role || '(rol)'));
         if (step.type === 'http_request') return 'Solicitud HTTP: ' + ((step.method || 'GET') + ' ' + (step.url || '(sin URL)'));
         if (step.type === 'sql_query') return 'Consulta SQL: ' + sqlShortText(step.query || '');
-        if (step.type === 'state_set') return 'Guardar variable: ' + (step.key || '');
+        if (step.type === 'file_read') return 'Archivo: Leer ' + (step.path || '(sin ruta)');
+        if (step.type === 'file_write') return 'Archivo: Escribir ' + (step.path || '(sin ruta)');
+        if (step.type === 'subflow') return 'Ejecutar workflow: ' + subflowDisplayName(step);
+        if (step.type === 'state_set') return stateSetTitle(step);
         if (step.type === 'state_remove') return 'Quitar variable: ' + (step.key || '');
         if (step.type === 'delay') return 'Demora: ' + (step.ms || '1000') + ' ms';
-        if (step.type === 'logger') return 'Registrar log';
+        if (step.type === 'retry') return 'Reintentar: ' + (step.reintentos || '3') + ' reintento(s)';
+        if (step.type === 'error_handler') return 'Manejador de Error';
+        if (step.type === 'logger') return 'Registrar log: ' + (step.level || 'Info');
         if (step.type === 'end') return 'Finalizar flujo';
         return step.type || 'Paso';
     }
@@ -376,8 +439,62 @@
                 addAvailableField(fields, source, 'sql.scalar', 'Primer valor SQL', 'texto');
                 addAvailableField(fields, source, 'sql.rowsAffected', 'Filas afectadas SQL', 'número');
                 addAvailableField(fields, source, 'sql.error', 'Último error SQL', 'texto');
+            } else if (step.type === 'file_read') {
+                addAvailableField(fields, source, step.output || 'archivo', 'Contenido leído del archivo', 'texto');
+                addAvailableField(fields, source, 'file.read.lastPath', 'Última ruta leída', 'texto');
+                addAvailableField(fields, source, 'file.read.lastLength', 'Longitud del archivo leído', 'número');
+                addAvailableField(fields, source, 'file.read.lastEncoding', 'Encoding usado al leer', 'texto');
+                addAvailableField(fields, source, 'file.read.lastZipMode', 'Compresión detectada al leer', 'texto');
+                addAvailableField(fields, source, 'file.read.lastAsJson', 'Archivo leído como JSON', 'sí/no');
+                addAvailableField(fields, source, 'file.read.exists', 'Archivo existe', 'sí/no');
+                addAvailableField(fields, source, 'file.read.lastError', 'Último error de lectura', 'texto');
+            } else if (step.type === 'file_write') {
+                addAvailableField(fields, source, 'file.write.lastPath', 'Última ruta escrita', 'texto');
+                addAvailableField(fields, source, 'file.write.lastLength', 'Longitud escrita', 'número');
+                addAvailableField(fields, source, 'file.write.lastEncoding', 'Encoding usado al escribir', 'texto');
+                addAvailableField(fields, source, 'file.write.lastZipMode', 'Modo ZIP al escribir', 'texto');
+                addAvailableField(fields, source, 'file.write.lastEntryName', 'Entrada ZIP escrita', 'texto');
+                addAvailableField(fields, source, 'file.write.skipped', 'Escritura omitida', 'sí/no');
+                addAvailableField(fields, source, 'file.write.lastError', 'Último error de escritura', 'texto');
+            } else if (step.type === 'subflow') {
+                addAvailableField(fields, source, 'subflow.instanceId', 'Instancia hija creada', 'número');
+                addAvailableField(fields, source, 'subflow.childState', 'Estado de la instancia hija', 'texto');
+                addAvailableField(fields, source, 'subflow.ref', 'Workflow hijo ejecutado', 'texto');
+                addAvailableField(fields, source, 'subflow.estado', 'Datos de estado del subflujo', 'texto');
+                addAvailableField(fields, source, 'subflow.logs', 'Logs del subflujo', 'texto');
+                var alias = String(step.alias || '').trim();
+                if (alias && subflowAliasIsValid(alias)) {
+                    var baseAlias = 'subflows.' + alias;
+                    addAvailableField(fields, source, baseAlias + '.instanceId', 'Instancia hija (' + alias + ')', 'número');
+                    addAvailableField(fields, source, baseAlias + '.childState', 'Estado hijo (' + alias + ')', 'texto');
+                    addAvailableField(fields, source, baseAlias + '.ref', 'Workflow hijo (' + alias + ')', 'texto');
+                    addAvailableField(fields, source, baseAlias + '.estado', 'Datos del subflujo (' + alias + ')', 'texto');
+                    addAvailableField(fields, source, baseAlias + '.logs', 'Logs del subflujo (' + alias + ')', 'texto');
+                }
             } else if (step.type === 'state_set') {
-                addAvailableField(fields, source, step.key || 'wf.variable', 'Variable guardada', inferFieldType(step.key, step.key));
+                var stateKeys = stateSetKeysForStep(step);
+                stateKeys.forEach(function (k) {
+                    addAvailableField(fields, source, k, 'Variable guardada', inferFieldType(k, k));
+                });
+                addAvailableField(fields, source, 'state.last.setCount', 'Cantidad de variables guardadas', 'número');
+                addAvailableField(fields, source, 'state.last.setKeys', 'Variables guardadas', 'texto');
+                addAvailableField(fields, source, 'state.last.nodeId', 'Último nodo de variables', 'texto');
+            } else if (step.type === 'state_remove') {
+                addAvailableField(fields, source, 'state.last.removeCount', 'Cantidad de variables solicitadas para quitar', 'número');
+                addAvailableField(fields, source, 'state.last.removedCount', 'Cantidad de variables quitadas', 'número');
+                addAvailableField(fields, source, 'state.last.removeKeys', 'Variables solicitadas para quitar', 'texto');
+                addAvailableField(fields, source, 'state.last.nodeId', 'Último nodo de variables', 'texto');
+            } else if (step.type === 'error_handler') {
+                addAvailableField(fields, source, 'wf.error', 'Hay error marcado', 'sí/no');
+                addAvailableField(fields, source, 'wf.error.message', 'Mensaje de error', 'texto');
+                addAvailableField(fields, source, 'wf.error.nodeId', 'Nodo que marcó error', 'texto');
+                addAvailableField(fields, source, 'wf.error.nodeType', 'Tipo de nodo de error', 'texto');
+                addAvailableField(fields, source, 'wf.error.timestamp', 'Fecha/hora del error', 'fecha');
+                addAvailableField(fields, source, 'util.error.lastNotify.mensaje', 'Último aviso de error', 'texto');
+            } else if (step.type === 'logger') {
+                addAvailableField(fields, source, 'logger.last.level', 'Último nivel de log', 'texto');
+                addAvailableField(fields, source, 'logger.last.message', 'Último mensaje de log', 'texto');
+                addAvailableField(fields, source, 'logger.last.nodeId', 'Último nodo de log', 'texto');
             }
         });
 
@@ -426,7 +543,7 @@
         }
 
         var html = '<div class="wf-ai-fields-title">Datos disponibles para próximos pasos</div>';
-        html += '<div class="wf-ai-fields-help">Se alimenta con la entrada del workflow y con las salidas de los pasos agregados. Se usa para elegir campos en el IF guiado.</div>';
+        html += '<div class="wf-ai-fields-help">Se alimenta con la entrada del workflow y con las salidas de los pasos agregados. Se usa para elegir campos en el IF guiado, mensajes, logs y variables.</div>';
         html += '<div class="wf-ai-fields-list">';
         var lastSource = null;
         fields.forEach(function (f) {
@@ -489,6 +606,54 @@
         });
         if (lastSource !== null) html += '</optgroup>';
         return html;
+    }
+
+    function availableFieldOptionsWithBlank(selectedValue, blankText) {
+        var fields = fieldsNewestGroupsFirst(buildAvailableFields());
+        var selected = String(selectedValue || '').trim();
+        var html = '<option value="">' + htmlEncode(blankText || '— escribir valor manual —') + '</option>';
+        var lastSource = null;
+        fields.forEach(function (f) {
+            if (f.source !== lastSource) {
+                if (lastSource !== null) html += '</optgroup>';
+                lastSource = f.source;
+                html += '<optgroup label="' + htmlEncode(lastSource || 'Datos') + '">';
+            }
+            var label = (f.label || f.path) + ' — ' + f.path;
+            html += '<option value="' + htmlEncode(f.path) + '"' + (f.path === selected ? ' selected' : '') + '>' + htmlEncode(label) + '</option>';
+        });
+        if (lastSource !== null) html += '</optgroup>';
+        return html;
+    }
+
+    function isValidStatePath(path) {
+        var v = String(path || '').trim();
+        if (!v) return false;
+        if (v.indexOf('${') >= 0 || /\s/.test(v)) return false;
+        return /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(v);
+    }
+
+    function isTechnicalOutputPath(path) {
+        var v = String(path || '').trim().toLowerCase();
+        return /^(payload|sql|logger|notify|email|queue|subflow|subflows)\./.test(v);
+    }
+
+    function syncStateValueFromField() {
+        var sel = $('wfAiStepValueField');
+        var val = $('wfAiStepValue');
+        if (!sel || !val) return;
+        var path = String(sel.value || '').trim();
+        if (path) val.value = '${' + path + '}';
+    }
+
+    function syncStateSetModeFields() {
+        var mode = $('wfAiStepStateMode');
+        var simple = $('wfAiStepStateSimpleBox');
+        var json = $('wfAiStepStateJsonBox');
+        if (!mode || !simple || !json) return;
+        var m = String(mode.value || 'simple');
+        simple.style.display = m === 'json' ? 'none' : '';
+        json.style.display = m === 'json' ? '' : 'none';
     }
 
     function normalizeFieldType(type) {
@@ -727,6 +892,49 @@
         return null;
     }
 
+    function parseStateSimpleValueForPlan(text) {
+        var raw = String(text == null ? '' : text);
+        var trimmed = raw.trim();
+        if (!trimmed) return '';
+
+        // En modo simple, el valor común queda como texto.
+        // Si el usuario escribe explícitamente un objeto/array JSON, se conserva como estructura.
+        if ((trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') ||
+            (trimmed.charAt(0) === '[' && trimmed.charAt(trimmed.length - 1) === ']')) {
+            try { return JSON.parse(trimmed); } catch (e) { return raw; }
+        }
+        return raw;
+    }
+
+    function isStateJsonMode(step) {
+        return !!(step && (step.mode === 'json' || step.setJson));
+    }
+
+    function stateSetObjectFromStep(step) {
+        if (!step) return {};
+        if (isStateJsonMode(step)) {
+            var obj = parseJsonObjectOrEmpty(step.setJson || '');
+            return obj || {};
+        }
+        var key = String(step.key || '').trim();
+        if (!key) return {};
+        var set = {};
+        set[key] = parseStateSimpleValueForPlan(step.value || '');
+        return set;
+    }
+
+    function stateSetKeysForStep(step) {
+        var obj = stateSetObjectFromStep(step);
+        return Object.keys(obj || {});
+    }
+
+    function stateSetTitle(step) {
+        var keys = stateSetKeysForStep(step);
+        if (!keys.length) return 'Guardar variable: (sin destino)';
+        if (keys.length === 1) return 'Guardar variable: ' + keys[0];
+        return 'Guardar variables: ' + keys.length + ' dato(s)';
+    }
+
     function createStepTitle(step) {
         if (!step) return '';
         if (step.type === 'doc_load') return 'Cargar documento: ' + docPhrase(step.docTipo || '');
@@ -736,10 +944,15 @@
         if (step.type === 'notify') return 'Notificar: ' + (step.destType === 'usuario' ? (step.user || '(usuario)') : (step.role || '(rol)'));
         if (step.type === 'http_request') return 'Solicitud HTTP: ' + ((step.method || 'GET') + ' ' + (step.url || '(sin URL)'));
         if (step.type === 'sql_query') return 'Consulta SQL: ' + sqlShortText(step.query || '');
-        if (step.type === 'state_set') return 'Guardar variable: ' + (step.key || '');
+        if (step.type === 'file_read') return 'Archivo: Leer ' + (step.path || '(sin ruta)');
+        if (step.type === 'file_write') return 'Archivo: Escribir ' + (step.path || '(sin ruta)');
+        if (step.type === 'subflow') return 'Ejecutar workflow: ' + subflowDisplayName(step);
+        if (step.type === 'state_set') return stateSetTitle(step);
         if (step.type === 'state_remove') return 'Quitar variable: ' + (step.key || '');
         if (step.type === 'delay') return 'Demora: ' + (step.ms || '1000') + ' ms';
-        if (step.type === 'logger') return 'Registrar log';
+        if (step.type === 'retry') return 'Reintentar: ' + (step.reintentos || '3') + ' reintento(s)';
+        if (step.type === 'error_handler') return 'Manejador de Error';
+        if (step.type === 'logger') return 'Registrar log: ' + (step.level || 'Info');
         if (step.type === 'end') return 'Finalizar flujo';
         return step.type;
     }
@@ -788,6 +1001,17 @@
         if (step.type === 'sql_query') {
             return 'ejecutar consulta SQL ' + sqlShortText(step.query || '');
         }
+        if (step.type === 'file_read') {
+            return 'leer archivo ' + (step.path || 'C:\\Temp\\entrada.txt') + ' y guardar el contenido en ' + (step.output || 'archivo');
+        }
+        if (step.type === 'file_write') {
+            return 'escribir archivo ' + (step.path || 'C:\\Temp\\salida.txt');
+        }
+        if (step.type === 'subflow') {
+            var txt = 'ejecutar otro workflow ' + (step.ref || '(sin workflow)');
+            if (step.alias) txt += ' con alias ' + step.alias;
+            return txt;
+        }
         if (step.type === 'state_set') {
             return 'guardar variable ' + (step.key || 'wf.variable') + ' con valor ' + (step.value || 'valor');
         }
@@ -797,8 +1021,14 @@
         if (step.type === 'delay') {
             return 'esperar ' + (step.ms || '1000') + ' ms';
         }
+        if (step.type === 'retry') {
+            return 'reintentar el siguiente paso hasta ' + (step.reintentos || '3') + ' reintento(s) con espera ' + (step.backoffMs || '500') + ' ms';
+        }
+        if (step.type === 'error_handler') {
+            return 'marcar error con mensaje ' + (step.message || 'Error controlado por el workflow');
+        }
         if (step.type === 'logger') {
-            return step.message ? 'registrar un log con mensaje ' + step.message : 'registrar un log';
+            return step.message ? 'registrar un log ' + (step.level || 'Info') + ' con mensaje ' + step.message : 'registrar un log ' + (step.level || 'Info');
         }
         if (step.type === 'end') {
             return 'finalizar';
@@ -1012,6 +1242,102 @@
                     pushUnique(result.warnings, stepShortName(step, idx) + ': los parámetros SQL deben ser JSON válido, por ejemplo {"Id":150484}.');
                 }
             }
+
+            if (step.type === 'file_read') {
+                if (!String(step.path || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la ruta del archivo a leer.');
+                else if (isProbablyTestPath(step.path)) pushUnique(result.warnings, stepShortName(step, idx) + ': la ruta del archivo parece una ruta de prueba (“' + String(step.path || '').trim() + '”).');
+                if (!String(step.output || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar dónde guardar el contenido leído.');
+                else if (!isValidStatePath(step.output)) pushUnique(result.warnings, stepShortName(step, idx) + ': el destino de salida tiene formato inválido. Usá algo como archivo.texto o biz.archivo.texto.');
+                if (String(step.output || '').indexOf('file.read.') === 0) pushUnique(result.warnings, stepShortName(step, idx) + ': no conviene guardar el contenido sobre salidas técnicas file.read.*.');
+            }
+
+            if (step.type === 'file_write') {
+                if (!String(step.path || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la ruta del archivo a escribir.');
+                else if (isProbablyTestPath(step.path)) pushUnique(result.warnings, stepShortName(step, idx) + ': la ruta del archivo parece una ruta de prueba (“' + String(step.path || '').trim() + '”).');
+                if (step.sourceMode === 'context') {
+                    if (!String(step.origen || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la variable origen para escribir.');
+                    else if (!isValidStatePath(step.origen)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable origen tiene formato inválido.');
+                } else if (!String(step.content || '').trim()) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el contenido a escribir.');
+                }
+            }
+
+            if (step.type === 'subflow') {
+                if (!String(step.ref || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta seleccionar el workflow a ejecutar.');
+                var sj = parseJsonObjectOrEmpty(step.inputJson || '{}');
+                if (sj === null) pushUnique(result.warnings, stepShortName(step, idx) + ': el Input JSON debe ser un objeto JSON válido.');
+                if (step.alias && !subflowAliasIsValid(step.alias)) pushUnique(result.warnings, stepShortName(step, idx) + ': el alias debe usar letras/números/_ y no puede empezar con número.');
+                var md = parseInt(step.maxDepth || '10', 10);
+                if (isNaN(md) || md < 1 || md > 50) pushUnique(result.warnings, stepShortName(step, idx) + ': la profundidad máxima debe estar entre 1 y 50.');
+                var aliasCount = {};
+                guideSteps.forEach(function (x) {
+                    var a = x && x.type === 'subflow' ? String(x.alias || '').trim() : '';
+                    if (a) aliasCount[normalizeKey(a)] = (aliasCount[normalizeKey(a)] || 0) + 1;
+                });
+                if (step.alias && aliasCount[normalizeKey(step.alias)] > 1) pushUnique(result.warnings, stepShortName(step, idx) + ': hay otro subflujo con el mismo alias. Conviene usar alias únicos.');
+                var subflowCount = guideSteps.filter(function (x) { return x && x.type === 'subflow'; }).length;
+                if (subflowCount > 1 && !String(step.alias || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': hay más de un subflujo. Conviene definir alias para poder distinguir salidas subflows.<alias>.*.');
+            }
+
+            if (step.type === 'state_set') {
+                if (isStateJsonMode(step)) {
+                    var setObj = parseJsonObjectOrEmpty(step.setJson || '');
+                    if (setObj === null) {
+                        pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar no es válido.');
+                    } else {
+                        var keys = Object.keys(setObj || {});
+                        if (!keys.length) pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar está vacío.');
+                        keys.forEach(function (k) {
+                            if (!isValidStatePath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable destino "' + k + '" tiene formato inválido.');
+                            if (isTechnicalOutputPath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': estás por guardar sobre una salida técnica (' + k + '). Conviene usar biz.* o wf.vars.*.');
+                        });
+                    }
+                } else {
+                    if (!String(step.key || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la variable destino.');
+                    else if (!isValidStatePath(step.key)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable destino tiene un formato inválido. Usá algo como biz.prueba.fix30.');
+                    if (isTechnicalOutputPath(step.key)) pushUnique(result.warnings, stepShortName(step, idx) + ': estás por guardar sobre una salida técnica (' + step.key + '). Conviene usar biz.* o wf.vars.*.');
+                    if (!String(step.value || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el valor a guardar.');
+                }
+            }
+
+            if (step.type === 'state_remove') {
+                if (!String(step.key || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la variable a quitar.');
+                else if (!isValidStatePath(step.key)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable a quitar tiene un formato inválido.');
+                if (isTechnicalOutputPath(step.key)) pushUnique(result.warnings, stepShortName(step, idx) + ': estás por quitar una salida técnica (' + step.key + '). Conviene quitar solo variables propias.');
+            }
+
+            if (step.type === 'retry') {
+                var r = parseInt(step.reintentos || '3', 10);
+                var b = parseInt(step.backoffMs || '500', 10);
+                if (isNaN(r) || r < 0) pushUnique(result.warnings, stepShortName(step, idx) + ': la cantidad de reintentos debe ser 0 o mayor.');
+                if (r > 10) pushUnique(result.warnings, stepShortName(step, idx) + ': muchos reintentos pueden demorar el flujo. Revisá si realmente necesitás más de 10.');
+                if (isNaN(b) || b < 0) pushUnique(result.warnings, stepShortName(step, idx) + ': el backoff debe ser 0 o mayor.');
+                if (b > 60000) pushUnique(result.warnings, stepShortName(step, idx) + ': backoff mayor a 60000 ms puede dejar la instancia esperando mucho tiempo.');
+
+                var next = guideSteps[idx + 1];
+                if (!next) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar debe ubicarse antes del nodo que querés reintentar. Ahora no tiene un paso siguiente.');
+                } else if (next.type === 'end') {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar antes de Finalizar flujo no aporta valor. Ubicalo antes de HTTP, SQL, correo, documento o archivo.');
+                } else if (next.type === 'human_task') {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': no conviene reintentar una tarea humana porque podría crear tareas duplicadas.');
+                } else if (next.type === 'logger' || next.type === 'state_set' || next.type === 'state_remove' || next.type === 'delay') {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': el siguiente paso normalmente no requiere reintento. Usalo principalmente antes de HTTP, SQL, correo, documento o archivo.');
+                }
+            }
+
+            if (step.type === 'error_handler') {
+                if (!String(step.message || '').trim()) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el mensaje de error.');
+                }
+                if (step.retry) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': “Volver a intentar” en util.error solo marca intención; para reintentos reales agregá el paso Reintentar antes del nodo que puede fallar.');
+                }
+            }
+
+            if (step.type === 'logger' && !String(step.message || '').trim()) {
+                pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el mensaje del log.');
+            }
         });
 
         result.ok = result.errors.length === 0;
@@ -1123,23 +1449,95 @@
                 '<div class="wf-ai-guide-row"><label>Máx. filas a guardar</label><input id="wfAiStepSqlMaxRows" class="wf-ai-input" value="100" /></div>' +
                 '<div class="wf-ai-guide-note">Usa el nodo data.sql existente. En SELECT deja visibles sql.rows, sql.rowCount, sql.first y sql.scalar en Datos de la instancia.</div>';
         }
+        if (type === 'file_read') {
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Ruta archivo</label><input id="wfAiStepFileReadPath" class="wf-ai-input" placeholder="Ej.: C:\\Temp\\entrada.txt o ${input.filePath}" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Guardar contenido en</label><input id="wfAiStepFileReadOutput" class="wf-ai-input" value="archivo" placeholder="Ej.: archivo.texto o biz.archivo.texto" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Leer como JSON</label><select id="wfAiStepFileReadAsJson" class="wf-ai-select"><option value="false">No, texto</option><option value="true">Sí, JSON</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Encoding</label><input id="wfAiStepFileReadEncoding" class="wf-ai-input" value="utf-8" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Compresión</label><select id="wfAiStepFileReadZipMode" class="wf-ai-select"><option value="auto">Auto</option><option value="none">Sin compresión</option><option value="zip">ZIP</option><option value="gzip">GZIP</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Entrada ZIP</label><input id="wfAiStepFileReadZipEntry" class="wf-ai-input" placeholder="Opcional. Ej.: datos.json" /></div>' +
+                '<div class="wf-ai-guide-note">Usa el handler real file.read. Deja disponible el contenido en la variable que indiques y metadatos como file.read.lastPath y file.read.lastLength.</div>';
+        }
+        if (type === 'file_write') {
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Ruta destino</label><input id="wfAiStepFileWritePath" class="wf-ai-input" placeholder="Ej.: C:\\Temp\\salida.txt" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Origen contenido</label><select id="wfAiStepFileWriteSourceMode" class="wf-ai-select"><option value="manual">Texto manual / plantilla</option><option value="context">Variable de DatosContexto</option></select></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepFileWriteOriginFieldRow"><label>Variable origen</label><select id="wfAiStepFileWriteOriginField" class="wf-ai-select">' + availableFieldOptionsWithBlank('', '— seleccionar variable —') + '</select></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepFileWriteOriginManualRow"><label>O escribir origen manual</label><input id="wfAiStepFileWriteOrigin" class="wf-ai-input" placeholder="Ej.: archivo o biz.compra" /></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepFileWriteContentRow"><label>Contenido</label><textarea id="wfAiStepFileWriteContent" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Instancia ${wf.instanceId}, estado ${wf.estado}"></textarea></div>' +
+                '<div class="wf-ai-guide-row"><label>Sobrescribir si existe</label><select id="wfAiStepFileWriteOverwrite" class="wf-ai-select"><option value="true">Sí</option><option value="false">No</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Encoding</label><input id="wfAiStepFileWriteEncoding" class="wf-ai-input" value="utf-8" /></div>' +
+                '<div class="wf-ai-guide-row"><label>ZIP</label><select id="wfAiStepFileWriteZipMode" class="wf-ai-select"><option value="none">No</option><option value="zip">Sí, escribir ZIP</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Entrada ZIP</label><input id="wfAiStepFileWriteEntry" class="wf-ai-input" placeholder="Opcional. Ej.: salida.txt" /></div>' +
+                '<div class="wf-ai-guide-note">Usa el handler real file.write. Si elegís variable de DatosContexto, el sistema escribe el valor de esa variable; si es objeto, lo serializa como JSON.</div>';
+        }
+        if (type === 'subflow') {
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Workflow a ejecutar</label><select id="wfAiStepSubflowRef" class="wf-ai-select">' + workflowDefOptions(firstWorkflowDef()) + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Alias opcional</label><input id="wfAiStepSubflowAlias" class="wf-ai-input" placeholder="Ej.: validacion, compras, control" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Input JSON</label><textarea id="wfAiStepSubflowInput" class="wf-ai-input wf-ai-textarea" placeholder="{&#10;  &quot;filePath&quot;: &quot;${input.filePath}&quot;,&#10;  &quot;importe&quot;: &quot;${biz.notaCredito.total}&quot;&#10;}">{&#10;  &quot;filePath&quot;: &quot;${input.filePath}&quot;&#10;}</textarea></div>' +
+                '<div class="wf-ai-guide-row"><label>Profundidad máxima</label><input id="wfAiStepSubflowMaxDepth" class="wf-ai-input" value="10" /></div>' +
+                '<div class="wf-ai-guide-note">Ejecuta una definición existente creando una instancia hija. Después podés usar ${subflow.instanceId}, ${subflow.childState} y, si usás alias, ${subflows.alias.childState}.</div>';
+        }
         if (type === 'state_set') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Variable</label><input id="wfAiStepKey" class="wf-ai-input" value="wf.variable" /></div>' +
-                '<div class="wf-ai-guide-row"><label>Valor</label><input id="wfAiStepValue" class="wf-ai-input" value="valor" /></div>';
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Modo</label><select id="wfAiStepStateMode" class="wf-ai-select"><option value="simple">Simple: una variable</option><option value="json">Avanzado: JSON / varios datos</option></select></div>' +
+                '<div id="wfAiStepStateSimpleBox">' +
+                '<div class="wf-ai-guide-row"><label>Variable destino</label><input id="wfAiStepKey" class="wf-ai-input" placeholder="Ej.: biz.prueba.fix30" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Copiar desde dato disponible</label><select id="wfAiStepValueField" class="wf-ai-select">' + availableFieldOptionsWithBlank('', '— escribir valor manual —') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Valor</label><textarea id="wfAiStepValue" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: OK_FIX30, ${sql.rowCount} o ${payload.status}"></textarea></div>' +
+                '<div class="wf-ai-guide-note">El destino es el nombre real de la variable. Ej.: biz.prueba.fix30. No escribas “=” acá.</div>' +
+                '</div>' +
+                '<div id="wfAiStepStateJsonBox" style="display:none">' +
+                '<div class="wf-ai-guide-row"><label>JSON a guardar</label><textarea id="wfAiStepSetJson" class="wf-ai-input wf-ai-textarea" placeholder="{&#10;  &quot;biz.prueba.fix30&quot;: &quot;OK_FIX30&quot;,&#10;  &quot;biz.compra&quot;: { &quot;estado&quot;: &quot;Pendiente&quot;, &quot;importe&quot;: 150000 }&#10;}"></textarea></div>' +
+                '<div class="wf-ai-guide-note">Usá este modo para guardar varios datos, objetos o arrays. Debe ser un JSON objeto válido.</div>' +
+                '</div>' +
+                '<div class="wf-ai-guide-note">Usá variables propias como biz.* o wf.vars.*. No conviene pisar salidas técnicas como sql.*, payload.*, logger.*, notify.*.</div>';
         }
         if (type === 'state_remove') {
-            return '<div class="wf-ai-guide-row"><label>Variable</label><input id="wfAiStepKey" class="wf-ai-input" value="wf.variable" /></div>';
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Variable a quitar</label><input id="wfAiStepKey" class="wf-ai-input" placeholder="Ej.: biz.prueba.fix30" /></div>' +
+                '<div class="wf-ai-guide-note">Quita una variable de DatosContexto. Para evitar confusión, usalo principalmente sobre variables creadas por vos.</div>';
         }
         if (type === 'delay') {
             return '' +
                 '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
                 '<div class="wf-ai-guide-row"><label>Milisegundos</label><input id="wfAiStepMs" class="wf-ai-input" value="1000" /></div>';
         }
+        if (type === 'retry') {
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Reintentos</label><input id="wfAiStepRetryCount" class="wf-ai-input" value="3" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Backoff ms</label><input id="wfAiStepRetryBackoff" class="wf-ai-input" value="500" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Mensaje opcional</label><input id="wfAiStepRetryMessage" class="wf-ai-input" value="Reintento agregado por Constructor IA" /></div>' +
+                '<div class="wf-ai-guide-note">Reintentar ejecuta el nodo siguiente. Ubicalo antes del paso que puede fallar. Reintenta si el siguiente nodo devuelve error o lanza excepción. Para HTTP, dejá activo “Falla con status &gt;= 400”.</div>';
+        }
+        if (type === 'error_handler') {
+            return '' +
+                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Mensaje de error</label><textarea id="wfAiStepErrorMessage" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Falló la consulta SQL. Instancia ${wf.instanceId}">Error controlado por el workflow</textarea></div>' +
+                '<div class="wf-ai-guide-row"><label>Continuar luego de marcar error</label><select id="wfAiStepErrorCapture" class="wf-ai-select"><option value="true">Sí, continuar por salida normal</option><option value="false">No, usar salida error si existe</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Dejar aviso en log/contexto</label><select id="wfAiStepErrorNotify" class="wf-ai-select"><option value="false">No</option><option value="true">Sí</option></select></div>' +
+                '<div class="wf-ai-guide-row"><label>Volver a intentar</label><select id="wfAiStepErrorRetry" class="wf-ai-select"><option value="false">No</option><option value="true">Sí, solo marca intención</option></select></div>' +
+                '<div class="wf-ai-guide-note">Este nodo usa util.error existente: marca wf.error en DatosContexto. Si se ejecuta, la instancia queda marcada como Error al finalizar. Para reintentos reales agregá el paso Reintentar antes del nodo que puede fallar.</div>';
+        }
         if (type === 'logger') {
             return '' +
                 '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
-                '<div class="wf-ai-guide-row"><label>Mensaje</label><input id="wfAiStepMessage" class="wf-ai-input" value="Paso agregado por Asistente IA" /></div>';
+                '<div class="wf-ai-guide-row"><label>Nivel</label><select id="wfAiStepLogLevel" class="wf-ai-select">' +
+                '  <option value="Info">Info</option>' +
+                '  <option value="Warn">Warn</option>' +
+                '  <option value="Error">Error</option>' +
+                '  <option value="Debug">Debug</option>' +
+                '</select></div>' +
+                '<div class="wf-ai-guide-row"><label>Mensaje</label><textarea id="wfAiStepMessage" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Total=${sql.rowCount}, Estado=${payload.status}">Paso agregado por Asistente IA</textarea></div>' +
+                '<div class="wf-ai-guide-note">Podés usar variables con ${...}, por ejemplo ${wf.instanceId}, ${payload.status}, ${sql.rowCount} o campos de Datos disponibles.</div>';
         }
         if (type === 'end') {
             return '' +
@@ -1147,6 +1545,18 @@
                 '<div class="wf-ai-guide-note">Agrega el cierre del flujo. Normalmente conviene dejarlo como último paso.</div>';
         }
         return '';
+    }
+
+    function syncFileWriteModeFields() {
+        var mode = $('wfAiStepFileWriteSourceMode');
+        var originFieldRow = $('wfAiStepFileWriteOriginFieldRow');
+        var originManualRow = $('wfAiStepFileWriteOriginManualRow');
+        var contentRow = $('wfAiStepFileWriteContentRow');
+        if (!mode) return;
+        var useContext = mode.value === 'context';
+        if (originFieldRow) originFieldRow.style.display = useContext ? '' : 'none';
+        if (originManualRow) originManualRow.style.display = useContext ? '' : 'none';
+        if (contentRow) contentRow.style.display = useContext ? 'none' : '';
     }
 
     function syncDynamicStepFields() {
@@ -1170,6 +1580,9 @@
             taskRoleRow.style.display = taskDest.value === 'rol' ? '' : 'none';
             taskUserRow.style.display = taskDest.value === 'usuario' ? '' : 'none';
         }
+
+        syncFileWriteModeFields();
+        syncStateSetModeFields();
     }
 
     function setControlValue(id, value) {
@@ -1252,14 +1665,61 @@
             setControlValue('wfAiStepSqlQuery', step.query || 'SELECT 1');
             setControlValue('wfAiStepSqlParams', step.paramsJson || '');
             setControlValue('wfAiStepSqlMaxRows', step.maxRows || '100');
+        } else if (step.type === 'file_read') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepFileReadPath', step.path || '');
+            setControlValue('wfAiStepFileReadOutput', step.output || 'archivo');
+            setControlValue('wfAiStepFileReadAsJson', step.asJson ? 'true' : 'false');
+            setControlValue('wfAiStepFileReadEncoding', step.encoding || 'utf-8');
+            setControlValue('wfAiStepFileReadZipMode', step.zipMode || 'auto');
+            setControlValue('wfAiStepFileReadZipEntry', step.zipEntry || '');
+        } else if (step.type === 'file_write') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepFileWritePath', step.path || '');
+            setControlValue('wfAiStepFileWriteSourceMode', step.sourceMode || 'manual');
+            setControlValue('wfAiStepFileWriteOriginField', step.origen || '');
+            setControlValue('wfAiStepFileWriteOrigin', step.origen || '');
+            setControlValue('wfAiStepFileWriteContent', step.content || '');
+            setControlValue('wfAiStepFileWriteOverwrite', step.overwrite === false ? 'false' : 'true');
+            setControlValue('wfAiStepFileWriteEncoding', step.encoding || 'utf-8');
+            setControlValue('wfAiStepFileWriteZipMode', step.zipMode || 'none');
+            setControlValue('wfAiStepFileWriteEntry', step.entryName || '');
+        } else if (step.type === 'subflow') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepSubflowRef', step.ref || '');
+            setControlValue('wfAiStepSubflowAlias', step.alias || '');
+            setControlValue('wfAiStepSubflowInput', step.inputJson || '{\n  "filePath": "${input.filePath}"\n}');
+            setControlValue('wfAiStepSubflowMaxDepth', step.maxDepth || '10');
         } else if (step.type === 'state_set') {
-            setControlValue('wfAiStepKey', step.key || 'wf.variable');
-            setControlValue('wfAiStepValue', step.value || 'valor');
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            var mode = isStateJsonMode(step) ? 'json' : 'simple';
+            setControlValue('wfAiStepStateMode', mode);
+            if (mode === 'json') {
+                setControlValue('wfAiStepSetJson', step.setJson || '{}');
+            } else {
+                setControlValue('wfAiStepKey', step.key || '');
+                setControlValue('wfAiStepValue', step.value || '');
+            }
         } else if (step.type === 'state_remove') {
-            setControlValue('wfAiStepKey', step.key || 'wf.variable');
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepKey', step.key || '');
         } else if (step.type === 'delay') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepMs', step.ms || '1000');
+        } else if (step.type === 'retry') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepRetryCount', step.reintentos || '3');
+            setControlValue('wfAiStepRetryBackoff', step.backoffMs || '500');
+            setControlValue('wfAiStepRetryMessage', step.message || 'Reintento agregado por Constructor IA');
+        } else if (step.type === 'error_handler') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepErrorMessage', step.message || 'Error controlado por el workflow');
+            setControlValue('wfAiStepErrorCapture', step.capture === false ? 'false' : 'true');
+            setControlValue('wfAiStepErrorNotify', step.notify ? 'true' : 'false');
+            setControlValue('wfAiStepErrorRetry', step.retry ? 'true' : 'false');
         } else if (step.type === 'logger') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepLogLevel', step.level || 'Info');
             setControlValue('wfAiStepMessage', step.message || 'Paso agregado por Asistente IA');
         }
 
@@ -1309,6 +1769,15 @@
         var taskDest = $('wfAiStepTaskDestType');
         if (taskDest) taskDest.addEventListener('change', syncDynamicStepFields);
 
+        var stateValueField = $('wfAiStepValueField');
+        if (stateValueField) stateValueField.addEventListener('change', syncStateValueFromField);
+
+        var stateMode = $('wfAiStepStateMode');
+        if (stateMode) stateMode.addEventListener('change', syncDynamicStepFields);
+
+        var fileWriteMode = $('wfAiStepFileWriteSourceMode');
+        if (fileWriteMode) fileWriteMode.addEventListener('change', syncDynamicStepFields);
+
         syncDynamicStepFields();
         updateGuideEditMode();
     }
@@ -1342,6 +1811,117 @@
                 if (sf && sf.focus) sf.focus();
                 return 'Los parámetros SQL deben ser un objeto JSON válido. Ejemplo: {"Id":150484}. Dejalo vacío si no usás parámetros.';
             }
+        }
+
+        if (type === 'file_read') {
+            if (!selectedText('wfAiStepFileReadPath')) {
+                var frp = $('wfAiStepFileReadPath');
+                if (frp && frp.focus) frp.focus();
+                return 'Indicá la ruta del archivo a leer.';
+            }
+            if (!isValidStatePath(selectedText('wfAiStepFileReadOutput') || '')) {
+                var fro = $('wfAiStepFileReadOutput');
+                if (fro && fro.focus) fro.focus();
+                return 'Indicá una variable válida para guardar el contenido leído. Ejemplo: archivo.texto o biz.archivo.texto.';
+            }
+        }
+
+        if (type === 'file_write') {
+            if (!selectedText('wfAiStepFileWritePath')) {
+                var fwp = $('wfAiStepFileWritePath');
+                if (fwp && fwp.focus) fwp.focus();
+                return 'Indicá la ruta del archivo a escribir.';
+            }
+            var wm = selectedText('wfAiStepFileWriteSourceMode') || 'manual';
+            var origin = selectedText('wfAiStepFileWriteOriginField') || selectedText('wfAiStepFileWriteOrigin');
+            if (wm === 'context' && !isValidStatePath(origin || '')) {
+                var fwo = $('wfAiStepFileWriteOrigin');
+                if (fwo && fwo.focus) fwo.focus();
+                return 'Indicá una variable origen válida para escribir. Ejemplo: archivo.texto o biz.compra.';
+            }
+            if (wm !== 'context' && !selectedText('wfAiStepFileWriteContent')) {
+                var fwc = $('wfAiStepFileWriteContent');
+                if (fwc && fwc.focus) fwc.focus();
+                return 'Indicá el contenido a escribir o cambiá el origen a Variable de DatosContexto.';
+            }
+        }
+
+        if (type === 'subflow') {
+            if (!selectedText('wfAiStepSubflowRef')) {
+                var sr = $('wfAiStepSubflowRef');
+                if (sr && sr.focus) sr.focus();
+                return 'Seleccioná el workflow que querés ejecutar como subflujo.';
+            }
+            if (parseJsonObjectOrEmpty(selectedText('wfAiStepSubflowInput') || '{}') === null) {
+                var si = $('wfAiStepSubflowInput');
+                if (si && si.focus) si.focus();
+                return 'El Input JSON del subflujo debe ser un objeto JSON válido.';
+            }
+            var sa = selectedText('wfAiStepSubflowAlias');
+            if (sa && !subflowAliasIsValid(sa)) {
+                var sfAlias = $('wfAiStepSubflowAlias');
+                if (sfAlias && sfAlias.focus) sfAlias.focus();
+                return 'El alias del subflujo debe usar letras/números/_ y no puede empezar con número.';
+            }
+            var smd = parseInt(selectedText('wfAiStepSubflowMaxDepth') || '10', 10);
+            if (isNaN(smd) || smd < 1 || smd > 50) {
+                var smf = $('wfAiStepSubflowMaxDepth');
+                if (smf && smf.focus) smf.focus();
+                return 'La profundidad máxima del subflujo debe estar entre 1 y 50.';
+            }
+        }
+
+        if (type === 'state_set') {
+            var stateMode = selectedText('wfAiStepStateMode') || 'simple';
+            if (stateMode === 'json') {
+                var setObj = parseJsonObjectOrEmpty(selectedText('wfAiStepSetJson'));
+                if (setObj === null || !Object.keys(setObj).length) {
+                    var jf = $('wfAiStepSetJson');
+                    if (jf && jf.focus) jf.focus();
+                    return 'El JSON a guardar debe ser un objeto válido y tener al menos una propiedad. Ejemplo: {"biz.prueba.fix30":"OK_FIX30"}';
+                }
+                var badKeys = Object.keys(setObj).filter(function (k) { return !isValidStatePath(k); });
+                if (badKeys.length) return 'Estas variables destino no tienen formato válido: ' + badKeys.join(', ');
+            } else {
+                var key = selectedText('wfAiStepKey');
+                if (!isValidStatePath(key)) {
+                    var kf = $('wfAiStepKey');
+                    if (kf && kf.focus) kf.focus();
+                    return 'La variable destino debe tener formato de ruta simple, por ejemplo biz.prueba.fix30 o wf.vars.estado. No uses espacios ni ${...} en el nombre.';
+                }
+                if (!selectedText('wfAiStepValue')) {
+                    var vf = $('wfAiStepValue');
+                    if (vf && vf.focus) vf.focus();
+                    return 'Indicá el valor a guardar para la variable.';
+                }
+            }
+        }
+
+        if (type === 'state_remove' && !isValidStatePath(selectedText('wfAiStepKey'))) {
+            var rf = $('wfAiStepKey');
+            if (rf && rf.focus) rf.focus();
+            return 'La variable a quitar debe tener formato de ruta simple, por ejemplo biz.prueba.fix30 o wf.vars.estado.';
+        }
+
+        if (type === 'retry') {
+            var rr = parseInt(selectedText('wfAiStepRetryCount') || '3', 10);
+            var rb = parseInt(selectedText('wfAiStepRetryBackoff') || '500', 10);
+            if (isNaN(rr) || rr < 0 || rr > 50) {
+                var rcf = $('wfAiStepRetryCount');
+                if (rcf && rcf.focus) rcf.focus();
+                return 'Reintentos debe ser un número entre 0 y 50.';
+            }
+            if (isNaN(rb) || rb < 0 || rb > 600000) {
+                var rbf = $('wfAiStepRetryBackoff');
+                if (rbf && rbf.focus) rbf.focus();
+                return 'Backoff ms debe ser un número entre 0 y 600000.';
+            }
+        }
+
+        if (type === 'error_handler' && !selectedText('wfAiStepErrorMessage')) {
+            var ef = $('wfAiStepErrorMessage');
+            if (ef && ef.focus) ef.focus();
+            return 'Indicá el mensaje de error que quedará registrado en wf.error.message.';
         }
 
         return '';
@@ -1402,16 +1982,62 @@
             step.query = selectedText('wfAiStepSqlQuery') || 'SELECT 1';
             step.paramsJson = selectedText('wfAiStepSqlParams') || '';
             step.maxRows = selectedText('wfAiStepSqlMaxRows') || '100';
+        } else if (type === 'file_read') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.path = selectedText('wfAiStepFileReadPath') || '';
+            step.output = selectedText('wfAiStepFileReadOutput') || 'archivo';
+            step.asJson = selectedText('wfAiStepFileReadAsJson') === 'true';
+            step.encoding = selectedText('wfAiStepFileReadEncoding') || 'utf-8';
+            step.zipMode = selectedText('wfAiStepFileReadZipMode') || 'auto';
+            step.zipEntry = selectedText('wfAiStepFileReadZipEntry') || '';
+        } else if (type === 'file_write') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.path = selectedText('wfAiStepFileWritePath') || '';
+            step.sourceMode = selectedText('wfAiStepFileWriteSourceMode') || 'manual';
+            step.origen = selectedText('wfAiStepFileWriteOriginField') || selectedText('wfAiStepFileWriteOrigin') || '';
+            step.content = selectedText('wfAiStepFileWriteContent') || '';
+            step.overwrite = selectedText('wfAiStepFileWriteOverwrite') !== 'false';
+            step.encoding = selectedText('wfAiStepFileWriteEncoding') || 'utf-8';
+            step.zipMode = selectedText('wfAiStepFileWriteZipMode') || 'none';
+            step.entryName = selectedText('wfAiStepFileWriteEntry') || '';
+        } else if (type === 'subflow') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.ref = selectedText('wfAiStepSubflowRef') || '';
+            step.alias = selectedText('wfAiStepSubflowAlias') || '';
+            step.inputJson = selectedText('wfAiStepSubflowInput') || '{}';
+            step.maxDepth = selectedText('wfAiStepSubflowMaxDepth') || '10';
         } else if (type === 'state_set') {
-            step.key = selectedText('wfAiStepKey') || 'wf.variable';
-            step.value = selectedText('wfAiStepValue') || 'valor';
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.mode = selectedText('wfAiStepStateMode') || 'simple';
+            if (step.mode === 'json') {
+                step.setJson = selectedText('wfAiStepSetJson') || '{}';
+                step.key = '';
+                step.value = '';
+            } else {
+                step.key = selectedText('wfAiStepKey') || '';
+                step.value = selectedText('wfAiStepValue') || '';
+                step.setJson = '';
+            }
         } else if (type === 'state_remove') {
-            step.key = selectedText('wfAiStepKey') || 'wf.variable';
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.key = selectedText('wfAiStepKey') || '';
         } else if (type === 'delay') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.ms = selectedText('wfAiStepMs') || '1000';
+        } else if (type === 'retry') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.reintentos = selectedText('wfAiStepRetryCount') || '3';
+            step.backoffMs = selectedText('wfAiStepRetryBackoff') || '500';
+            step.message = selectedText('wfAiStepRetryMessage') || 'Reintento agregado por Constructor IA';
+        } else if (type === 'error_handler') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.message = selectedText('wfAiStepErrorMessage') || 'Error controlado por el workflow';
+            step.capture = selectedText('wfAiStepErrorCapture') !== 'false';
+            step.notify = selectedText('wfAiStepErrorNotify') === 'true';
+            step.retry = selectedText('wfAiStepErrorRetry') === 'true';
         } else if (type === 'logger') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.level = selectedText('wfAiStepLogLevel') || 'Info';
             step.message = selectedText('wfAiStepMessage') || 'Paso agregado por Asistente IA';
         } else if (type === 'end') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
@@ -1710,11 +2336,16 @@
             '          <option value="human_task">Mandar tarea humana</option>' +
             '          <option value="http_request">Solicitud HTTP</option>' +
             '          <option value="sql_query">Consulta SQL</option>' +
+            '          <option value="subflow">Ejecutar otro workflow</option>' +
+            '          <option value="file_read">Archivo: Leer</option>' +
+            '          <option value="file_write">Archivo: Escribir</option>' +
             '          <option value="email_send">Enviar correo</option>' +
             '          <option value="notify">Notificación interna</option>' +
             '          <option value="state_set">Guardar variable</option>' +
             '          <option value="state_remove">Quitar variable</option>' +
             '          <option value="delay">Esperar / demora</option>' +
+            '          <option value="retry">Reintentar</option>' +
+            '          <option value="error_handler">Manejador de Error</option>' +
             '          <option value="logger">Registrar log</option>' +
             '          <option value="end">Finalizar flujo</option>' +
             '        </select>' +
@@ -1768,8 +2399,53 @@
     }
 
     // ------------------------------------------------------------
-    // Resultado del Asistente IA y aplicación al canvas
+    // fix31: UX Inspector / Asistente IA colapsado
     // ------------------------------------------------------------
+    var aiUxState = {
+        contextKey: '',
+        userOpenedForContext: false
+    };
+
+    function getCanvasNodeCount() {
+        try { return document.querySelectorAll('#canvasWorld .node').length; }
+        catch (e) { return 0; }
+    }
+
+    function getInspectorContext() {
+        var title = $('inspectorTitle');
+        var sub = $('inspectorSub');
+        var titleText = title ? (title.textContent || '').trim() : '';
+        var subText = sub ? (sub.textContent || '').trim() : '';
+        var nodeCount = getCanvasNodeCount();
+
+        var hasSelection = !!titleText &&
+            titleText.indexOf('Seleccion') !== 0 &&
+            titleText !== 'Nodo no encontrado' &&
+            titleText !== 'Arista no encontrada';
+
+        if (hasSelection) {
+            return {
+                mode: 'selection',
+                key: 'selection|' + titleText + '|' + subText,
+                message: 'Inspector activo para ' + titleText + '. El Asistente IA queda colapsado para dejar espacio a los parámetros del nodo.'
+            };
+        }
+
+        if (nodeCount > 0) {
+            return {
+                mode: 'graph',
+                key: 'graph|' + nodeCount,
+                message: 'Hay un grafo cargado. El Asistente IA queda colapsado para priorizar el inspector; podés abrirlo para seguir agregando pasos.'
+            };
+        }
+
+        return {
+            mode: 'empty',
+            key: 'empty|0',
+            message: ''
+        };
+    }
+
     function ensureCollapsedLauncher() {
         var panel = $('wfAiPanel');
         if (!panel || !panel.parentNode) return null;
@@ -1779,12 +2455,16 @@
 
         var box = document.createElement('div');
         box.id = 'wfAiCollapsed';
-        box.className = 'wf-ai-block';
+        box.className = 'wf-ai-collapsed';
         box.style.display = 'none';
-        box.style.margin = '10px 0';
         box.innerHTML =
-            '<div id="wfAiCollapsedMsg" class="wf-ai-meta"></div>' +
-            '<button type="button" class="btn" id="wfAiShow">Mostrar Asistente IA</button>';
+            '<div class="wf-ai-collapsed-head">' +
+            '  <div>' +
+            '    <div class="wf-ai-kicker">Asistente IA</div>' +
+            '    <div id="wfAiCollapsedMsg" class="wf-ai-collapsed-msg"></div>' +
+            '  </div>' +
+            '  <button type="button" class="btn" id="wfAiShow">Mostrar Asistente IA</button>' +
+            '</div>';
 
         panel.parentNode.insertBefore(box, panel);
 
@@ -1793,6 +2473,8 @@
             btn.addEventListener('click', function () {
                 panel.style.display = '';
                 box.style.display = 'none';
+                box.setAttribute('data-reason', '');
+                aiUxState.userOpenedForContext = true;
                 var prompt = $('wfAiPrompt');
                 if (prompt) prompt.focus();
             });
@@ -1801,6 +2483,93 @@
         return box;
     }
 
+    function collapseAssistant(message, reason) {
+        var panel = $('wfAiPanel');
+        if (!panel) return;
+
+        try { setWideMode(false); } catch (e) { }
+
+        var collapsed = ensureCollapsedLauncher();
+        var msg = $('wfAiCollapsedMsg');
+        if (msg) msg.textContent = message || 'Asistente IA colapsado.';
+
+        panel.style.display = 'none';
+        if (collapsed) {
+            collapsed.style.display = '';
+            collapsed.setAttribute('data-reason', reason || 'manual');
+        }
+    }
+
+    function showAssistant() {
+        var panel = $('wfAiPanel');
+        var collapsed = $('wfAiCollapsed');
+        if (!panel) return;
+        panel.style.display = '';
+        if (collapsed) {
+            collapsed.style.display = 'none';
+            collapsed.setAttribute('data-reason', '');
+        }
+    }
+
+    function syncAssistantWithInspector() {
+        var panel = $('wfAiPanel');
+        if (!panel) return;
+
+        var ctx = getInspectorContext();
+        if (ctx.key !== aiUxState.contextKey) {
+            aiUxState.contextKey = ctx.key;
+            aiUxState.userOpenedForContext = false;
+        }
+
+        var collapsed = ensureCollapsedLauncher();
+        var isPanelHidden = panel.style.display === 'none';
+        var reason = collapsed ? (collapsed.getAttribute('data-reason') || '') : '';
+
+        if (ctx.mode === 'empty') {
+            if (isPanelHidden && (reason === 'selection' || reason === 'graph')) {
+                showAssistant();
+            }
+            return;
+        }
+
+        if (!isPanelHidden && !aiUxState.userOpenedForContext && !panel.classList.contains('wf-ai-wide')) {
+            collapseAssistant(ctx.message, ctx.mode === 'selection' ? 'selection' : 'graph');
+        } else if (isPanelHidden && collapsed && !reason) {
+            collapsed.style.display = '';
+            collapsed.setAttribute('data-reason', ctx.mode === 'selection' ? 'selection' : 'graph');
+        }
+    }
+
+    function startAssistantInspectorWatcher() {
+        var inspector = $('inspector');
+        if (!inspector || !window.MutationObserver) {
+            setTimeout(syncAssistantWithInspector, 0);
+            return;
+        }
+
+        var pending = false;
+        var observer = new MutationObserver(function () {
+            if (pending) return;
+            pending = true;
+            setTimeout(function () {
+                pending = false;
+                syncAssistantWithInspector();
+            }, 0);
+        });
+
+        observer.observe(inspector, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true
+        });
+
+        setTimeout(syncAssistantWithInspector, 0);
+    }
+
+    // ------------------------------------------------------------
+    // Resultado del Asistente IA y aplicación al canvas
+    // ------------------------------------------------------------
     function hideAssistantAfterApply(message) {
         var panel = $('wfAiPanel');
         if (!panel) return;
@@ -1809,13 +2578,9 @@
         if (result) result.innerHTML = '';
         setStatus('', '');
         lastPlan = null;
+        aiUxState.userOpenedForContext = false;
 
-        var collapsed = ensureCollapsedLauncher();
-        var msg = $('wfAiCollapsedMsg');
-        if (msg) msg.textContent = message || 'Propuesta aplicada al canvas. Revisá el grafo antes de guardar.';
-
-        panel.style.display = 'none';
-        if (collapsed) collapsed.style.display = '';
+        collapseAssistant(message || 'Propuesta aplicada al canvas. Revisá el grafo antes de guardar.', 'applied');
     }
 
     function renderList(title, items, css) {
@@ -2109,14 +2874,51 @@
             });
         }
 
+        if (step.type === 'file_read') {
+            return makePlanAction('file.read', labelFor('Archivo: Leer'), {
+                path: step.path || '',
+                salida: step.output || 'archivo',
+                output: step.output || 'archivo',
+                asJson: !!step.asJson,
+                encoding: step.encoding || 'utf-8',
+                zipMode: step.zipMode || 'auto',
+                zipEntry: step.zipEntry || '',
+                useCache: true
+            });
+        }
+
+        if (step.type === 'file_write') {
+            var params = {
+                path: step.path || '',
+                encoding: step.encoding || 'utf-8',
+                overwrite: step.overwrite !== false,
+                zipMode: step.zipMode || 'none'
+            };
+            if (step.entryName) params.entryName = step.entryName;
+            if (step.sourceMode === 'context') params.origen = step.origen || 'archivo';
+            else params.content = step.content || '';
+            return makePlanAction('file.write', labelFor('Archivo: Escribir'), params);
+        }
+
+        if (step.type === 'subflow') {
+            var input = parseJsonObjectOrEmpty(step.inputJson || '{}') || {};
+            var maxDepth = parseInt(step.maxDepth || '10', 10);
+            var sp = {
+                ref: step.ref || '',
+                input: input,
+                maxDepth: isNaN(maxDepth) || maxDepth < 1 ? 10 : Math.min(maxDepth, 50)
+            };
+            if (step.alias) sp.as = step.alias;
+            return makePlanAction('util.subflow', labelFor('Ejecutar workflow'), sp);
+        }
+
         if (step.type === 'state_set') {
-            var set = {};
-            set[step.key || 'wf.variable'] = step.value || 'valor';
-            return makePlanAction('state.vars', labelFor('Definir variables'), { set: set });
+            var set = stateSetObjectFromStep(step);
+            return makePlanAction('state.vars', labelFor('Guardar variable'), { set: set });
         }
 
         if (step.type === 'state_remove') {
-            return makePlanAction('state.vars', labelFor('Quitar variable'), { remove: [step.key || 'wf.variable'] });
+            return makePlanAction('state.vars', labelFor('Quitar variable'), { remove: [step.key || ''] });
         }
 
         if (step.type === 'delay') {
@@ -2127,9 +2929,32 @@
             });
         }
 
+        if (step.type === 'retry') {
+            var reintentos = parseInt(step.reintentos || '3', 10);
+            var backoffMs = parseInt(step.backoffMs || '500', 10);
+            return makePlanAction('control.retry', labelFor('Reintentar'), {
+                reintentos: isNaN(reintentos) || reintentos < 0 ? 3 : Math.min(reintentos, 50),
+                backoffMs: isNaN(backoffMs) || backoffMs < 0 ? 500 : Math.min(backoffMs, 600000),
+                message: step.message || 'Reintento agregado por Constructor IA'
+            });
+        }
+
+        if (step.type === 'error_handler') {
+            var cap = step.capture !== false;
+            var retry = !!step.retry;
+            return makePlanAction('util.error', labelFor('Manejador de Error'), {
+                mensaje: step.message || 'Error controlado por el workflow',
+                capturar: cap,
+                capturarErrores: cap,
+                notificar: !!step.notify,
+                volverAIntentar: retry,
+                reintentar: retry
+            });
+        }
+
         if (step.type === 'logger') {
             return makePlanAction('util.logger', labelFor('Registrar evento'), {
-                level: 'Info',
+                level: step.level || 'Info',
                 message: step.message || 'Paso agregado por Constructor IA'
             });
         }
@@ -2366,17 +3191,17 @@
         });
 
         return {
-            assistantVersion: 'constructor-structured-fix27',
+            assistantVersion: 'constructor-structured-fix36',
             intent: 'build_workflow',
             confidence: 1,
             messageToUser: 'Propuesta generada desde el Constructor IA con plan estructurado local.',
             actions: actions,
             missingData: [],
             warnings: hasEndStep()
-                ? ['fix28: plan estructurado local activo. Consulta SQL usa data.sql/ManejadorSql existente y no toca el motor.']
-                : ['Se agregó un nodo Fin técnico en la propuesta para evitar un grafo abierto.', 'fix28: plan estructurado local activo. Consulta SQL usa data.sql/ManejadorSql existente y no toca el motor.'],
+                ? ['fix36: Subflujo usa util.subflow existente y crea una instancia hija de otra definición.']
+                : ['Se agregó un nodo Fin técnico en la propuesta para evitar un grafo abierto.', 'fix36: Subflujo usa util.subflow existente y crea una instancia hija de otra definición.'],
             branchPlan: {
-                planner: 'constructor-local-fix27',
+                planner: 'constructor-local-fix36',
                 hasBranches: branchItems.length > 0,
                 branches: branchItems
             },
@@ -2390,7 +3215,7 @@
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix27',
+            model: 'Constructor IA estructurado fix36',
             messageToUser: plan.messageToUser,
             plan: plan,
             validation: buildFunctionalValidation(),
@@ -2445,6 +3270,7 @@
         ensureCollapsedLauncher();
         ensureWideModeUi();
         ensureGuideUi();
+        startAssistantInspectorWatcher();
 
         var btn = $('wfAiRun');
         if (btn) btn.addEventListener('click', interpretar);

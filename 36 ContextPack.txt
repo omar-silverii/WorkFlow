@@ -1,0 +1,1189 @@
+# CONTEXTPACK — Workflow Studio / Asistente IA Constructor
+
+## Estado al 22-06-2026 — cierre después de fix36
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora salvo que Omar lo pida.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, qué resuelve, qué falta y qué podría confundir al usuario.
+* Antes de cada fix revisar el ZIP/código real.
+* No usar fixes sueltos viejos si el ZIP completo ya los contiene.
+* Cuando Omar diga “haceme el ContextPack y el Prompt”, generar ambos en el chat para cerrar sesión y retomar luego con ZIP actualizado desde GitHub.
+
+## 2. Procedimiento habitual de Omar
+
+Cuando Omar cierre sesión:
+
+1. Pide ContextPack y Prompt.
+2. Guarda el proyecto actualizado.
+3. Sube el proyecto a GitHub.
+4. En la próxima sesión pasa:
+
+   * ContextPack
+   * Prompt
+   * ZIP actualizado del proyecto desde GitHub
+   * ZIP adicional solo si corresponde
+
+En la próxima sesión, no proponer código hasta recibir y revisar el ZIP actualizado.
+
+## 3. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una sola conexión `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Uso de `ctx.Estado`.
+* Variables técnicas `wf.*`.
+* Variables de negocio `biz.*`.
+* Constructor IA offline/local con ML.NET + CSV + modelo externo.
+* Sin OpenAI API, sin Ollama, sin dependencia externa para IA.
+
+El sistema ya funciona en servidores reales de la empresa.
+
+## 4. Base de trabajo de esta sesión
+
+La sesión arrancó con:
+
+```text
+WorkFlow-main (35).zip
+35 CONTEXTPACK.txt
+Prompt de arranque
+```
+
+Sobre esa base se aplicaron y validaron fixes desde:
+
+```text
+fix29
+hasta
+fix36
+```
+
+Para la próxima sesión, Omar va a generar un ZIP nuevo desde GitHub con todo aplicado. Ese ZIP actualizado será la única base válida.
+
+## 5. Líneas cerradas / no tocar salvo bug real
+
+No tocar salvo bug real:
+
+```text
+WorkflowUI dev210 base canvas/aristas/zoom/minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+notificaciones fix19
+SMTP
+email.send/HEmailSend
+HSubFlow.cs
+handlers ya validados salvo bug real
+```
+
+Canvas, aristas, zoom y minimapa están funcionando bien.
+
+## 6. Estado estable previo validado
+
+Antes de esta sesión ya estaban cerrados y validados:
+
+```text
+fix19  — Notificaciones por usuario
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+fix24f — Selector buscable de usuarios
+fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+fix26  — Validador funcional del constructor
+fix27  — Solicitud HTTP en Constructor IA
+fix28  — Consulta SQL en Constructor IA
+fix28b — SELECT con resultados visibles en DatosContexto
+```
+
+## 7. Estado nuevo de esta sesión
+
+En esta sesión quedaron cerrados / validados:
+
+```text
+fix29  — Logger en Constructor IA
+fix29b — Inspector Logger corrige Level Warn/Trace
+fix30  — Guardar / Quitar variable state.vars
+fix30b — UX state.vars modo simple + avanzado JSON
+fix30c — Quitar propiedad dentro de objetos JSON
+fix31  — UX Inspector / Asistente IA colapsado
+fix32  — Demora / Delay ya existía y fue validado
+fix33  — Manejador de Error en Constructor IA
+fix34  — Reintentar en Constructor IA
+fix35  — Archivo Leer / Escribir en Constructor IA
+fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+```
+
+## 8. fix29 — Logger en Constructor IA
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix29_constructor_logger.zip
+```
+
+Qué hizo:
+
+* Cierra profesionalmente el nodo `util.logger`.
+* Limpia logs viejos:
+
+  * `[Logger DEBUG]`
+  * `[Logger NUEVO]`
+* Ahora registra:
+
+```text
+[Logger] [Info] mensaje
+[Logger] [Warn] mensaje
+```
+
+* Soporta parámetros:
+
+  * `message`
+  * `mensaje`
+  * `level`
+  * `nivel`
+
+Guarda en DatosContexto:
+
+```text
+logger.last.level
+logger.last.message
+logger.last.nodeId
+```
+
+Validación real:
+
+```text
+[Logger] [Info] Prueba fix29 logger OK
+[Logger] [Warn] Advertencia de prueba fix29
+```
+
+## 9. fix29b — Inspector Logger Level
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix29b_constructor_logger_inspector.zip
+```
+
+Problema detectado por Omar:
+
+* La ejecución estaba bien.
+* Pero el inspector lateral cargaba mal `Warn`.
+* Mostraba visualmente `Trace`.
+
+Causa:
+
+* El combo viejo tenía valores distintos.
+* El Constructor IA generaba `Warn`.
+* El inspector no lo reconocía y caía al primer valor.
+
+Resultado validado:
+
+```text
+Level: Warn
+```
+
+Correcto en inspector y ejecución.
+
+## 10. fix30 — state.vars / Guardar y Quitar variable
+
+Estado:
+
+```text
+CERRADO / VALIDADO PARCIAL INICIAL
+```
+
+Archivo entregado:
+
+```text
+fix30_constructor_state_vars.zip
+```
+
+Qué agregó:
+
+* Mejoró Guardar variable.
+* Mejoró Quitar variable.
+* Agregó selector “Cuándo”.
+* Dejó salidas nuevas:
+
+```text
+state.last.setCount
+state.last.setKeys
+state.last.removeCount
+state.last.removedCount
+state.last.removeKeys
+state.last.nodeId
+```
+
+Primer problema UX detectado:
+
+* `biz.variable` se veía como si fuera un título, pero era variable real.
+* Constructor e inspector no hablaban igual.
+* El inspector pedía JSON, pero el Constructor guiado pedía variable/valor.
+
+Decisión:
+
+* No cerrar fix30 todavía.
+* Hacer fix30b de UX.
+
+## 11. fix30b — UX Guardar variable simple / avanzado
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix30b_constructor_state_vars_ux.zip
+```
+
+Qué corrigió:
+
+* `biz.variable` ya no aparece como valor real por defecto.
+* Modo simple:
+
+  * Variable destino
+  * Valor
+* Modo avanzado:
+
+  * JSON para varios datos u objetos
+
+Ejemplo simple validado:
+
+```text
+Variable destino: biz.prueba.fix30
+Valor: OK_FIX30
+```
+
+Resultado:
+
+```text
+[state.vars] SET 1 variable(s): biz.prueba.fix30
+[Logger] [Info] Variable fix30 = OK_FIX30
+```
+
+Ejemplo avanzado validado:
+
+```json
+{
+  "biz.prueba.fix30": "OK_FIX30",
+  "biz.compra": {
+    "estado": "Pendiente",
+    "importe": 150000
+  }
+}
+```
+
+Resultado:
+
+```text
+[state.vars] SET 2 variable(s): biz.prueba.fix30, biz.compra
+```
+
+El Logger mostró correctamente:
+
+```text
+Variable fix30 = OK_FIX30
+Cliente = {
+  "estado": "Pendiente",
+  "importe": 150000
+}
+```
+
+## 12. fix30c — Quitar propiedad dentro de objeto JSON
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix30c_state_vars_remove_object.zip
+```
+
+Problema detectado por Omar:
+
+* Quitar simple funcionaba.
+* Quitar `biz.compra.importe` dentro del objeto no funcionaba.
+* Log anterior:
+
+```text
+[state.vars] REMOVE 0/1 variable(s): biz.compra.importe
+```
+
+Correctivo:
+
+* Se ajustó `HStateVars.cs` para borrar propiedades dentro de objetos JSON.
+
+Validación real:
+
+```text
+[state.vars] REMOVE 1/1 variable(s): biz.compra.importe
+```
+
+Logger final mostró:
+
+```json
+{
+  "estado": "Pendiente"
+}
+```
+
+Resultado:
+
+* Quitar variable simple funciona.
+* Quitar propiedad anidada dentro de objeto funciona.
+* Guardar simple, guardar objeto, leer con Logger y quitar funcionan completo.
+
+## 13. fix31 — UX Inspector / Asistente IA colapsado
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix31_inspector_ai_collapsed.zip
+```
+
+Qué hizo:
+
+* Si hay nodo seleccionado:
+
+  * se prioriza Inspector
+  * Asistente IA queda colapsado
+* Si hay grafo cargado:
+
+  * Asistente IA queda colapsado
+  * botón “Mostrar Asistente IA”
+* Si hay grafo nuevo:
+
+  * Asistente IA visible
+* Si el usuario abre el Asistente:
+
+  * se muestra
+  * conserva frase/pasos anteriores
+* Si el usuario cambia de nodo:
+
+  * vuelve a colapsarse para priorizar Inspector
+
+Validación visual de Omar:
+
+* Nodo seleccionado: Inspector limpio.
+* Grafo cargado: Asistente colapsado.
+* Grafo nuevo: Asistente visible.
+* Si el usuario arrastra nodos manualmente y luego decide hacerlo por IA, aparece cartel confirmando si quiere eliminar lo hecho en canvas. Si acepta, limpia canvas y dibuja propuesta IA. Comportamiento validado como perfecto.
+
+No tocar salvo bug real.
+
+## 14. fix32 — Demora / Delay
+
+Estado:
+
+```text
+YA EXISTÍA / VALIDADO / SIN ZIP NUEVO
+```
+
+Omar detectó que ya estaba en el Constructor IA:
+
+```text
+Esperar / demora
+Milisegundos
+```
+
+No correspondía generar fix.
+
+Prueba real:
+
+```text
+Esperar / demora: 5000 ms
+Logger: Terminó la demora
+Fin
+```
+
+Logs:
+
+```text
+[control.delay] Demora agregada por Constructor IA (ms=5000).
+[control.delay] OK.
+[Logger] [Info] Terminó la demora
+[End]
+```
+
+Tiempos:
+
+```text
+Inicio: 07:32:22
+Fin:    07:32:27
+```
+
+Resultado:
+
+* Esperó 5 segundos reales.
+* Nodo validado.
+
+## 15. fix33 — Manejador de Error
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix33_manejador_error_constructor.zip
+```
+
+Qué hizo:
+
+* Agregó “Manejador de Error” al Constructor IA.
+* Usa nodo real existente:
+
+```text
+util.error
+```
+
+* No crea handler nuevo.
+* No toca motor.
+* No toca canvas.
+
+Validación real con instancia:
+
+```text
+150498
+```
+
+Logs:
+
+```text
+[util.error] mensaje = "Error de prueba fix33 en instancia 150498"
+[util.error] wf.error = true en contexto.
+[util.error/notify] Notificación por error...
+[Logger] [Info] Error marcado=True, Mensaje=Error de prueba fix33 en instancia 150498
+[End]
+```
+
+Estado de instancia:
+
+```text
+Error
+```
+
+DatosContexto confirmó:
+
+```text
+wf.error = true
+wf.error.message
+wf.error.nodeId
+wf.error.nodeType
+wf.error.timestamp
+util.error.lastNotify
+```
+
+Este comportamiento es correcto: el nodo marca la instancia como error.
+
+## 16. fix34 — Reintentar
+
+Estado:
+
+```text
+CERRADO / VALIDADO FUNCIONALMENTE
+```
+
+Archivo entregado:
+
+```text
+fix34_reintentar_constructor.zip
+```
+
+Qué hizo:
+
+* Agregó `Reintentar` al Constructor IA.
+* Usa nodo real existente:
+
+```text
+control.retry
+```
+
+* No toca handler.
+* No toca motor.
+* No toca canvas.
+
+Funcionamiento:
+
+```text
+control.retry opera sobre el nodo siguiente.
+```
+
+Ejemplo:
+
+```text
+Inicio
+→ Reintentar
+→ Solicitud HTTP
+→ Logger
+→ Fin
+```
+
+Prueba OK con HTTP `/Api/Ping.ashx`:
+
+```text
+[Retry] Reintento HTTP fix34 (reintentos=3, backoffMs=500)
+[Retry] intento 1/4 -> n3 (http.request)
+[HTTP] Client=intranet GET http://localhost:55557/Api/Ping.ashx => 200
+[Logger] [Info] Terminó retry. Status=200
+[End]
+```
+
+Prueba con URL inexistente:
+
+Configuración:
+
+```text
+Reintentos = 2
+Backoff = 500
+```
+
+Logs:
+
+```text
+[Retry] intento 1/3
+[HTTP] ... /Api/NoExiste_fix34.ashx => 404
+[Retry] backoff 500ms
+
+[Retry] intento 2/3
+[HTTP] ... => 404
+[Retry] backoff 500ms
+
+[Retry] intento 3/3
+[HTTP] ... => 404
+[Logger] [Info] Terminó retry con status=404
+[End]
+```
+
+Observación UX:
+
+* El handler interpreta `Reintentos = 2` como:
+
+  * 1 intento inicial
+  * 2 reintentos adicionales
+  * total 3 intentos
+* Funcionalmente está correcto.
+* Posible fix futuro menor: renombrar etiqueta a:
+
+```text
+Reintentos adicionales
+```
+
+o mostrar ayuda:
+
+```text
+Total de intentos = 1 intento inicial + reintentos
+```
+
+No hacerlo salvo que Omar lo pida.
+
+## 17. fix35 — Archivo Leer / Escribir
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix35_archivo_leer_escribir_constructor.zip
+```
+
+Qué hizo:
+
+* Agregó al Constructor IA:
+
+  * Archivo: Leer
+  * Archivo: Escribir
+* Usa handlers reales existentes:
+
+  * `file.read`
+  * `file.write`
+* No tocó handlers.
+* No tocó motor.
+* No tocó canvas.
+
+Prueba escribir:
+
+```text
+Ruta: C:\Temp\fix35_salida.txt
+Contenido: Instancia=${wf.instanceId}; Estado=${wf.estado}
+```
+
+Logs:
+
+```text
+[file.write] archivo escrito correctamente: C:\Temp\fix35_salida.txt
+[Logger] [Info] Archivo escrito en C:\Temp\fix35_salida.txt, largo=33
+[End]
+```
+
+DatosContexto:
+
+```text
+file.write.lastPath
+file.write.lastEncoding = utf-8
+file.write.lastLength = 33
+file.write.lastZipMode = none
+```
+
+Prueba leer:
+
+```text
+Ruta: C:\Temp\fix35_salida.txt
+Leer como JSON: No
+Guardar contenido en variable
+Logger muestra contenido leído
+```
+
+Logs:
+
+```text
+[file.read] leyendo bytes de 'C:\Temp\fix35_salida.txt'
+[file.read] Tratando archivo como texto plano
+[file.read] archivo leído...
+[Logger] [Info] Leído=Instancia=150501; Estado=Iniciado
+[End]
+```
+
+DatosContexto:
+
+```text
+file.read.lastPath
+file.read.lastEncoding = utf-8
+file.read.lastLength = 34
+file.read.lastZipMode = none
+file.read.lastAsJson = false
+```
+
+Nota:
+
+* `Estado=Iniciado` es correcto porque era el valor de `wf.estado` al momento de escribir el archivo.
+
+## 18. fix36 — Subflujo / Ejecutar otro workflow
+
+Estado:
+
+```text
+CERRADO / VALIDADO
+```
+
+Archivo entregado:
+
+```text
+fix36_subflujo_constructor.zip
+```
+
+Qué hizo:
+
+* Agregó “Ejecutar otro workflow” al Constructor IA.
+* Usa nodo real existente:
+
+```text
+util.subflow
+```
+
+* No tocó `HSubFlow.cs`.
+* No tocó motor.
+* No tocó canvas.
+* No tocó runtime.
+
+Campos agregados:
+
+```text
+Cuándo
+Workflow a ejecutar
+Alias opcional
+Input JSON
+Profundidad máxima
+```
+
+Funcionamiento real del nodo:
+
+```text
+1. Recibe una definición hija por WF_Definicion.Key.
+2. Crea una WF_Instancia hija.
+3. Guarda relación padre/hijo:
+   ParentInstanciaId
+   ParentNodoId
+   RootInstanciaId
+   Depth
+4. Ejecuta instancia hija.
+5. Devuelve datos al padre.
+```
+
+Datos que deja:
+
+```text
+subflow.instanceId
+subflow.childState
+subflow.ref
+subflow.estado
+subflow.logs
+```
+
+Con alias:
+
+```text
+subflows.<alias>.instanceId
+subflows.<alias>.childState
+subflows.<alias>.ref
+subflows.<alias>.estado
+subflows.<alias>.logs
+```
+
+Prueba real:
+
+Instancia padre:
+
+```text
+150503
+```
+
+Subflow ejecutado:
+
+```text
+ref=WF-20260119-015120
+defId=5074
+depth=1
+```
+
+Instancia hija:
+
+```text
+150504
+```
+
+Logs:
+
+```text
+[util.subflow] Ejecutando subflow ref=WF-20260119-015120 defId=5074 depth=1 ...
+[util.subflow] OK childInstId=150504, estado=Finalizado
+[Logger] [Info] Subflow=150504, estado=Finalizado, alias=Finalizado
+[End]
+```
+
+DatosContexto confirmó:
+
+```text
+wf.callStack
+wf.depth = 0
+subflow.instanceId
+subflow.childState
+subflow.estado
+subflow.ref
+subflow.logs
+subflows.<alias>.*
+```
+
+Conclusión:
+
+```text
+Subflujo funciona completo desde Constructor IA → Canvas → SQL → Motor → instancia hija → regreso al padre.
+```
+
+No tocar `HSubFlow.cs` ni motor salvo bug real.
+
+## 19. Catálogo funcional de nodos validado hasta fix36
+
+### Cargar documento
+
+Carga archivo/documento y expone:
+
+```text
+input.*
+input.filePath
+input.text
+biz.* según DocTipo / reglas / extractor
+```
+
+No tocar extractores FACTURA_AR / NC_AR salvo bug real.
+
+### Validar condición / control.if
+
+Evalúa campos reales del contexto y bifurca:
+
+```text
+SI cumple
+NO cumple
+```
+
+Usa FieldPicker y operadores por tipo.
+
+### Mandar tarea humana
+
+Crea tarea a usuario o rol.
+
+Luego permite ramas humanas:
+
+```text
+APTO / APROBADO
+NO APTO / RECHAZADO
+```
+
+Internamente usa:
+
+```text
+wf.tarea.resultado == apto
+```
+
+### Solicitud HTTP
+
+Ejecuta request HTTP.
+
+Expone:
+
+```text
+payload.status
+payload.body
+payload.json
+```
+
+### Consulta SQL
+
+Ejecuta `data.sql`.
+
+SELECT expone:
+
+```text
+sql.rows
+sql.rowCount
+sql.first
+sql.scalar
+sql.truncated
+```
+
+### Notificación interna
+
+Crea avisos en `WF_Notificacion`.
+
+Lectura por usuario validada con `WF_NotificacionLectura`.
+
+### Guardar variable / Quitar variable
+
+Usa `state.vars`.
+
+Soporta:
+
+```text
+modo simple
+modo avanzado JSON
+objetos
+varios datos
+remove simple
+remove anidado dentro de objetos
+```
+
+Expone:
+
+```text
+state.last.*
+```
+
+### Esperar / Demora
+
+Usa `control.delay`.
+
+Pausa milisegundos reales.
+
+### Registrar log
+
+Usa `util.logger`.
+
+Expone:
+
+```text
+logger.last.level
+logger.last.message
+logger.last.nodeId
+```
+
+### Manejador de Error
+
+Usa `util.error`.
+
+Marca:
+
+```text
+wf.error = true
+wf.error.message
+wf.error.nodeId
+wf.error.nodeType
+wf.error.timestamp
+```
+
+Puede dejar notificación por error.
+
+### Reintentar
+
+Usa `control.retry`.
+
+Opera sobre el nodo siguiente.
+
+Interpretación:
+
+```text
+total intentos = 1 intento inicial + reintentos adicionales
+```
+
+### Archivo Leer / Escribir
+
+Usa:
+
+```text
+file.read
+file.write
+```
+
+Expone:
+
+```text
+file.read.last*
+file.write.last*
+```
+
+### Ejecutar otro workflow / Subflujo
+
+Usa `util.subflow`.
+
+Crea instancia hija y devuelve:
+
+```text
+subflow.*
+subflows.<alias>.*
+wf.callStack
+wf.depth
+```
+
+## 20. Pendientes / mejoras futuras detectadas
+
+### 20.1 UX Reintentar
+
+Posible mejora menor:
+
+```text
+Cambiar etiqueta "Reintentos" por "Reintentos adicionales"
+```
+
+o mostrar ayuda:
+
+```text
+Total de intentos = 1 intento inicial + reintentos
+```
+
+No urgente. No hacer salvo que Omar lo pida.
+
+### 20.2 WF_Instancias.aspx — cajas de Logs y DatosContexto
+
+Omar sugirió:
+
+```text
+Permitir agrandar/redimensionar las cajas de Logs y DatosContexto.
+```
+
+Tiene sentido operativo porque los logs y datos pueden crecer mucho.
+
+Pendiente futuro como fix separado. No pertenece al Constructor IA.
+
+### 20.3 WF_Definiciones.aspx con defId
+
+Pendiente menor detectado antes:
+
+Al llegar a:
+
+```text
+WF_Definiciones.aspx?defId=8152
+```
+
+pueden aparecer más filas porque el filtro usa texto/LIKE y no Id exacto.
+
+Ejemplo:
+
+```text
+6079 — WF-20260127-181522
+8152 — WF-20260619-185957
+```
+
+Causa probable:
+
+```text
+el código WF-20260127-181522 contiene la secuencia 8152
+```
+
+Fix futuro recomendado:
+
+```text
+Si viene querystring defId → filtrar por Id exacto.
+Si el usuario escribe manualmente → mantener búsqueda textual.
+```
+
+No corregir salvo que Omar lo pida.
+
+### 20.4 Mapa visual de instancia / expediente
+
+Pendiente importante futuro.
+
+Ya existe:
+
+```text
+WF_Gerente_Tareas.aspx
+```
+
+como vista de seguimiento no gráfica.
+
+Crear más adelante:
+
+```text
+Mapa visual de instancia / expediente
+```
+
+Objetivo:
+
+Usar el grafo de la definición como visor de ejecución, no editor.
+
+Debe mostrar por nodo:
+
+```text
+si pasó o no pasó
+estado del nodo
+rama tomada
+tareas creadas
+responsable / rol / usuario
+fechas
+tiempos
+logs asociados
+documentos asociados
+estado actual de la instancia
+errores
+```
+
+Nombre posible:
+
+```text
+WF_Instancia_Mapa.aspx?id=...
+```
+
+No implementar ahora.
+
+## 21. Próximo paso recomendado
+
+Al retomar, primero recibir ZIP actualizado desde GitHub y revisar código real.
+
+Como ya se cerró la línea:
+
+```text
+fix33 — Manejador de Error
+fix34 — Reintentar
+fix35 — Archivo Leer / Escribir
+fix36 — Subflujo
+```
+
+El próximo paso debería decidirse con Omar.
+
+Opciones razonables:
+
+```text
+A. UX WF_Instancias.aspx: redimensionar Logs y DatosContexto.
+B. UX menor fix34b: aclarar “Reintentos adicionales”.
+C. Revisar otros nodos de caja de herramientas aún no integrados al Constructor IA.
+D. Empezar a pensar en Mapa visual de instancia / expediente.
+E. Revisar funcionalmente Constructor IA completo con un flujo real más grande.
+```
+
+Recomendación profesional inicial:
+
+```text
+Primero revisar ZIP actualizado.
+Luego decidir con Omar si conviene:
+1. Pulido UX chico en WF_Instancias Logs/Datos.
+2. O seguir expandiendo Constructor IA.
+3. O armar prueba integral con varios nodos ya validados.
+```
+
+## 22. Estado emocional/productivo
+
+Omar está muy conforme con el avance.
+
+Se validó que el Constructor IA ya no es solo una frase larga, sino una herramienta real para construir workflows administrativos:
+
+```text
+pasos editables
+datos disponibles
+IF guiado
+ramas SI/NO
+ramas humanas APTO/NO APTO
+validación funcional
+HTTP
+SQL
+Logger
+state.vars
+Delay
+Error handler
+Retry
+File read/write
+Subflow
+```
+
+El objetivo sigue siendo que un usuario administrativo pueda construir flujos reales sin conocer JSON, handlers internos ni variables técnicas.

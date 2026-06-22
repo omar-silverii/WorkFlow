@@ -56,3 +56,23 @@ HQueuePublishSql.cs	"queue.publish"
 
 HQueueConsume.cs	"queue.consume.legacy"  No hay nodo
 HQueueConsumeSql	"queue.consume"         Si hay nodo
+
+
+
+
+
+
+
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.start", Label = "Inicio", Params = new List<string>() });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.end", Label = "Fin", Params = new List<string>() });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "doc.load", Label = "Documento: Cargar archivo", Params = new List<string> { "path", "mode", "docTipoCodigo", "outputPrefix" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.if", Label = "Condición (If)", Params = new List<string> { "field", "op", "value", "expression", "transform" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "human.task", Label = "Tarea humana", Params = new List<string> { "rol", "usuarioAsignado", "titulo", "descripcion", "scopeKey", "deadlineMinutes", "estadoNegocioPendiente" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "email.send", Label = "Correo: Enviar", Params = new List<string> { "from", "to", "cc", "bcc", "subject", "body", "html", "modo", "useWebConfig", "isHtml" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.notify", Label = "Notificar", Params = new List<string> { "tipo", "canal", "nivel", "destinoTipo", "usuarioDestino", "rolDestino", "destino", "prioridad", "asunto", "mensaje", "urlAccion" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "http.request", Label = "Solicitud HTTP", Params = new List<string> { "method", "url", "headers", "query", "body", "contentType", "timeoutMs", "failOnStatus", "failStatusMin" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "data.sql", Label = "Consulta SQL", Params = new List<string> { "connectionStringName", "query", "commandText", "parameters" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "state.vars", Label = "Variables", Params = new List<string> { "set", "remove" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.delay", Label = "Demora (Delay)", Params = new List<string> { "ms", "seconds", "message" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.error", Label = "Manejador de Error", Params = new List<string> { "mensaje", "capturar", "capturarErrores", "notificar", "volverAIntentar", "reintentar" } });
+ catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.logger", Label = "Logger", Params = new List<string> { "message", "level" } });

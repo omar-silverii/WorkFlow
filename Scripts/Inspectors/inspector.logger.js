@@ -12,6 +12,27 @@
 
         const p = node.params || {};
 
+        function getParam(name1, name2, def) {
+            if (p[name1] != null) return p[name1];
+            if (name2 && p[name2] != null) return p[name2];
+            return def;
+        }
+
+        function normalizeLevelForUi(v) {
+            const raw = String(v || 'Info').trim();
+            if (!raw) return 'Info';
+
+            if (raw.toLowerCase() === 'warning') return 'Warn';
+            if (raw.toLowerCase() === 'warn') return 'Warn';
+            if (raw.toLowerCase() === 'info') return 'Info';
+            if (raw.toLowerCase() === 'error') return 'Error';
+            if (raw.toLowerCase() === 'debug') return 'Debug';
+            if (raw.toLowerCase() === 'trace') return 'Trace';
+            if (raw.toLowerCase() === 'fatal') return 'Fatal';
+
+            return raw;
+        }
+
         // =======================
         // Label
         // =======================
@@ -43,11 +64,12 @@
         // Level
         // =======================
         const selLevel = el('select', 'input');
-        ['Trace', 'Debug', 'Info', 'Warning', 'Error', 'Fatal'].forEach(lv => {
+        const currentLevel = normalizeLevelForUi(getParam('level', 'nivel', 'Info'));
+        ['Info', 'Warn', 'Error', 'Debug', 'Trace', 'Fatal'].forEach(lv => {
             const o = document.createElement('option');
             o.value = lv;
             o.textContent = lv;
-            if ((p.level || 'Info') === lv) o.selected = true;
+            if (currentLevel === lv) o.selected = true;
             selLevel.appendChild(o);
         });
         const sLevel = section('Level', selLevel);
@@ -60,7 +82,8 @@
         inpMsg.style.resize = 'vertical';
         inpMsg.style.fontFamily = 'monospace';
         inpMsg.style.fontSize = '12px';
-        inpMsg.value = (p.message != null ? String(p.message) : '');
+        const currentMessage = getParam('message', 'mensaje', '');
+        inpMsg.value = (currentMessage != null ? String(currentMessage) : '');
         inpMsg.placeholder = 'Podés usar ${...}';
 
         const btnPickMsg = btn('Elegir…');
@@ -102,8 +125,8 @@
             const def = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['util.logger']) || {};
             const tpl = (selTpl.value && pack[selTpl.value]) ? pack[selTpl.value] : def;
 
-            selLevel.value = (tpl.level || 'Info');
-            inpMsg.value = (tpl.message || 'Mensaje');
+            selLevel.value = normalizeLevelForUi(tpl.level || tpl.nivel || 'Info');
+            inpMsg.value = (tpl.message || tpl.mensaje || 'Mensaje');
         };
 
         bSave.onclick = () => {

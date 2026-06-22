@@ -691,3 +691,31 @@
 .wf-ai-functional-errors {
     color: #991b1b;
 }
+
+/* fix31: Asistente IA colapsado cuando hay grafo/nodo para priorizar el inspector */
+.wf-ai-collapsed {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.wf-ai-collapsed-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    border-radius: 14px;
+    padding: 10px;
+}
+
+.wf-ai-collapsed-msg {
+    color: #475569;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.wf-ai-collapsed .btn {
+    white-space: nowrap;
+}

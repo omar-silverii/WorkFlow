@@ -15,9 +15,15 @@ namespace Intranet.WorkflowStudio.WebForms
     ///   - set:    object { "key": value, ... }  (value puede ser string con ${...})
     ///   - remove: array|string csv              (ej: ["a","b"] o "a,b")
     ///
-    /// Nota:
-    /// - Para keys con puntos (ej: "biz.oc.numero") usa ContextoEjecucion.SetPath(...) y arma diccionarios anidados.
-    /// - No tira error duro: si set/remove vienen vacíos, continúa.
+    /// fix30:
+    /// - mantiene compatibilidad con set/remove existentes.
+    /// - evita logs "SET vacío" / "REMOVE vacío" cuando no corresponde.
+    /// - remove soporta rutas anidadas creadas con SetPath, por ejemplo biz.aprobacion.monto.
+    /// - deja un resumen técnico en state.last.* para ver qué hizo el nodo en DatosContexto.
+    ///
+    /// fix30c:
+    /// - remove también soporta rutas anidadas dentro de objetos JSON guardados como JObject,
+    ///   por ejemplo biz.compra.importe cuando biz.compra fue guardado desde JSON avanzado.
     /// </summary>
     public class HStateVars : IManejadorNodo
     {
@@ -30,62 +36,60 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var p = nodo.Parameters ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-            // ---- SET ----
             var setObj = GetObject(p, "set");
             var setDict = CoerceToDict(setObj);
+            var setKeys = new List<string>();
 
-            if (setDict.Count > 0)
+            foreach (var kv in setDict)
             {
-                foreach (var kv in setDict)
-                {
-                    ct.ThrowIfCancellationRequested();
+                ct.ThrowIfCancellationRequested();
 
-                    var key = (kv.Key ?? "").Trim();
-                    if (string.IsNullOrWhiteSpace(key)) continue;
+                var key = (kv.Key ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(key)) continue;
 
-                    object value = NormalizeValue(kv.Value);
+                object value = NormalizeValue(kv.Value);
 
-                    // Expand string templates ${...}
-                    if (value is string s)
-                        value = ctx.ExpandString(s);
+                // Expand string templates ${...}
+                if (value is string s)
+                    value = ctx.ExpandString(s);
 
-                    // Set path (soporta "a.b.c")
-                    ContextoEjecucion.SetPath(ctx.Estado, key, value);
-                }
-
-                ctx.Log($"[state.vars] SET {setDict.Count} variable(s).");
-            }
-            else
-            {
-                ctx.Log("[state.vars] SET vacío.");
+                ContextoEjecucion.SetPath(ctx.Estado, key, value);
+                setKeys.Add(key);
             }
 
-            // ---- REMOVE ----
             var remObj = GetObject(p, "remove");
             var removeList = CoerceToStringList(remObj);
+            var removeKeys = new List<string>();
+            int removed = 0;
 
-            if (removeList.Count > 0)
+            foreach (var k in removeList)
             {
-                int removed = 0;
+                ct.ThrowIfCancellationRequested();
 
-                foreach (var k in removeList)
-                {
-                    ct.ThrowIfCancellationRequested();
+                var key = (k ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(key)) continue;
 
-                    var key = (k ?? "").Trim();
-                    if (string.IsNullOrWhiteSpace(key)) continue;
+                if (RemovePath(ctx.Estado, key))
+                    removed++;
 
-                    // remover solo key exacta (no borra sub-árbol completo de paths)
-                    if (ctx.Estado.Remove(key))
-                        removed++;
-                }
-
-                ctx.Log($"[state.vars] REMOVE {removed}/{removeList.Count} key(s).");
+                removeKeys.Add(key);
             }
-            else
-            {
-                ctx.Log("[state.vars] REMOVE vacío.");
-            }
+
+            if (setKeys.Count > 0)
+                ctx.Log($"[state.vars] SET {setKeys.Count} variable(s): {string.Join(", ", setKeys)}");
+
+            if (removeKeys.Count > 0)
+                ctx.Log($"[state.vars] REMOVE {removed}/{removeKeys.Count} variable(s): {string.Join(", ", removeKeys)}");
+
+            if (setKeys.Count == 0 && removeKeys.Count == 0)
+                ctx.Log("[state.vars] Sin cambios.");
+
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.nodeId", nodo.Id ?? string.Empty);
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.setCount", setKeys.Count);
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.removeCount", removeKeys.Count);
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.removedCount", removed);
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.setKeys", setKeys.ToArray());
+            ContextoEjecucion.SetPath(ctx.Estado, "state.last.removeKeys", removeKeys.ToArray());
 
             return Task.FromResult(new ResultadoEjecucion { Etiqueta = "always" });
         }
@@ -103,7 +107,6 @@ namespace Intranet.WorkflowStudio.WebForms
             var r = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             if (v == null) return r;
 
-            // JObject
             if (v is JObject jo)
             {
                 foreach (var prop in jo.Properties())
@@ -111,7 +114,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return r;
             }
 
-            // IDictionary<string, object>
             if (v is IDictionary<string, object> dso)
             {
                 foreach (var kv in dso)
@@ -119,7 +121,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return r;
             }
 
-            // string JSON
             if (v is string s && !string.IsNullOrWhiteSpace(s))
             {
                 s = s.Trim();
@@ -184,7 +185,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return list;
             }
 
-            // fallback single
             var single = Convert.ToString(v, CultureInfo.InvariantCulture);
             if (!string.IsNullOrWhiteSpace(single)) list.Add(single.Trim());
             return list;
@@ -193,14 +193,88 @@ namespace Intranet.WorkflowStudio.WebForms
         private static object NormalizeValue(object v)
         {
             if (v == null) return null;
-
-            // JValue unwrap
             if (v is JValue jv) return jv.Value;
-
-            // JObject/JArray los dejamos como JToken (persistencia ya lo serializa)
             if (v is JObject || v is JArray) return v;
-
             return v;
+        }
+
+        private static bool RemovePath(IDictionary<string, object> root, string path)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(path)) return false;
+
+            path = path.Trim();
+
+            // Compatibilidad: si existiera como key plana exacta, remover primero.
+            if (root.Remove(path))
+                return true;
+
+            var parts = path.Split('.');
+            if (parts.Length == 0) return false;
+
+            object curr = root;
+
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                var key = (parts[i] ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(key)) return false;
+
+                curr = GetChildForRemove(curr, key);
+                if (curr == null) return false;
+            }
+
+            var last = (parts[parts.Length - 1] ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(last)) return false;
+
+            return RemoveChild(curr, last);
+        }
+
+        private static object GetChildForRemove(object parent, string key)
+        {
+            if (parent == null || string.IsNullOrWhiteSpace(key)) return null;
+
+            if (parent is IDictionary<string, object> dict)
+            {
+                object value;
+                return dict.TryGetValue(key, out value) ? value : null;
+            }
+
+            var jo = parent as JObject;
+            if (jo != null)
+            {
+                JToken token;
+                return jo.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out token) ? token : null;
+            }
+
+            return null;
+        }
+
+        private static bool RemoveChild(object parent, string key)
+        {
+            if (parent == null || string.IsNullOrWhiteSpace(key)) return false;
+
+            if (parent is IDictionary<string, object> dict)
+                return dict.Remove(key);
+
+            var jo = parent as JObject;
+            if (jo != null)
+            {
+                JProperty prop = null;
+                foreach (var p in jo.Properties())
+                {
+                    if (string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        prop = p;
+                        break;
+                    }
+                }
+
+                if (prop == null) return false;
+
+                prop.Remove();
+                return true;
+            }
+
+            return false;
         }
     }
 }

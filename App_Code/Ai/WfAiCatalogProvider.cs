@@ -34,8 +34,13 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.notify", Label = "Notificar", Params = new List<string> { "tipo", "canal", "nivel", "destinoTipo", "usuarioDestino", "rolDestino", "destino", "prioridad", "asunto", "mensaje", "urlAccion" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "http.request", Label = "Solicitud HTTP", Params = new List<string> { "method", "url", "headers", "query", "body", "contentType", "timeoutMs", "failOnStatus", "failStatusMin" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "data.sql", Label = "Consulta SQL", Params = new List<string> { "connectionStringName", "query", "commandText", "parameters" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "file.read", Label = "Archivo: Leer", Params = new List<string> { "path", "salida", "output", "asJson", "encoding", "zipMode", "zipEntry", "useCache" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "file.write", Label = "Archivo: Escribir", Params = new List<string> { "path", "content", "origen", "encoding", "overwrite", "zipMode", "entryName", "zipEntryName" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.subflow", Label = "Ejecutar otro workflow", Params = new List<string> { "ref", "input", "as", "maxDepth", "usuario" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "state.vars", Label = "Variables", Params = new List<string> { "set", "remove" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.delay", Label = "Demora (Delay)", Params = new List<string> { "ms", "seconds", "message" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.retry", Label = "Reintentar", Params = new List<string> { "reintentos", "backoffMs", "message" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.error", Label = "Manejador de Error", Params = new List<string> { "mensaje", "capturar", "capturarErrores", "notificar", "volverAIntentar", "reintentar" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.logger", Label = "Logger", Params = new List<string> { "message", "level" } });
         }
 
@@ -54,6 +59,26 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.first", Label = "Primera fila SQL" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.scalar", Label = "Primer valor SQL" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "sql.rowsAffected", Label = "Filas afectadas SQL" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "wf.error", Label = "Error marcado" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "wf.error.message", Label = "Mensaje de error" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "wf.error.nodeId", Label = "Nodo que marcó error" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "wf.error.nodeType", Label = "Tipo de nodo de error" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "archivo", Label = "Contenido leído por archivo" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.read.lastPath", Label = "Última ruta leída" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.read.lastLength", Label = "Longitud del archivo leído" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.read.lastEncoding", Label = "Encoding de lectura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.read.lastZipMode", Label = "Compresión detectada" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.read.lastError", Label = "Último error de lectura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastPath", Label = "Última ruta escrita" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastLength", Label = "Longitud escrita" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastEncoding", Label = "Encoding de escritura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastZipMode", Label = "Modo ZIP de escritura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastError", Label = "Último error de escritura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.instanceId", Label = "Instancia hija del subflujo" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.childState", Label = "Estado de instancia hija" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.ref", Label = "Workflow hijo ejecutado" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.estado", Label = "Estado/Datos del subflujo" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.logs", Label = "Logs del subflujo" });
         }
 
         private void TryLoadDocTypes(WfAiCatalog catalog)

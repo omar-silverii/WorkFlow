@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
-   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix28" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix31" />
 
   <style>
      body { background: #f6f7fb; }
@@ -183,7 +183,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix28b"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix36"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
@@ -202,7 +202,7 @@
     <script src="Scripts/inspectors/inspector.control.parallel.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.control.join.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.subflow.js?v=dev200"></script>
-    <script src="Scripts/inspectors/inspector.logger.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.logger.js?v=fix29b"></script>
     <script src="Scripts/inspectors/inspector.human.task.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.data.sql.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.notify.js?v=dev200"></script>
@@ -215,7 +215,7 @@
     <script src="Scripts/inspectors/inspector.ftp.get.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.ftp.put.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.email.send.js?v=dev200"></script>
-    <script src="Scripts/Inspectors/inspector.state.vars.js?v=dev200"></script>
+    <script src="Scripts/Inspectors/inspector.state.vars.js?v=fix30b"></script>
     <script src="Scripts/Inspectors/inspector.transform.map.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.code.function.js?v=dev200"></script>
     <script src="Scripts/Inspectors/inspector.code.script.js?v=dev200"></script>
