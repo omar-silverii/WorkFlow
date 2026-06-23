@@ -27,7 +27,7 @@
         <h4 class="mb-3">Workflows – Definiciones</h4>
 
         <div class="form-inline mb-2">
-            <label class="mr-2">Filtrar por código:</label>
+            <label class="mr-2">Filtrar por Id / código:</label>
             <asp:TextBox ID="txtFiltro" runat="server" CssClass="form-control form-control-sm mr-2" />
             <asp:Button ID="btnBuscar" runat="server" Text="Buscar" CssClass="btn btn-sm btn-primary mr-2" OnClick="btnBuscar_Click" />
             <asp:Button ID="btnLimpiar" runat="server" Text="Limpiar" CssClass="btn btn-sm btn-secondary mr-2" OnClick="btnLimpiar_Click" />

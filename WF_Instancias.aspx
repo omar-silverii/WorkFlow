@@ -11,7 +11,8 @@
 
     <style>
         body { padding: 12px; background: #f6f7fb; }
-        pre.log-view { max-height: 220px; overflow: auto; background: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: .7rem; }
+        pre.log-view { height: 320px; min-height: 180px; max-height: 75vh; resize: vertical; overflow: auto; background: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: .7rem; }
+        .ws-resize-hint { font-size: .72rem; color: rgba(0,0,0,.48); }
 
         .ws-card { border: 0; border-radius: 16px; box-shadow: 0 10px 24px rgba(16,24,40,.06); }
         .ws-card .card-body { padding: 20px; }
@@ -163,7 +164,10 @@
                     <asp:Panel ID="pnlDatosCard" runat="server" Visible="true">
                         <div class="card ws-card mb-3">
                             <div class="card-body">
-                                <div class="ws-title mb-2">Datos (DatosContexto)</div>
+                                <div class="d-flex align-items-center justify-content-between mb-2 gap-2">
+                                    <div class="ws-title">Datos (DatosContexto)</div>
+                                    <div class="ws-resize-hint text-end">Arrastrá la esquina inferior derecha para agrandar</div>
+                                </div>
 
                                 <asp:Panel ID="pnlDatos" runat="server" Visible="false">
                                     <pre class="log-view"><asp:Literal ID="litDatos" runat="server"></asp:Literal></pre>
@@ -293,7 +297,10 @@
                     <asp:Panel ID="pnlLogsCard" runat="server" Visible="true">
                         <div class="card ws-card">
                             <div class="card-body">
-                                <div class="ws-title mb-2">Logs</div>
+                                <div class="d-flex align-items-center justify-content-between mb-2 gap-2">
+                                    <div class="ws-title">Logs</div>
+                                    <div class="ws-resize-hint text-end">Arrastrá la esquina inferior derecha para agrandar</div>
+                                </div>
 
                                 <asp:Panel ID="pnlLogs" runat="server" Visible="false">
                                     <pre class="log-view"><asp:Literal ID="litLogs" runat="server"></asp:Literal></pre>

@@ -1,6 +1,7 @@
 ﻿// Scripts/workflow.ai.assistant.js
 // Asistente IA del editor: interpreta intención con ML.NET local/offline.
-// fix36: Subflujo / Ejecutar otro workflow integrado al Constructor IA sin tocar motor.
+// fix39c: corrige render recursivo de ramas anidadas sobre fix39b.
+// fix39b: Constructor IA en 3 columnas, rama activa visual y datos clickeables sin tocar motor.
 (function () {
     var lastPlan = null;
 
@@ -45,6 +46,11 @@
     var guideSteps = [];
     var guideSeq = 1;
     var editingStepIndex = -1;
+
+    // fix39b: destino visual activo del Constructor IA.
+    // Permite hacer clic en SI/NO o APTO/NO APTO para que los próximos pasos
+    // se agreguen en esa rama, sin depender de combos largos.
+    var guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
 
     function normalizeKey(v) {
         return String(v == null ? '' : v).trim().toUpperCase();
@@ -552,14 +558,21 @@
                 lastSource = f.source;
                 html += '<div class="wf-ai-field-group"><div class="wf-ai-field-source">' + htmlEncode(lastSource) + '</div>';
             }
-            html += '<div class="wf-ai-field-row" title="' + htmlEncode(f.path) + '">';
-            html += '<div><strong>' + htmlEncode(f.label || f.path) + '</strong><br><code>' + htmlEncode(f.path) + '</code></div>';
+            html += '<button type="button" class="wf-ai-field-row" title="Cargar ' + htmlEncode(f.path) + ' en el formulario" data-guide-field-path="' + htmlEncode(f.path) + '">';
+            html += '<span><strong>' + htmlEncode(f.label || f.path) + '</strong><br><code>' + htmlEncode(f.path) + '</code></span>';
             html += '<span class="wf-ai-field-type">' + htmlEncode(f.type || '') + '</span>';
-            html += '</div>';
+            html += '</button>';
         });
         if (lastSource !== null) html += '</div>';
         html += '</div>';
         box.innerHTML = html;
+
+        Array.prototype.forEach.call(box.querySelectorAll('[data-guide-field-path]'), function (btn) {
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                applyAvailableFieldToCurrentForm(btn.getAttribute('data-guide-field-path'));
+            });
+        });
     }
 
 
@@ -873,6 +886,192 @@
         return items.map(function (x) {
             return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '') + '>' + htmlEncode(x[1]) + '</option>';
         }).join('');
+    }
+
+    // fix39d: si el usuario ya eligió visualmente una rama/resultado,
+    // el formulario no vuelve a pedir "Cuándo". El destino queda definido por el clic.
+    function guideBranchRowHtml(selectedValue) {
+        var editing = editingStepIndex >= 0 && editingStepIndex < guideSteps.length;
+        if (!editing && !activeTargetIsMain()) {
+            var label = (guideActiveTarget && guideActiveTarget.label) || 'rama seleccionada';
+            return '' +
+                '<div class="wf-ai-guide-context-locked">' +
+                '  <div class="wf-ai-guide-context-locked-title">Ubicación definida por clic</div>' +
+                '  <div class="wf-ai-guide-context-locked-label">' + htmlEncode(label) + '</div>' +
+                '  <div class="wf-ai-guide-context-locked-help">No se muestra “Cuándo” porque ya seleccionaste visualmente dónde agregar este paso.</div>' +
+                '</div>';
+        }
+        return '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml(selectedValue || 'then') + '</select></div>';
+    }
+
+    function activeTargetIsMain() {
+        return !guideActiveTarget || guideActiveTarget.branch === 'then' || !guideActiveTarget.sourceId;
+    }
+
+    function resetGuideActiveTarget() {
+        guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
+        renderActiveTargetBox();
+        renderGuideSteps();
+        setStatus('Destino activo: Flujo principal.', 'ok');
+    }
+
+    function isActiveGuideTarget(branch, sourceId) {
+        return !!guideActiveTarget &&
+            guideActiveTarget.branch === branch &&
+            String(guideActiveTarget.sourceId || '') === String(sourceId || '');
+    }
+
+    function setGuideActiveTarget(branch, sourceId, label) {
+        branch = String(branch || 'then');
+        sourceId = sourceId == null ? null : sourceId;
+        if (branch === 'then' || !sourceId) {
+            guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
+        } else {
+            guideActiveTarget = { branch: branch, sourceId: sourceId, label: label || branch };
+        }
+        renderActiveTargetBox();
+        renderGuideSteps();
+        setStatus('Destino activo: ' + (guideActiveTarget.label || 'Flujo principal') + '.', 'ok');
+    }
+
+    function applyActiveTargetToStep(step) {
+        if (!step || activeTargetIsMain()) return step;
+        step.branch = guideActiveTarget.branch;
+        step.branchSourceId = guideActiveTarget.sourceId;
+        return step;
+    }
+
+    function renderActiveTargetBox() {
+        var box = $('wfAiActiveTarget');
+        if (!box) return;
+        var label = (guideActiveTarget && guideActiveTarget.label) || 'Flujo principal';
+        var isMain = activeTargetIsMain();
+        box.className = 'wf-ai-active-target' + (isMain ? ' is-main' : ' is-branch');
+        box.innerHTML =
+            '<div>' +
+            '  <div class="wf-ai-active-target-caption">Agregando próximo paso en</div>' +
+            '  <div class="wf-ai-active-target-label">' + htmlEncode(label) + '</div>' +
+            '</div>' +
+            '<button type="button" class="btn wf-ai-mini-btn" id="wfAiUseMainFlow">Flujo principal</button>';
+        var btn = $('wfAiUseMainFlow');
+        if (btn) btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            resetGuideActiveTarget();
+        });
+    }
+
+    function insertAtCursor(el, text) {
+        if (!el) return;
+        var value = String(el.value || '');
+        var start = typeof el.selectionStart === 'number' ? el.selectionStart : value.length;
+        var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+        el.value = value.substring(0, start) + text + value.substring(end);
+        try {
+            el.focus();
+            el.selectionStart = el.selectionEnd = start + text.length;
+        } catch (e) { }
+    }
+
+    function setSelectOrInputValue(id, value) {
+        var el = $(id);
+        if (!el) return false;
+        if (el.tagName && el.tagName.toLowerCase() === 'select') {
+            var found = false;
+            Array.prototype.forEach.call(el.options || [], function (opt) {
+                if (opt.value === value) found = true;
+            });
+            if (!found) {
+                var opt = document.createElement('option');
+                opt.value = value;
+                opt.text = value;
+                el.appendChild(opt);
+            }
+        }
+        el.value = value;
+        return true;
+    }
+
+    function applyAvailableFieldToCurrentForm(path) {
+        path = String(path || '').trim();
+        if (!path) return;
+        var type = selectedText('wfAiStepType') || 'doc_load';
+        var token = '${' + path + '}';
+
+        if (type === 'condition' && setSelectOrInputValue('wfAiStepField', path)) {
+            syncConditionFields();
+            setStatus('Campo cargado en la condición: ' + path, 'ok');
+            return;
+        }
+
+        if (type === 'state_set') {
+            var mode = selectedText('wfAiStepStateMode') || 'simple';
+            if (mode === 'simple') {
+                setSelectOrInputValue('wfAiStepValueField', path);
+                setControlValue('wfAiStepValue', token);
+                setStatus('Dato cargado como valor de la variable: ' + path, 'ok');
+                return;
+            }
+        }
+
+        if (type === 'file_write') {
+            var modeWrite = selectedText('wfAiStepFileWriteSourceMode') || 'manual';
+            if (modeWrite === 'context') {
+                setSelectOrInputValue('wfAiStepFileWriteOriginField', path);
+                setControlValue('wfAiStepFileWriteOrigin', path);
+                setStatus('Variable origen cargada para escribir archivo: ' + path, 'ok');
+                return;
+            }
+            insertAtCursor($('wfAiStepFileWriteContent'), token);
+            setStatus('Dato insertado en el contenido del archivo: ' + token, 'ok');
+            return;
+        }
+
+        if (type === 'file_read' && path === 'input.filePath') {
+            setControlValue('wfAiStepFileReadPath', token);
+            setStatus('Ruta cargada desde dato disponible: ' + token, 'ok');
+            return;
+        }
+
+        var active = document.activeElement;
+        if (active && $('wfAiStepFields') && $('wfAiStepFields').contains(active) &&
+            (active.tagName || '').toLowerCase().match(/^(input|textarea)$/)) {
+            insertAtCursor(active, token);
+            setStatus('Dato insertado: ' + token, 'ok');
+            return;
+        }
+
+        if (type === 'logger') {
+            insertAtCursor($('wfAiStepMessage'), token);
+            setStatus('Dato insertado en el mensaje del log: ' + token, 'ok');
+            return;
+        }
+        if (type === 'notify') {
+            insertAtCursor($('wfAiStepMessage'), token);
+            setStatus('Dato insertado en el mensaje de notificación: ' + token, 'ok');
+            return;
+        }
+        if (type === 'email_send') {
+            insertAtCursor($('wfAiStepBody'), token);
+            setStatus('Dato insertado en el cuerpo del correo: ' + token, 'ok');
+            return;
+        }
+        if (type === 'http_request') {
+            insertAtCursor($('wfAiStepHttpBody'), token);
+            setStatus('Dato insertado en el body HTTP: ' + token, 'ok');
+            return;
+        }
+        if (type === 'sql_query') {
+            insertAtCursor($('wfAiStepSqlParams'), token);
+            setStatus('Dato insertado en parámetros SQL: ' + token, 'ok');
+            return;
+        }
+        if (type === 'subflow') {
+            insertAtCursor($('wfAiStepSubflowInput'), token);
+            setStatus('Dato insertado en Input JSON del subflujo: ' + token, 'ok');
+            return;
+        }
+
+        setStatus('Dato seleccionado: ' + path + '. Elegí un campo del formulario para insertarlo.', 'ok');
     }
 
 
@@ -1402,27 +1601,27 @@
                 '<div class="wf-ai-guide-hint" id="wfAiStepFieldTypeHint"></div>' +
                 '<div class="wf-ai-guide-row"><label>Operador</label><select id="wfAiStepOperator" class="wf-ai-select">' + conditionOperatorOptions(meta.type, '') + '</select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepValueRow"><label>Valor</label><input id="wfAiStepConditionValue" class="wf-ai-input" placeholder="Ej.: 100000, texto, fecha o campo" /></div>' +
-                '<div class="wf-ai-guide-note">Después agregá pasos en la rama SI o NO usando el campo “Cuándo” de cada paso.</div>';
+                '<div class="wf-ai-guide-note">Después hacé clic en SI CUMPLE o NO CUMPLE en la columna de pasos para agregar acciones dentro de cada rama.</div>';
         }
         if (type === 'human_task') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Destino</label><select id="wfAiStepTaskDestType" class="wf-ai-select"><option value="rol">Rol</option><option value="usuario">Usuario</option></select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepTaskRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select">' + roleOptions(firstRole(['COMPRAS'])) + '</select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepTaskUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepTaskUser', firstUser(['OMARD\\OMARD'])) + '</div>' +
                 '<div class="wf-ai-guide-row"><label>Qué hace</label><input id="wfAiStepPurpose" class="wf-ai-input" value="revisión" placeholder="Ej.: revisar, aprobar, corregir, cargar datos" /></div>' +
-                '<div class="wf-ai-guide-note">Después podés agregar pasos según el resultado humano usando “Cuándo”: Resultado APROBADO/APTO o RECHAZADO/NO APTO de la última tarea humana.</div>';
+                '<div class="wf-ai-guide-note">Después hacé clic en APROBADO/APTO o RECHAZADO/NO APTO en la columna de pasos para agregar acciones según el resultado humano.</div>';
         }
         if (type === 'email_send') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Para</label><input id="wfAiStepTo" class="wf-ai-input" placeholder="usuario@empresa.com" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Asunto</label><input id="wfAiStepSubject" class="wf-ai-input" value="Aviso Workflow Studio" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Cuerpo</label><input id="wfAiStepBody" class="wf-ai-input" value="Se generó un aviso desde Workflow Studio" /></div>';
         }
         if (type === 'notify') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Destino</label><select id="wfAiStepDestType" class="wf-ai-select"><option value="rol">Rol</option><option value="usuario">Usuario</option></select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select">' + roleOptions(firstRole(['COMPRAS'])) + '</select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepUser', firstUser(['OMARD\\OMARD'])) + '</div>' +
@@ -1431,7 +1630,7 @@
         }
         if (type === 'http_request') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Método</label><select id="wfAiStepHttpMethod" class="wf-ai-select"><option value="GET">GET</option><option value="POST">POST</option><option value="PUT">PUT</option><option value="PATCH">PATCH</option><option value="DELETE">DELETE</option></select></div>' +
                 '<div class="wf-ai-guide-row"><label>URL</label><input id="wfAiStepHttpUrl" class="wf-ai-input" value="/Api/Ping.ashx" placeholder="Ej.: /Api/Ping.ashx" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Body</label><textarea id="wfAiStepHttpBody" class="wf-ai-input wf-ai-textarea" placeholder="Opcional. Para GET dejalo vacío."></textarea></div>' +
@@ -1442,7 +1641,7 @@
         }
         if (type === 'sql_query') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepSqlConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
                 '<div class="wf-ai-guide-row"><label>SQL</label><textarea id="wfAiStepSqlQuery" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: SELECT 1"></textarea></div>' +
                 '<div class="wf-ai-guide-row"><label>Parámetros JSON</label><textarea id="wfAiStepSqlParams" class="wf-ai-input wf-ai-textarea" placeholder="Opcional. Ej.: {&quot;Id&quot;:150484}"></textarea></div>' +
@@ -1451,7 +1650,7 @@
         }
         if (type === 'file_read') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Ruta archivo</label><input id="wfAiStepFileReadPath" class="wf-ai-input" placeholder="Ej.: C:\\Temp\\entrada.txt o ${input.filePath}" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Guardar contenido en</label><input id="wfAiStepFileReadOutput" class="wf-ai-input" value="archivo" placeholder="Ej.: archivo.texto o biz.archivo.texto" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Leer como JSON</label><select id="wfAiStepFileReadAsJson" class="wf-ai-select"><option value="false">No, texto</option><option value="true">Sí, JSON</option></select></div>' +
@@ -1462,7 +1661,7 @@
         }
         if (type === 'file_write') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Ruta destino</label><input id="wfAiStepFileWritePath" class="wf-ai-input" placeholder="Ej.: C:\\Temp\\salida.txt" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Origen contenido</label><select id="wfAiStepFileWriteSourceMode" class="wf-ai-select"><option value="manual">Texto manual / plantilla</option><option value="context">Variable de DatosContexto</option></select></div>' +
                 '<div class="wf-ai-guide-row" id="wfAiStepFileWriteOriginFieldRow"><label>Variable origen</label><select id="wfAiStepFileWriteOriginField" class="wf-ai-select">' + availableFieldOptionsWithBlank('', '— seleccionar variable —') + '</select></div>' +
@@ -1476,7 +1675,7 @@
         }
         if (type === 'subflow') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Workflow a ejecutar</label><select id="wfAiStepSubflowRef" class="wf-ai-select">' + workflowDefOptions(firstWorkflowDef()) + '</select></div>' +
                 '<div class="wf-ai-guide-row"><label>Alias opcional</label><input id="wfAiStepSubflowAlias" class="wf-ai-input" placeholder="Ej.: validacion, compras, control" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Input JSON</label><textarea id="wfAiStepSubflowInput" class="wf-ai-input wf-ai-textarea" placeholder="{&#10;  &quot;filePath&quot;: &quot;${input.filePath}&quot;,&#10;  &quot;importe&quot;: &quot;${biz.notaCredito.total}&quot;&#10;}">{&#10;  &quot;filePath&quot;: &quot;${input.filePath}&quot;&#10;}</textarea></div>' +
@@ -1485,7 +1684,7 @@
         }
         if (type === 'state_set') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Modo</label><select id="wfAiStepStateMode" class="wf-ai-select"><option value="simple">Simple: una variable</option><option value="json">Avanzado: JSON / varios datos</option></select></div>' +
                 '<div id="wfAiStepStateSimpleBox">' +
                 '<div class="wf-ai-guide-row"><label>Variable destino</label><input id="wfAiStepKey" class="wf-ai-input" placeholder="Ej.: biz.prueba.fix30" /></div>' +
@@ -1501,18 +1700,18 @@
         }
         if (type === 'state_remove') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Variable a quitar</label><input id="wfAiStepKey" class="wf-ai-input" placeholder="Ej.: biz.prueba.fix30" /></div>' +
                 '<div class="wf-ai-guide-note">Quita una variable de DatosContexto. Para evitar confusión, usalo principalmente sobre variables creadas por vos.</div>';
         }
         if (type === 'delay') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Milisegundos</label><input id="wfAiStepMs" class="wf-ai-input" value="1000" /></div>';
         }
         if (type === 'retry') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Reintentos</label><input id="wfAiStepRetryCount" class="wf-ai-input" value="3" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Backoff ms</label><input id="wfAiStepRetryBackoff" class="wf-ai-input" value="500" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Mensaje opcional</label><input id="wfAiStepRetryMessage" class="wf-ai-input" value="Reintento agregado por Constructor IA" /></div>' +
@@ -1520,7 +1719,7 @@
         }
         if (type === 'error_handler') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Mensaje de error</label><textarea id="wfAiStepErrorMessage" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Falló la consulta SQL. Instancia ${wf.instanceId}">Error controlado por el workflow</textarea></div>' +
                 '<div class="wf-ai-guide-row"><label>Continuar luego de marcar error</label><select id="wfAiStepErrorCapture" class="wf-ai-select"><option value="true">Sí, continuar por salida normal</option><option value="false">No, usar salida error si existe</option></select></div>' +
                 '<div class="wf-ai-guide-row"><label>Dejar aviso en log/contexto</label><select id="wfAiStepErrorNotify" class="wf-ai-select"><option value="false">No</option><option value="true">Sí</option></select></div>' +
@@ -1529,7 +1728,7 @@
         }
         if (type === 'logger') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Nivel</label><select id="wfAiStepLogLevel" class="wf-ai-select">' +
                 '  <option value="Info">Info</option>' +
                 '  <option value="Warn">Warn</option>' +
@@ -1541,7 +1740,7 @@
         }
         if (type === 'end') {
             return '' +
-                '<div class="wf-ai-guide-row"><label>Cuándo</label><select id="wfAiStepBranch" class="wf-ai-select">' + branchOptionsHtml('then') + '</select></div>' +
+                guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-note">Agrega el cierre del flujo. Normalmente conviene dejarlo como último paso.</div>';
         }
         return '';
@@ -1779,6 +1978,7 @@
         if (fileWriteMode) fileWriteMode.addEventListener('change', syncDynamicStepFields);
 
         syncDynamicStepFields();
+        renderActiveTargetBox();
         updateGuideEditMode();
     }
 
@@ -2069,61 +2269,87 @@
         return html;
     }
 
-    function renderConditionBranches(conditionIndex, branchMap) {
+    function renderGuideStepTree(step, idx, extraClass, branchMap, taskBranchMap, path) {
+        path = path || {};
+        var key = String(idx);
+        if (path[key]) {
+            return renderSingleGuideStep(step, idx, extraClass);
+        }
+        var nextPath = {};
+        Object.keys(path).forEach(function (k) { nextPath[k] = path[k]; });
+        nextPath[key] = true;
+
+        var html = renderSingleGuideStep(step, idx, extraClass);
+        if (step && step.type === 'condition') html += renderConditionBranches(idx, branchMap, taskBranchMap, nextPath);
+        if (step && step.type === 'human_task') html += renderTaskResultBranches(idx, branchMap, taskBranchMap, nextPath);
+        return html;
+    }
+
+    function renderConditionBranches(conditionIndex, branchMap, taskBranchMap, path) {
         var groups = branchMap[conditionIndex] || { si: [], no: [] };
+        var owner = guideSteps[conditionIndex] || {};
+        var ownerId = owner.id || '';
+        var ownerTitle = createStepTitle(owner) || 'Condición';
+        var yesActive = isActiveGuideTarget('if_cond_true', ownerId) ? ' is-active-target' : '';
+        var noActive = isActiveGuideTarget('if_cond_false', ownerId) ? ' is-active-target' : '';
         var html = '<div class="wf-ai-if-branches">';
 
-        html += '<div class="wf-ai-if-branch wf-ai-if-branch-yes"><div class="wf-ai-if-branch-title">SI cumple</div>';
+        html += '<div class="wf-ai-if-branch wf-ai-if-branch-yes' + yesActive + '" data-guide-target-branch="if_cond_true" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Rama SI de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-if-branch-title">SI cumple</div>';
         if (groups.si.length) {
             html += '<ol class="wf-ai-branch-step-list">';
-            groups.si.forEach(function (item) { html += renderSingleGuideStep(item.step, item.idx, 'wf-ai-step-branch'); });
+            groups.si.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
             html += '</ol>';
         } else {
             html += '<div class="wf-ai-if-branch-empty">Todavía no agregaste pasos para esta rama.</div>';
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-if-branch wf-ai-if-branch-no"><div class="wf-ai-if-branch-title">NO cumple</div>';
+        html += '<div class="wf-ai-if-branch wf-ai-if-branch-no' + noActive + '" data-guide-target-branch="if_cond_false" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Rama NO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-if-branch-title">NO cumple</div>';
         if (groups.no.length) {
             html += '<ol class="wf-ai-branch-step-list">';
-            groups.no.forEach(function (item) { html += renderSingleGuideStep(item.step, item.idx, 'wf-ai-step-branch'); });
+            groups.no.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
             html += '</ol>';
         } else {
             html += '<div class="wf-ai-if-branch-empty">Todavía no agregaste pasos para esta rama.</div>';
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-if-branch-help">Para agregar pasos acá, elegí una acción y en “Cuándo” seleccioná Rama SI o Rama NO de la última condición.</div>';
+        html += '<div class="wf-ai-if-branch-help">Hacé clic sobre SI CUMPLE o NO CUMPLE para que el próximo paso se agregue en esa rama.</div>';
         html += '</div>';
         return html;
     }
 
 
-    function renderTaskResultBranches(taskIndex, branchMap) {
-        var groups = branchMap[taskIndex] || { ok: [], reject: [] };
+    function renderTaskResultBranches(taskIndex, branchMap, taskBranchMap, path) {
+        var groups = taskBranchMap[taskIndex] || { ok: [], reject: [] };
+        var owner = guideSteps[taskIndex] || {};
+        var ownerId = owner.id || '';
+        var ownerTitle = createStepTitle(owner) || 'Tarea humana';
+        var okActive = isActiveGuideTarget('if_task_ok', ownerId) ? ' is-active-target' : '';
+        var rejectActive = isActiveGuideTarget('if_task_reject', ownerId) ? ' is-active-target' : '';
         var html = '<div class="wf-ai-task-branches">';
 
-        html += '<div class="wf-ai-task-branch wf-ai-task-branch-ok"><div class="wf-ai-task-branch-title">APROBADO / APTO</div>';
+        html += '<div class="wf-ai-task-branch wf-ai-task-branch-ok' + okActive + '" data-guide-target-branch="if_task_ok" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">APROBADO / APTO</div>';
         if (groups.ok.length) {
             html += '<ol class="wf-ai-branch-step-list">';
-            groups.ok.forEach(function (item) { html += renderSingleGuideStep(item.step, item.idx, 'wf-ai-step-branch'); });
+            groups.ok.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
             html += '</ol>';
         } else {
             html += '<div class="wf-ai-if-branch-empty">Todavía no agregaste pasos para este resultado.</div>';
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-task-branch wf-ai-task-branch-reject"><div class="wf-ai-task-branch-title">RECHAZADO / NO APTO</div>';
+        html += '<div class="wf-ai-task-branch wf-ai-task-branch-reject' + rejectActive + '" data-guide-target-branch="if_task_reject" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado NO APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">RECHAZADO / NO APTO</div>';
         if (groups.reject.length) {
             html += '<ol class="wf-ai-branch-step-list">';
-            groups.reject.forEach(function (item) { html += renderSingleGuideStep(item.step, item.idx, 'wf-ai-step-branch'); });
+            groups.reject.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
             html += '</ol>';
         } else {
             html += '<div class="wf-ai-if-branch-empty">Todavía no agregaste pasos para este resultado.</div>';
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-task-branch-help">Estas ramas son decisiones humanas: se evalúan después de cerrar la tarea. Operativamente se usa el resultado <strong>apto</strong> para aprobado y <strong>no_apto</strong> para no aprobado; el resultado técnico <strong>rechazado</strong> sigue reservado para volver a una etapa anterior.</div>';
+        html += '<div class="wf-ai-task-branch-help">Hacé clic en APROBADO/APTO o RECHAZADO/NO APTO para agregar el próximo paso en ese resultado humano. Operativamente se usa <strong>apto</strong> para aprobado y <strong>no_apto</strong> para no aprobado.</div>';
         html += '</div>';
         return html;
     }
@@ -2131,6 +2357,11 @@
     function renderGuideSteps() {
         var box = $('wfAiGuideSteps');
         if (!box) return;
+
+        if (!activeTargetIsMain()) {
+            var exists = guideSteps.some(function (x) { return x && String(x.id || '') === String(guideActiveTarget.sourceId || ''); });
+            if (!exists) guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
+        }
 
         if (!guideSteps.length) {
             box.innerHTML = '<div class="wf-ai-guide-empty">Todavía no agregaste pasos. Elegí una acción y presioná “Agregar paso”.</div>';
@@ -2168,9 +2399,7 @@
         var html = '<ol class="wf-ai-step-list">';
         guideSteps.forEach(function (step, idx) {
             if (skip[idx]) return;
-            html += renderSingleGuideStep(step, idx, '');
-            if (step && step.type === 'condition') html += renderConditionBranches(idx, branchMap);
-            if (step && step.type === 'human_task') html += renderTaskResultBranches(idx, taskBranchMap);
+            html += renderGuideStepTree(step, idx, '', branchMap, taskBranchMap, {});
         });
         html += '</ol>';
         html += renderFunctionalValidationPanel(buildFunctionalValidation());
@@ -2210,7 +2439,20 @@
             });
         });
 
+        Array.prototype.forEach.call(box.querySelectorAll('[data-guide-target-branch]'), function (target) {
+            target.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setGuideActiveTarget(
+                    target.getAttribute('data-guide-target-branch'),
+                    target.getAttribute('data-guide-target-source-id'),
+                    target.getAttribute('data-guide-target-label')
+                );
+            });
+        });
+
         renderAvailableFields();
+        renderActiveTargetBox();
     }
 
     function saveGuideStep() {
@@ -2233,6 +2475,7 @@
         }
 
         var step = collectStepFromForm();
+        applyActiveTargetToStep(step);
         guideSteps.push(step);
         renderGuideSteps();
         updateGuideEditMode();
@@ -2242,8 +2485,10 @@
     function clearGuideSteps() {
         guideSteps = [];
         editingStepIndex = -1;
+        guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
         renderGuideSteps();
         renderAvailableFields();
+        renderActiveTargetBox();
         updateGuideEditMode();
         setStatus('Constructor limpio.', 'ok');
     }
@@ -2323,11 +2568,14 @@
             '<div class="wf-ai-guide-body" id="wfAiGuideBody" style="display:none">' +
             '  <div class="wf-ai-guide-layout">' +
             '    <div class="wf-ai-guide-left">' +
-            '      <div class="wf-ai-guide-note">Elegí qué querés agregar ahora. El orden lo decidís vos; después el sistema arma una frase clara para el Asistente IA actual.</div>' +
+            '      <div class="wf-ai-guide-note">Elegí qué querés agregar. Hacé clic en una rama SI/NO o APTO/NO APTO para fijar dónde va el próximo paso; el formulario de la derecha se adapta a esa ubicación.</div>' +
             '      <div id="wfAiGuideSteps" class="wf-ai-guide-steps"></div>' +
+            '    </div>' +
+            '    <div class="wf-ai-guide-center">' +
             '      <div id="wfAiAvailableFields" class="wf-ai-available-fields"></div>' +
             '    </div>' +
             '    <div class="wf-ai-guide-right">' +
+            '      <div id="wfAiActiveTarget" class="wf-ai-active-target"></div>' +
             '      <div class="wf-ai-guide-row">' +
             '        <label>Agregar paso</label>' +
             '        <select id="wfAiStepType" class="wf-ai-select">' +
@@ -2394,6 +2642,7 @@
 
         renderGuideSteps();
         renderStepFields();
+        renderActiveTargetBox();
         updateGuideEditMode();
         loadGuideCatalogs();
     }
@@ -3089,34 +3338,87 @@
         var startAction = makePlanAction('util.start', labelFor('Inicio'), {});
         actions.push(startAction);
 
-        guideSteps.forEach(function (step, idx) {
-            if (!step) return;
-            if (isBranchChildStep(step)) return;
+        function mapForConditionIndex(idx) {
+            return maps.conditions[idx] || { si: [], no: [] };
+        }
+
+        function mapForTaskIndex(idx) {
+            return maps.tasks[idx] || { ok: [], reject: [] };
+        }
+
+        function hasConditionBranches(idx) {
+            var m = mapForConditionIndex(idx);
+            return !!(m.si.length || m.no.length);
+        }
+
+        function hasTaskBranches(idx) {
+            var m = mapForTaskIndex(idx);
+            return !!(m.ok.length || m.reject.length);
+        }
+
+        function ensureActionForIndex(idx) {
+            var step = guideSteps[idx];
+            if (!step) return null;
+            if (actionByStepId[step.id]) return actionByStepId[step.id];
 
             var action = actionForGuideStep(step, labelFor);
             if (action) {
                 actions.push(action);
                 actionByStepId[step.id] = action;
             }
+            return action || null;
+        }
 
-            if (step.type === 'human_task' && maps.tasks[idx] && (maps.tasks[idx].ok.length || maps.tasks[idx].reject.length)) {
-                var resultIf = taskResultIfActionForPlan(step, labelFor);
-                actions.push(resultIf);
-                taskResultIfByStepId[step.id] = resultIf;
+        function ensureTaskResultIfForIndex(idx) {
+            var step = guideSteps[idx];
+            if (!step || step.type !== 'human_task' || !hasTaskBranches(idx)) return null;
+            if (taskResultIfByStepId[step.id]) return taskResultIfByStepId[step.id];
+
+            var resultIf = taskResultIfActionForPlan(step, labelFor);
+            actions.push(resultIf);
+            taskResultIfByStepId[step.id] = resultIf;
+            return resultIf;
+        }
+
+        function childIndexesForIndex(idx) {
+            var step = guideSteps[idx];
+            if (!step) return [];
+            if (step.type === 'condition') {
+                var cm = mapForConditionIndex(idx);
+                return cm.si.concat(cm.no);
             }
+            if (step.type === 'human_task') {
+                var tm = mapForTaskIndex(idx);
+                return tm.ok.concat(tm.reject);
+            }
+            return [];
+        }
 
-            var childIndexes = [];
-            if (step.type === 'condition' && maps.conditions[idx]) childIndexes = maps.conditions[idx].si.concat(maps.conditions[idx].no);
-            if (step.type === 'human_task' && maps.tasks[idx]) childIndexes = maps.tasks[idx].ok.concat(maps.tasks[idx].reject);
-            childIndexes.forEach(function (childIdx) {
-                var child = guideSteps[childIdx];
-                if (!child) return;
-                var childAction = actionForGuideStep(child, labelFor);
-                if (childAction) {
-                    actions.push(childAction);
-                    actionByStepId[child.id] = childAction;
-                }
+        function collectActionsRecursive(idx, path) {
+            path = path || {};
+            if (idx == null || idx < 0 || idx >= guideSteps.length) return;
+            if (path[idx]) return;
+
+            var nextPath = {};
+            Object.keys(path).forEach(function (k) { nextPath[k] = path[k]; });
+            nextPath[idx] = true;
+
+            ensureActionForIndex(idx);
+            ensureTaskResultIfForIndex(idx);
+
+            childIndexesForIndex(idx).forEach(function (childIdx) {
+                collectActionsRecursive(childIdx, nextPath);
             });
+        }
+
+        var mainIndexes = [];
+        guideSteps.forEach(function (step, idx) {
+            if (!step || isBranchChildStep(step)) return;
+            mainIndexes.push(idx);
+        });
+
+        mainIndexes.forEach(function (idx) {
+            collectActionsRecursive(idx, {});
         });
 
         var endAction = null;
@@ -3128,53 +3430,82 @@
             actions.push(endAction);
         }
 
-        var mainIndexes = [];
-        guideSteps.forEach(function (step, idx) {
-            if (!step || isBranchChildStep(step)) return;
-            mainIndexes.push(idx);
-        });
-
-        function nextMainActionAfter(mainPos) {
-            for (var i = mainPos + 1; i < mainIndexes.length; i++) {
-                var st = guideSteps[mainIndexes[i]];
+        function firstActionForIndexes(indexes) {
+            indexes = indexes || [];
+            for (var i = 0; i < indexes.length; i++) {
+                var st = guideSteps[indexes[i]];
                 if (st && actionByStepId[st.id]) return actionByStepId[st.id];
             }
-            return endAction;
+            return null;
+        }
+
+        function nextActionAfter(indexes, currentPos, mergeAction) {
+            for (var i = currentPos + 1; i < indexes.length; i++) {
+                var st = guideSteps[indexes[i]];
+                if (st && actionByStepId[st.id]) return actionByStepId[st.id];
+            }
+            return mergeAction || endAction;
         }
 
         var connections = [];
+
+        function connectSequence(fromAction, indexes, edgeCondition, mergeAction, path) {
+            indexes = indexes || [];
+            mergeAction = mergeAction || endAction;
+            path = path || {};
+
+            var first = firstActionForIndexes(indexes);
+            if (!first) {
+                if (mergeAction) addStructuredConnection(connections, fromAction, mergeAction, edgeCondition);
+                return;
+            }
+
+            addStructuredConnection(connections, fromAction, first, edgeCondition);
+
+            for (var pos = 0; pos < indexes.length; pos++) {
+                var idx = indexes[pos];
+                if (idx == null || idx < 0 || idx >= guideSteps.length) continue;
+                if (path[idx]) continue;
+
+                var nextPath = {};
+                Object.keys(path).forEach(function (k) { nextPath[k] = path[k]; });
+                nextPath[idx] = true;
+
+                var step = guideSteps[idx];
+                var current = step && actionByStepId[step.id];
+                if (!step || !current) continue;
+                if (actionNodeTypeForPlan(current) === 'util.end') continue;
+
+                var nextAction = nextActionAfter(indexes, pos, mergeAction);
+                if (nextAction === current) nextAction = mergeAction || endAction;
+
+                if (step.type === 'condition' && hasConditionBranches(idx)) {
+                    var cm = mapForConditionIndex(idx);
+                    connectSequence(current, cm.si, 'SI', nextAction, nextPath);
+                    connectSequence(current, cm.no, 'NO', nextAction, nextPath);
+                    continue;
+                }
+
+                if (step.type === 'human_task' && hasTaskBranches(idx)) {
+                    var resultIf = ensureTaskResultIfForIndex(idx);
+                    if (resultIf) {
+                        addStructuredConnection(connections, current, resultIf, '');
+                        var tm = mapForTaskIndex(idx);
+                        connectSequence(resultIf, tm.ok, 'SI', nextAction, nextPath);
+                        connectSequence(resultIf, tm.reject, 'NO', nextAction, nextPath);
+                        continue;
+                    }
+                }
+
+                if (nextAction) addStructuredConnection(connections, current, nextAction, '');
+            }
+        }
+
         if (mainIndexes.length) {
-            var firstMain = guideSteps[mainIndexes[0]];
-            addStructuredConnection(connections, startAction, actionByStepId[firstMain.id], '');
+            connectSequence(startAction, mainIndexes, '', endAction, {});
         } else {
             addStructuredConnection(connections, startAction, endAction, '');
         }
-
-        mainIndexes.forEach(function (idx, mainPos) {
-            var step = guideSteps[idx];
-            if (!step || !actionByStepId[step.id]) return;
-            var current = actionByStepId[step.id];
-            if (actionNodeTypeForPlan(current) === 'util.end') return;
-
-            var merge = nextMainActionAfter(mainPos);
-            if (merge === current) merge = endAction;
-
-            if (step.type === 'condition' && maps.conditions[idx] && (maps.conditions[idx].si.length || maps.conditions[idx].no.length)) {
-                connectBranchSteps(connections, current, maps.conditions[idx].si, 'SI', merge, actionByStepId);
-                connectBranchSteps(connections, current, maps.conditions[idx].no, 'NO', merge, actionByStepId);
-                return;
-            }
-
-            if (step.type === 'human_task' && taskResultIfByStepId[step.id]) {
-                var resultIf = taskResultIfByStepId[step.id];
-                addStructuredConnection(connections, current, resultIf, '');
-                connectBranchSteps(connections, resultIf, maps.tasks[idx].ok, 'SI', merge, actionByStepId);
-                connectBranchSteps(connections, resultIf, maps.tasks[idx].reject, 'NO', merge, actionByStepId);
-                return;
-            }
-
-            addStructuredConnection(connections, current, merge, '');
-        });
 
         var branchItems = [];
         Object.keys(maps.tasks).forEach(function (k) {
@@ -3191,17 +3522,17 @@
         });
 
         return {
-            assistantVersion: 'constructor-structured-fix36',
+            assistantVersion: 'constructor-structured-fix39e',
             intent: 'build_workflow',
             confidence: 1,
             messageToUser: 'Propuesta generada desde el Constructor IA con plan estructurado local.',
             actions: actions,
             missingData: [],
             warnings: hasEndStep()
-                ? ['fix36: Subflujo usa util.subflow existente y crea una instancia hija de otra definición.']
-                : ['Se agregó un nodo Fin técnico en la propuesta para evitar un grafo abierto.', 'fix36: Subflujo usa util.subflow existente y crea una instancia hija de otra definición.'],
+                ? []
+                : ['Se agregó un nodo Fin técnico en la propuesta para evitar un grafo abierto.'],
             branchPlan: {
-                planner: 'constructor-local-fix36',
+                planner: 'constructor-local-fix39e',
                 hasBranches: branchItems.length > 0,
                 branches: branchItems
             },

@@ -131,7 +131,7 @@ WHERE 1 = 1";
             if (!string.IsNullOrEmpty(filtro))
             {
                 if (esId)
-                    sql += " AND (Id = @FiltroId OR Codigo LIKE @Filtro)";
+                    sql += " AND Id = @FiltroId";
                 else
                     sql += " AND Codigo LIKE @Filtro";
             }
@@ -146,9 +146,13 @@ WHERE 1 = 1";
                 if (!string.IsNullOrEmpty(filtro))
                 {
                     if (esId)
-                        cmd.Parameters.AddWithValue("@FiltroId", filtroId);
-
-                    cmd.Parameters.AddWithValue("@Filtro", "%" + filtro + "%");
+                    {
+                        cmd.Parameters.Add("@FiltroId", SqlDbType.Int).Value = filtroId;
+                    }
+                    else
+                    {
+                        cmd.Parameters.Add("@Filtro", SqlDbType.NVarChar, 100).Value = "%" + filtro + "%";
+                    }
                 }
 
                 using (SqlDataAdapter da = new SqlDataAdapter(cmd))

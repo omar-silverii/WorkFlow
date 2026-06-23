@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
-   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix31" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix39b" />
 
   <style>
      body { background: #f6f7fb; }
@@ -183,7 +183,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix36"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix39b"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
