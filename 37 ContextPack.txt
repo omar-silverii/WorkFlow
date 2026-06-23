@@ -1,0 +1,1020 @@
+CONTEXTPACK — Workflow Studio / Constructor IA
+Cierre de sesión — 23/06/2026 — después de fix39e validado completo
+1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+No inventar código.
+No asumir que el código quedó igual que en el chat.
+No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Cambios mínimos, precisos y profesionales.
+Entregar correcciones como ZIP con estructura real de carpetas.
+Incluir LEEME en cada ZIP correctivo.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No tocar líneas estables salvo bug real explícito.
+No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+No tocar SMTP/email.send ahora salvo que Omar lo pida.
+Antes de cada fix revisar el ZIP/código real.
+No usar fixes sueltos viejos si el ZIP completo nuevo ya los contiene.
+2. Procedimiento habitual
+
+Cuando Omar cierre sesión:
+
+Pide ContextPack y Prompt.
+Guarda el proyecto actualizado.
+Sube el proyecto a GitHub.
+En la próxima sesión pasa:
+ContextPack
+Prompt
+ZIP actualizado del proyecto desde GitHub
+ZIP adicional solo si corresponde
+
+En la próxima sesión, no proponer código hasta recibir y revisar el ZIP actualizado.
+
+3. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+ASP.NET WebForms
+.NET Framework 4.8
+C#
+SQL Server
+Una sola base
+Una conexión DefaultConnection
+Motor propio de workflows
+Grafos visuales persistidos en SQL
+Nodos ejecutados por handlers IManejadorNodo
+Variables técnicas wf.*
+Variables de negocio biz.*
+Constructor IA offline/local con ML.NET + CSV + modelo externo
+Sin OpenAI API
+Sin Ollama
+Sin dependencia externa para IA
+
+El sistema ya funciona en servidores reales de la empresa.
+
+4. Estado estable previo
+
+Ya estaban cerrados antes de esta sesión:
+
+fix19  — Notificaciones por usuario
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+fix24f — Selector buscable de usuarios
+fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+fix26  — Validador funcional del constructor
+fix27  — Solicitud HTTP en Constructor IA
+fix28  — Consulta SQL en Constructor IA
+fix28b — SELECT con resultados visibles en DatosContexto
+fix29  — Logger en Constructor IA
+fix29b — Inspector Logger Level Warn correcto
+fix30  — Guardar / Quitar variable state.vars
+fix30b — UX Guardar variable simple + avanzado JSON
+fix30c — Quitar propiedad dentro de objeto JSON
+fix31  — UX Inspector / Asistente IA colapsado
+fix32  — Demora / Delay ya existente y validado
+fix33  — Manejador de Error en Constructor IA
+fix34  — Reintentar en Constructor IA
+fix35  — Archivo Leer / Escribir en Constructor IA
+fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+5. Esta sesión: fixes aplicados y validados
+
+En esta sesión quedaron cerrados o tratados:
+
+fix37  — WF_Instancias.aspx: Logs y DatosContexto redimensionables
+fix38  — WF_Definiciones.aspx: filtro por Id exacto si el filtro es numérico
+fix39a — Intento de agregar “Cuándo” a Validar condición
+fix39a rollback — Se descartó fix39a porque empeoraba la UX
+fix39b — Constructor IA en 3 columnas, ramas y datos clickeables
+fix39c — Ramas anidadas visibles recursivamente
+fix39d — UX contextual: ocultar “Cuándo” cuando la rama ya fue elegida por clic
+fix39e — Aplicador al canvas con ramas profundas recursivas
+6. fix37 — WF_Instancias Logs / DatosContexto redimensionables
+
+Estado:
+
+CERRADO / VALIDADO
+
+Archivo entregado:
+
+fix37_instancias_logs_datos_resizable.zip
+
+Archivos modificados:
+
+WorkFlow-main/WF_Instancias.aspx
+
+Qué hizo:
+
+Agrandó las cajas de DatosContexto y Logs.
+Permitió redimensionarlas verticalmente con resize: vertical.
+Agregó leyenda:
+Arrastrá la esquina inferior derecha para agrandar
+
+Validación:
+
+Omar validó visualmente en imágenes 1 y 2.
+No tocó code-behind, designer, SQL, motor, canvas, handlers ni nada estable.
+7. fix38 — WF_Definiciones filtro por Id exacto
+
+Estado:
+
+CERRADO / VALIDADO
+
+Archivo entregado:
+
+fix38_definiciones_filtro_id_exacto.zip
+
+Archivos modificados:
+
+WorkFlow-main/WF_Definiciones.aspx
+WorkFlow-main/WF_Definiciones.aspx.cs
+
+Problema:
+
+Al llegar a:
+
+WF_Definiciones.aspx?defId=8164
+
+la grilla mostraba también definiciones cuyo Código contenía 8164.
+
+Ejemplo:
+
+Id 8149 — Código WF-20260619-181641
+Id 8164 — Código WF-20260622-085252
+
+Corrección:
+
+Si el filtro es numérico, filtra por Id exacto.
+Si el filtro no es numérico, mantiene búsqueda por Código.
+Cambió etiqueta a:
+Filtrar por Id / código
+
+Validación:
+
+Omar probó defId=8164.
+La grilla mostró solo la definición Id 8164.
+8. fix39a — intento descartado
+
+Estado:
+
+DESCARTADO / ROLLBACK APLICADO
+
+Archivo entregado:
+
+fix39a_constructor_condicion_en_rama.zip
+
+Qué intentaba:
+
+Agregar el selector Cuándo también a Validar condición.
+
+Problema:
+
+Empeoró la UX.
+No resolvía de raíz el problema.
+Omar observó correctamente que lo natural era hacer clic directamente en SI CUMPLE / NO CUMPLE, no elegir en combos.
+
+Rollback entregado:
+
+fix39a_rollback_constructor_ia.zip
+
+Archivos restaurados:
+
+WorkFlow-main/WorkflowUI.aspx
+WorkFlow-main/Scripts/workflow.ai.assistant.js
+
+Conclusión:
+
+No continuar con la idea de sumar combos.
+El camino correcto es selección visual de rama activa.
+9. Decisión UX importante tomada
+
+Omar propuso algo clave:
+
+Hacer clic en SI CUMPLE / NO CUMPLE para decidir dónde se agrega el próximo paso.
+Hacer clic en APROBADO / NO APTO para decidir dónde se agrega el próximo paso.
+Hacer clic en un dato disponible para cargarlo en el formulario derecho.
+
+Conclusión acordada:
+
+La UX correcta del Constructor IA debe ser visual, no basada en combos largos.
+
+Esto llevó a fix39b / fix39c / fix39d.
+
+10. fix39b — Constructor IA en 3 columnas
+
+Estado:
+
+APLICADO / VALIDADO VISUALMENTE CON AJUSTES POSTERIORES
+
+Archivo entregado:
+
+fix39b_constructor_3_columnas_ramas_datos.zip
+
+Archivos modificados:
+
+WorkFlow-main/WorkflowUI.aspx
+WorkFlow-main/Scripts/workflow.ai.assistant.js
+WorkFlow-main/Styles/workflow.ai.assistant.css
+
+Qué hizo:
+
+Constructor IA modo amplio en 3 columnas:
+
+Izquierda: pasos, estructura y ramas
+Centro: datos disponibles siempre visibles
+Derecha: formulario del paso actual
+
+Agregó:
+
+Ramas clickeables:
+SI CUMPLE
+NO CUMPLE
+APROBADO / APTO
+RECHAZADO / NO APTO
+Datos disponibles clickeables:
+En IF cargan campo a validar.
+En Logger insertan ${campo}.
+En Guardar variable cargan valor.
+En Archivo/HTTP/SQL/Notificación insertan o cargan donde corresponde.
+Cartel:
+Agregando próximo paso en...
+
+Problema detectado:
+
+Las condiciones o tareas humanas dentro de ramas no dibujaban sus propias subramas.
+Eso se resolvió con fix39c.
+11. fix39c — ramas anidadas visibles
+
+Estado:
+
+CERRADO / VALIDADO VISUALMENTE
+
+Archivo entregado:
+
+fix39c_constructor_ramas_anidadas.zip
+
+Archivo modificado:
+
+WorkFlow-main/Scripts/workflow.ai.assistant.js
+
+Problema:
+
+Si se agregaba una condición dentro de una rama, se veía el nodo condición, pero no aparecían sus propias ramas:
+
+SI CUMPLE
+NO CUMPLE
+
+Corrección:
+
+Renderizado recursivo de ramas.
+Una condición dentro de otra rama muestra sus ramas.
+Una tarea humana dentro de una rama muestra:
+APROBADO / APTO
+RECHAZADO / NO APTO
+12. fix39d — UX contextual
+
+Estado:
+
+APLICADO / VALIDADO EN USO
+
+Archivo entregado:
+
+fix39d_constructor_ux_contextual.zip
+
+Archivos modificados:
+
+WorkFlow-main/Scripts/workflow.ai.assistant.js
+WorkFlow-main/Styles/workflow.ai.assistant.css
+
+Qué corrigió:
+
+Si el usuario selecciona visualmente:
+
+SI CUMPLE
+NO CUMPLE
+APROBADO / APTO
+RECHAZADO / NO APTO
+
+entonces ya no corresponde mostrar el combo Cuándo, porque el sistema ya sabe dónde está parado.
+
+Regla implementada:
+
+Si el contexto fue elegido por clic visual, ocultar “Cuándo”.
+Si está en flujo principal o editando un paso existente, mantener “Cuándo” como respaldo.
+
+También compactó algo la vista.
+
+13. Tema futuro importante: IF compuesto
+
+Omar planteó que el IF actual está limitado:
+
+campo operador valor
+
+Ejemplo:
+
+biz.notaCredito.total > 200000
+
+Pero un workflow real necesita condiciones compuestas:
+
+CAE no está vacío
+Y total > 200000
+Y itemsCount > 0
+
+O:
+
+CAE no está vacío
+O comprobante asociado informado
+
+Decisión:
+
+No mezclar con fix39d/fix39e. Dejar como mejora funcional futura:
+
+fix40 — IF compuesto / Condición compuesta
+
+Alcance pensado:
+
+varias reglas dentro del mismo IF
+modo:
+todas las reglas deben cumplirse = Y / AND
+cualquiera debe cumplirse = O / OR
+operadores:
+igual
+distinto
+mayor
+menor
+mayor o igual
+menor o igual
+contiene
+no contiene
+está vacío
+no está vacío
+verdadero
+falso
+valor puede ser:
+texto fijo
+número
+fecha
+otro campo del contexto
+
+Ejemplo deseado:
+
+Condición: Validar NC completa
+
+Modo:
+Todas deben cumplirse
+
+Reglas:
+1. biz.notaCredito.cae no está vacío
+2. biz.notaCredito.total mayor que 200000
+3. biz.notaCredito.itemsCount mayor que 0
+
+Antes de implementar hay que revisar el handler real control.if, porque puede ser necesario extender el motor/handler o generar internamente estructuras compatibles.
+
+14. fix39e — Aplicar ramas profundas al canvas
+
+Estado:
+
+CERRADO / VALIDADO COMPLETO END-TO-END
+
+Archivo entregado:
+
+fix39e_constructor_aplicar_ramas_profundas.zip
+
+Archivo modificado:
+
+WorkFlow-main/Scripts/workflow.ai.assistant.js
+
+Problema:
+
+El Constructor visual armaba bien la estructura y decía:
+
+Sin advertencias funcionales.
+La estructura del flujo se ve consistente.
+
+Pero al aplicar al canvas se perdían ramas profundas.
+
+Ejemplo: la estructura contenía:
+
+COMPRAS APTO / NO APTO
+DIR_GENERAL APTO / NO APTO
+ADM_FIN APTO / NO APTO
+
+pero el canvas dibujaba solo una parte.
+
+Corrección:
+
+buildStructuredGuidePlan ahora recorre recursivamente:
+condiciones
+ramas SI/NO
+tareas humanas
+ramas APTO/NO APTO
+varios pasos consecutivos dentro de cada rama profunda
+finales independientes por rama
+
+No tocó:
+
+motor
+handlers
+canvas UI
+CSS
+WorkflowUI.aspx
+FACTURA_AR
+NC_AR
+HSubFlow.cs
+SMTP/email.send
+SQL
+
+Validación de sintaxis:
+
+node --check Scripts/workflow.ai.assistant.js
+15. Caso integral FIX39E armado
+
+Flujo probado:
+
+Cargar NC
+→ IF CAE no vacío
+   ├─ NO:
+   │  → Notificar COMPRAS
+   │  → Tarea COMPRAS
+   │     ├─ APTO:
+   │     │  → Guardar variable CORREGIDA_COMPRAS
+   │     │  → Fin
+   │     └─ NO APTO:
+   │        → Guardar variable RECHAZADA_SIN_CAE
+   │        → Logger Warn
+   │        → Fin
+   │
+   └─ SI:
+      → IF total > 200000
+         ├─ SI:
+         │  → Tarea DIR_GENERAL
+         │     ├─ APTO:
+         │     │  → Guardar variable APROBADA_DIRECCION
+         │     │  → Reintentar
+         │     │  → HTTP GET /Api/Ping.ashx
+         │     │  → Archivo escribir C:\Temp\fix39e_resumen.txt
+         │     │  → Archivo leer C:\Temp\fix39e_resumen.txt
+         │     │  → Logger Info
+         │     │  → Fin
+         │     └─ NO APTO:
+         │        → Guardar variable RECHAZADA_DIRECCION
+         │        → Notificar COMPRAS
+         │        → Logger Warn
+         │        → Fin
+         │
+         └─ NO:
+            → Tarea ADM_FIN
+               ├─ APTO:
+               │  → Guardar variable APROBADA_ADMINISTRACION
+               │  → Demora 1000 ms
+               │  → Archivo escribir C:\Temp\fix39e_resumen_admin.txt
+               │  → Fin
+               └─ NO APTO:
+                  → Guardar variable RECHAZADA_ADMINISTRACION
+                  → Logger Info
+                  → Fin
+16. Definiciones e instancias de prueba fix39e
+Ruta 1 — Dirección APTO
+
+Definición:
+
+WF-20260623-115726
+defId=9168
+
+Instancia:
+
+160505
+
+Ruta:
+
+CAE OK
+total > 200000 = True
+DIR_GENERAL
+APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = APROBADA_DIRECCION
+payload.status = 200
+file.write.lastPath = C:\Temp\fix39e_resumen.txt
+file.read.lastPath = C:\Temp\fix39e_resumen.txt
+logger.last.message = FIX39E aprobada por Dirección...
+
+Archivo físico generado:
+
+C:\Temp\fix39e_resumen.txt
+
+Contenido validado:
+
+FIX39E - Resumen
+Instancia=160505
+Estado workflow=Finalizado
+Estado demo=APROBADA_DIRECCION
+Resultado humano=apto
+CAE=70010265448347
+Total=412247
+HTTP Status=200
+Ruta 2 — CAE faltante / COMPRAS APTO
+
+Definición:
+
+WF-20260623-122037
+defId=9169
+
+Instancia:
+
+160506
+
+Se forzó el CAE usando:
+
+biz.notaCredito.cae_prueba_faltante
+
+Ruta:
+
+CAE false
+Notificar COMPRAS
+Tarea COMPRAS
+APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = CORREGIDA_COMPRAS
+Ruta 3 — CAE faltante / COMPRAS NO APTO
+
+Definición:
+
+WF-20260623-122037
+defId=9169
+
+Instancia:
+
+160507
+
+Ruta:
+
+CAE false
+Notificar COMPRAS
+Tarea COMPRAS
+NO APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = RECHAZADA_SIN_CAE
+logger.last.level = Warn
+logger.last.message = FIX39E: Compras rechazó la NC sin CAE...
+Ruta 4 — Dirección NO APTO
+
+Definición:
+
+WF-20260623-125444
+defId=9170
+
+Instancia:
+
+160508
+
+Ruta:
+
+CAE OK
+total > 200000 = True
+DIR_GENERAL
+NO APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = RECHAZADA_DIRECCION
+notify.last.destino = COMPRAS
+notify.last.title = FIX39E - NC rechazada por Dirección
+logger.last.level = Warn
+logger.last.message = FIX39E rechazada por Dirección...
+Ruta 5 — Administración APTO
+
+Definición:
+
+WF-20260623-132807
+defId=9171
+
+Se forzó importe con:
+
+biz.notaCredito.total > 999999
+
+Instancia:
+
+160509
+
+Ruta:
+
+CAE OK
+412247 > 999999 = False
+ADM_FIN
+APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = APROBADA_ADMINISTRACION
+control.delay OK
+file.write OK
+file.write.lastPath = C:\Temp\fix39e_resumen_admin.txt
+
+Archivo físico generado:
+
+C:\Temp\fix39e_resumen_admin.txt
+
+Contenido validado:
+
+FIX39E - Administración
+Instancia=160509
+Estado=APROBADA_ADMINISTRACION
+Resultado humano=apto
+CAE=70010265448347
+Total=412247
+Ruta 6 — Administración NO APTO
+
+Definición:
+
+WF-20260623-132807
+defId=9171
+
+Instancia:
+
+160510
+
+Ruta:
+
+CAE OK
+412247 > 999999 = False
+ADM_FIN
+NO APTO
+
+Resultado:
+
+Finalizado
+biz.demo.fix39e.estado = RECHAZADA_ADMINISTRACION
+logger.last.level = Info
+logger.last.message = FIX39E rechazada por Administración...
+17. Conclusión de fix39e
+
+fix39e queda:
+
+CERRADO
+VALIDADO COMPLETO
+END-TO-END
+
+Quedó validado:
+
+Constructor IA visual
+→ estructura profunda
+→ aplicación completa al canvas
+→ guardado SQL
+→ ejecución real del motor
+→ doc.load NC_AR
+→ control.if SI/NO
+→ human.task
+→ reanudación
+→ wf.tarea.resultado APTO/NO_APTO
+→ state.vars
+→ util.notify
+→ control.retry
+→ http.request
+→ file.write
+→ file.read
+→ control.delay
+→ util.logger
+→ util.end
+
+Este es un hito importante del proyecto.
+
+18. Cosas a no tocar salvo bug real
+
+No tocar salvo bug real explícito:
+
+WorkflowUI canvas/aristas/zoom/minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+notificaciones fix19
+SMTP/email.send
+HSubFlow.cs
+handlers ya validados
+fix37
+fix38
+fix39e
+19. Pendientes futuros detectados
+19.1 Limpiar texto residual “Agregar paso:”
+
+Durante algunas frases apareció texto suelto:
+
+Agregar paso:
+
+No rompió el plan ni el canvas, pero es feo.
+
+Pendiente futuro:
+
+Limpiar texto residual generado por el Constructor IA.
+
+No urgente.
+
+19.2 IF compuesto
+
+Pendiente importante:
+
+fix40 — IF compuesto / Condición compuesta
+
+Debe permitir:
+
+CAE no está vacío Y total > 200000
+CAE no está vacío O comprobante asociado informado
+
+No implementarlo sin revisar handler real control.if.
+
+19.3 UX Constructor IA
+
+Aunque fix39b/fix39d mejoraron mucho, se puede seguir puliendo:
+
+compactar más algunas tarjetas
+mejorar navegación en flujos grandes
+mejorar visualización de paso común posterior a ramas
+mantener datos disponibles siempre visibles y cómodos
+seguir reduciendo combos innecesarios
+
+No hacer cambios grandes sin conversar.
+
+19.4 Mapa visual de instancia / expediente
+
+Pendiente futuro importante:
+
+Crear un visor visual de ejecución de instancia usando el grafo de la definición.
+
+Idea:
+
+WF_Instancia_Mapa.aspx?id=...
+
+Debe mostrar por nodo:
+
+si pasó o no
+estado del nodo
+rama tomada
+tareas creadas
+responsable / rol / usuario
+fechas
+tiempos
+logs asociados
+documentos asociados
+estado actual de la instancia
+errores
+
+No implementar ahora.
+
+20. Próximo paso recomendado
+
+Después de subir el ZIP nuevo a GitHub, la próxima sesión debería empezar revisando el ZIP actualizado.
+
+Opciones razonables:
+
+A. Empezar fix40 — IF compuesto / Condición compuesta.
+B. Pulir texto residual “Agregar paso:”.
+C. Seguir puliendo UX del Constructor IA con base en fix39e ya estable.
+D. Preparar una demo formal del Constructor IA usando FIX39E.
+E. Empezar diseño del Mapa visual de instancia.
+
+Recomendación profesional:
+
+No tocar fix39e salvo bug real.
+Próximo paso más valioso: analizar fix40 IF compuesto, pero primero revisar código real del ZIP.
+PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA
+
+Voy a pasarte:
+
+Este ContextPack.
+Este Prompt.
+El ZIP actualizado del proyecto Workflow Studio WebForms, generado desde GitHub con todos los fixes aplicados hasta fix39e.
+Si corresponde, cualquier ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+Reglas obligatorias
+No inventar nada.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Cambios mínimos y precisos.
+Siempre trabajar sobre código real del ZIP.
+No mandar “archivo completo” si no verificaste el archivo real actual.
+No asumir que el código quedó exactamente como en el chat.
+Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+Incluir LEEME en cada ZIP correctivo.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+Proponer siempre la mejor versión de entrada.
+No volver atrás sobre temas ya cerrados.
+Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+No tocar SMTP/email.send ahora, salvo que yo lo pida.
+No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+Estado estable actual
+
+Está cerrado y validado:
+
+fix19  — Notificaciones por usuario
+fix22  — Constructor amplio
+fix22b — Modificar pasos
+fix22c — Frase segura / datos respetados
+fix23  — Catálogo de salidas / datos disponibles
+fix24  — IF guiado con FieldPicker y operadores por tipo
+fix24b — Operadores numéricos
+fix24c — Recursión al agregar IF
+fix24d — Datos disponibles último arriba
+fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+fix24f — Selector buscable de usuarios
+fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+fix26  — Validador funcional del constructor
+fix27  — Solicitud HTTP en Constructor IA
+fix28  — Consulta SQL en Constructor IA
+fix28b — SELECT con resultados visibles en DatosContexto
+fix29  — Logger en Constructor IA
+fix29b — Inspector Logger Level Warn correcto
+fix30  — Guardar / Quitar variable state.vars
+fix30b — UX Guardar variable simple + avanzado JSON
+fix30c — Quitar propiedad dentro de objeto JSON
+fix31  — UX Inspector / Asistente IA colapsado
+fix32  — Demora / Delay ya existente y validado
+fix33  — Manejador de Error en Constructor IA
+fix34  — Reintentar en Constructor IA
+fix35  — Archivo Leer / Escribir en Constructor IA
+fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+fix37  — Logs y DatosContexto redimensionables en WF_Instancias.aspx
+fix38  — WF_Definiciones filtra por Id exacto si el filtro es numérico
+fix39a — descartado y revertido
+fix39b — Constructor IA modo amplio en 3 columnas
+fix39c — Ramas anidadas recursivas visibles
+fix39d — UX contextual, ocultar Cuándo si la rama ya fue elegida por clic
+fix39e — Aplicar ramas profundas al canvas y validar ejecución integral completa
+No tocar salvo bug real
+notificaciones fix19
+canvas/aristas/zoom/minimapa
+motor de ejecución
+FACTURA_AR
+NC_AR
+extractores documentales
+SMTP
+email.send/HEmailSend
+HSubFlow.cs
+WorkflowRuntime
+handlers ya validados
+fix37
+fix38
+fix39e
+Base de trabajo
+
+Tomar como base el ZIP nuevo que voy a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta fix39e.
+
+No uses fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+Validación fix39e
+
+fix39e quedó validado completo con flujo integral FIX39E.
+
+Rutas reales probadas:
+
+1. CAE OK + total > 200000 + DIR_GENERAL APTO
+2. CAE faltante + COMPRAS APTO
+3. CAE faltante + COMPRAS NO APTO
+4. CAE OK + total > 200000 + DIR_GENERAL NO APTO
+5. CAE OK + total forzado > 999999 false + ADM_FIN APTO
+6. CAE OK + total forzado > 999999 false + ADM_FIN NO APTO
+
+Instancias:
+
+160505 — DIR_GENERAL APTO — APROBADA_DIRECCION
+160506 — COMPRAS APTO — CORREGIDA_COMPRAS
+160507 — COMPRAS NO APTO — RECHAZADA_SIN_CAE
+160508 — DIR_GENERAL NO APTO — RECHAZADA_DIRECCION
+160509 — ADM_FIN APTO — APROBADA_ADMINISTRACION
+160510 — ADM_FIN NO APTO — RECHAZADA_ADMINISTRACION
+
+Definiciones:
+
+9168 — WF-20260623-115726
+9169 — WF-20260623-122037
+9170 — WF-20260623-125444
+9171 — WF-20260623-132807
+
+Resultado:
+
+Constructor IA → canvas → SQL → motor → tareas humanas → ramas profundas → finalización
+
+quedó validado.
+
+Pendientes sugeridos
+
+Opciones para seguir:
+
+A. fix40 — IF compuesto / Condición compuesta.
+B. Pulido menor: limpiar texto residual “Agregar paso:”.
+C. Mejoras UX del Constructor IA, sin tocar lógica estable.
+D. Preparar demo formal basada en FIX39E.
+E. Diseñar Mapa visual de instancia / expediente.
+Recomendación inicial
+
+La próxima sesión debería arrancar así:
+
+Confirmar lectura de ContextPack.
+Esperar ZIP actualizado.
+Revisar archivos reales.
+Si Omar quiere seguir producto, recomendar:
+fix40 — IF compuesto / Condición compuesta
+
+Pero antes de implementar, analizar:
+
+control.if actual
+parámetros esperados por HControlIf o handler equivalente
+cómo se persisten condiciones en JSON
+cómo mantener compatibilidad con IF simple existente
+cómo mostrar varias reglas en Constructor IA
+cómo traducir reglas Y/O al motor sin romper definiciones anteriores
+Criterio para fix40
+
+No hacerlo como parche rápido.
+
+Debe ser compatible con lo actual:
+
+IF simple actual debe seguir funcionando.
+IF compuesto debe ser una extensión.
+
+Diseño esperado:
+
+Condición: Validar NC completa
+
+Modo:
+Todas las reglas deben cumplirse / AND
+o
+Cualquiera de las reglas debe cumplirse / OR
+
+Reglas:
+1. biz.notaCredito.cae no está vacío
+2. biz.notaCredito.total mayor que 200000
+3. biz.notaCredito.itemsCount mayor que 0
+
+No tocar motor sin revisar código real.
+
+Forma de entrega esperada
+
+Cuando se haga un fix:
+
+fixXX_nombre_descriptivo.zip
+
+Debe incluir:
+
+archivos completos modificados
+LEEME_fixXX.txt
+estructura real de carpetas
+Criterio final
+
+No alcanza con que compile.
+
+Debe servir operativamente:
+
+que el usuario no tenga que memorizar variables
+que pueda elegir campos reales
+que pueda entender ramas SI/NO
+que pueda elegir usuarios sin escribirlos manualmente
+que pueda definir decisiones humanas sin confundirse con IF automático
+que pueda validar funcionalmente lo que arma
+que pueda usar HTTP, SQL, Logger, variables, delay, errores, retry, archivos y subflujos
+que los resultados útiles queden visibles en DatosContexto
+que el constructor ayude a armar un flujo real y no solo una frase larga
