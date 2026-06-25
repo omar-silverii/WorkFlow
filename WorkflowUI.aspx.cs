@@ -235,7 +235,7 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
             var chars = new System.Text.StringBuilder();
             foreach (var c in normalized)
             {
-                var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);    
+                var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
                 if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
                 {
                     if (char.IsLetterOrDigit(c)) chars.Append(c);
@@ -312,11 +312,19 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                         // Acepta:
                         //  - legacy: Parameters.expression
                         //  - simple: Parameters.field + Parameters.op (+Parameters.value opcional)
+                        //  - compuesto fix40: Parameters.rulesMode + Parameters.rules[]
                         var hasExpr = !string.IsNullOrWhiteSpace((string)par["expression"]);
                         var hasField = !string.IsNullOrWhiteSpace((string)par["field"]);
                         var hasOp = !string.IsNullOrWhiteSpace((string)par["op"]);
-                        if (!hasExpr && !(hasField && hasOp))
-                        { message = $"Nodo {id}: falta 'expression' (legacy) o 'field'+'op' (simple)."; return false; }
+                        var hasSimple = hasField && hasOp;
+                        var hasCompound = HasValidIfCompoundRules(par);
+
+                        if (!hasExpr && !hasSimple && !hasCompound)
+                        {
+                            message = $"Nodo {id}: falta condición IF: 'expression' (legacy), 'field'+'op' (simple) o 'rules[]' (compuesta).";
+                            return false;
+                        }
+
                         perNodeAllowed[id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "true", "false" };
                     }
 
@@ -406,6 +414,29 @@ SELECT CAST(SCOPE_IDENTITY() AS INT);", cn))
                 message = "JSON inválido: " + ex.Message;
                 return false;
             }
+        }
+
+
+        private static bool HasValidIfCompoundRules(JObject par)
+        {
+            if (par == null) return false;
+
+            var rules = par["rules"] as JArray;
+            if (rules == null || rules.Count == 0) return false;
+
+            foreach (var item in rules)
+            {
+                var r = item as JObject;
+                if (r == null) continue;
+
+                var field = ((string)r["field"] ?? (string)r["fieldPath"] ?? "").Trim();
+                var op = ((string)r["op"] ?? (string)r["operator"] ?? "").Trim();
+
+                if (!string.IsNullOrWhiteSpace(field) && !string.IsNullOrWhiteSpace(op))
+                    return true;
+            }
+
+            return false;
         }
 
         // ================= API PARA EL JS =================

@@ -2,6 +2,7 @@
 // Asistente IA del editor: interpreta intención con ML.NET local/offline.
 // fix39c: corrige render recursivo de ramas anidadas sobre fix39b.
 // fix39b: Constructor IA en 3 columnas, rama activa visual y datos clickeables sin tocar motor.
+// fix41: limpieza defensiva de texto residual del Constructor IA antes de armar/interpretar frase.
 (function () {
     var lastPlan = null;
 
@@ -690,6 +691,7 @@
     function conditionOperatorOptions(fieldType, selectedValue) {
         var type = normalizeFieldType(fieldType);
         var selected = selectedValue || '';
+        if (selected === '==') selected = '=';
         var items;
         if (type === 'numero') {
             items = [
@@ -741,11 +743,12 @@
 
     function operatorNeedsValue(op) {
         op = String(op || '');
-        return !(op === 'not_empty' || op === 'empty' || op === 'true' || op === 'false');
+        return !(op === 'not_empty' || op === 'empty' || op === 'exists' || op === 'not_exists' || op === 'true' || op === 'false');
     }
 
     function operatorPhrase(op) {
         var map = {
+            '==': 'igual a',
             '>': 'mayor que',
             '>=': 'mayor o igual que',
             '<': 'menor que',
@@ -754,12 +757,170 @@
             '!=': 'distinto de',
             'contains': 'contiene',
             'not_contains': 'no contiene',
+            'exists': 'existe',
+            'not_exists': 'no existe',
             'not_empty': 'no está vacío',
             'empty': 'está vacío',
             'true': 'es verdadero',
             'false': 'es falso'
         };
         return map[String(op || '')] || String(op || '');
+    }
+
+    function conditionRulesModeText(mode) {
+        mode = String(mode || 'all').toLowerCase();
+        return (mode === 'any' || mode === 'or') ? 'cualquiera de las reglas' : 'todas las reglas';
+    }
+
+    function normalizeConditionRule(rule) {
+        rule = rule || {};
+        var fieldPath = String(rule.fieldPath || rule.field || '').trim();
+        if (!fieldPath) fieldPath = defaultConditionField();
+        var meta = findAvailableField(fieldPath) || {};
+        return {
+            fieldPath: fieldPath,
+            fieldLabel: rule.fieldLabel || meta.label || fieldPath,
+            fieldType: rule.fieldType || meta.type || 'texto',
+            operator: rule.operator || rule.op || 'not_empty',
+            value: rule.value == null ? '' : String(rule.value),
+            transform: rule.transform || ''
+        };
+    }
+
+    function conditionRuleList(step) {
+        var src = step && step.rules;
+        if (!src || !src.length) return [];
+        var out = [];
+        for (var i = 0; i < src.length; i++) {
+            var r = normalizeConditionRule(src[i]);
+            if (r.fieldPath) out.push(r);
+        }
+        return out;
+    }
+
+    function defaultCompoundRule(path) {
+        return normalizeConditionRule({ fieldPath: path || defaultConditionField(), operator: 'not_empty', value: '' });
+    }
+
+    function conditionRulePhrase(rule) {
+        var r = normalizeConditionRule(rule);
+        var text = (r.fieldLabel || r.fieldPath) + ' ' + operatorPhrase(r.operator);
+        if (operatorNeedsValue(r.operator) && String(r.value || '').trim()) text += ' ' + String(r.value || '').trim();
+        return text;
+    }
+
+    function compoundRulesText(step) {
+        var rules = conditionRuleList(step);
+        if (!rules.length) return '';
+        var parts = rules.map(conditionRulePhrase);
+        return 'validar que ' + conditionRulesModeText(step.rulesMode) + ' se cumplan: ' + parts.join('; ');
+    }
+
+    function conditionRuleRowHtml(rule, index) {
+        var r = normalizeConditionRule(rule);
+        var meta = findAvailableField(r.fieldPath) || { type: r.fieldType || 'texto', path: r.fieldPath };
+        var needs = operatorNeedsValue(r.operator);
+        var html = '<div class="wf-ai-compound-rule" data-rule-index="' + index + '">';
+        html += '<div class="wf-ai-compound-rule-head">Regla ' + (index + 1) + '<button type="button" class="btn wf-ai-compound-remove" data-rule-remove="' + index + '">Quitar</button></div>';
+        html += '<div class="wf-ai-guide-row"><label>Campo</label><select id="wfAiRuleField_' + index + '" class="wf-ai-select wf-ai-rule-field" data-rule-index="' + index + '">' + availableFieldOptions(r.fieldPath) + '</select></div>';
+        html += '<div class="wf-ai-guide-row"><label>Operador</label><select id="wfAiRuleOperator_' + index + '" class="wf-ai-select wf-ai-rule-operator" data-rule-index="' + index + '">' + conditionOperatorOptions(meta.type, r.operator) + '</select></div>';
+        html += '<div class="wf-ai-guide-row wf-ai-rule-value-row" id="wfAiRuleValueRow_' + index + '"' + (needs ? '' : ' style="display:none"') + '><label>Valor</label><input id="wfAiRuleValue_' + index + '" class="wf-ai-input wf-ai-rule-value" value="' + htmlEncode(r.value || '') + '" placeholder="Ej.: 200000, texto, fecha o ${otro.campo}" /></div>';
+        html += '<div class="wf-ai-guide-hint" id="wfAiRuleHint_' + index + '">Tipo: ' + htmlEncode(meta.type || r.fieldType || 'texto') + ' · Campo técnico: ' + htmlEncode(meta.path || r.fieldPath || '') + '</div>';
+        html += '</div>';
+        return html;
+    }
+
+    function collectCompoundRulesFromForm() {
+        var box = $('wfAiCompoundRules');
+        if (!box) return [];
+        var rows = box.querySelectorAll('.wf-ai-compound-rule');
+        var rules = [];
+        Array.prototype.forEach.call(rows, function (row) {
+            var idx = row.getAttribute('data-rule-index');
+            var field = selectedText('wfAiRuleField_' + idx) || defaultConditionField();
+            var meta = findAvailableField(field) || {};
+            var op = selectedText('wfAiRuleOperator_' + idx) || 'not_empty';
+            var val = selectedText('wfAiRuleValue_' + idx) || '';
+            if (!field) return;
+            rules.push({
+                fieldPath: field,
+                fieldLabel: meta.label || field,
+                fieldType: meta.type || 'texto',
+                operator: op,
+                value: val
+            });
+        });
+        return rules;
+    }
+
+    function syncCompoundRuleRow(index) {
+        var field = $('wfAiRuleField_' + index);
+        var op = $('wfAiRuleOperator_' + index);
+        var valueRow = $('wfAiRuleValueRow_' + index);
+        var valueInput = $('wfAiRuleValue_' + index);
+        var hint = $('wfAiRuleHint_' + index);
+        if (!field || !op) return;
+
+        var meta = findAvailableField(field.value) || { type: 'texto', label: field.value, path: field.value };
+        var oldOp = op.value;
+        op.innerHTML = conditionOperatorOptions(meta.type, oldOp);
+        if (valueRow) valueRow.style.display = operatorNeedsValue(op.value) ? '' : 'none';
+        if (valueInput && !operatorNeedsValue(op.value)) valueInput.value = '';
+        if (hint) hint.textContent = 'Tipo: ' + (meta.type || 'texto') + ' · Campo técnico: ' + (meta.path || '');
+    }
+
+    function bindCompoundRulesUi() {
+        var box = $('wfAiCompoundRules');
+        if (!box) return;
+
+        Array.prototype.forEach.call(box.querySelectorAll('.wf-ai-rule-field'), function (sel) {
+            sel.addEventListener('change', function () { syncCompoundRuleRow(sel.getAttribute('data-rule-index')); });
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('.wf-ai-rule-operator'), function (sel) {
+            sel.addEventListener('change', function () { syncCompoundRuleRow(sel.getAttribute('data-rule-index')); });
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('[data-rule-remove]'), function (btn) {
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                var idx = parseInt(btn.getAttribute('data-rule-remove'), 10);
+                var rules = collectCompoundRulesFromForm();
+                if (!isNaN(idx)) rules.splice(idx, 1);
+                if (!rules.length) rules.push(defaultCompoundRule());
+                renderCompoundRules(rules);
+            });
+        });
+    }
+
+    function renderCompoundRules(rules) {
+        var box = $('wfAiCompoundRules');
+        if (!box) return;
+        rules = (rules && rules.length) ? rules : [defaultCompoundRule()];
+        var html = '';
+        for (var i = 0; i < rules.length; i++) html += conditionRuleRowHtml(rules[i], i);
+        box.innerHTML = html;
+        bindCompoundRulesUi();
+        for (var j = 0; j < rules.length; j++) syncCompoundRuleRow(j);
+    }
+
+    function syncConditionModeFields() {
+        var mode = selectedText('wfAiStepConditionMode') || 'simple';
+        var simpleBox = $('wfAiStepConditionSimpleBox');
+        var compoundBox = $('wfAiStepConditionCompoundBox');
+        if (simpleBox) simpleBox.style.display = mode === 'compound' ? 'none' : '';
+        if (compoundBox) compoundBox.style.display = mode === 'compound' ? '' : 'none';
+        if (mode === 'compound') {
+            var box = $('wfAiCompoundRules');
+            if (box && !box.querySelector('.wf-ai-compound-rule')) renderCompoundRules([defaultCompoundRule()]);
+        }
+    }
+
+    function applyAvailableFieldToCompoundRule(path) {
+        var rules = collectCompoundRulesFromForm();
+        var useReplace = !rules.length || (rules.length === 1 && !String(rules[0].value || '').trim());
+        if (useReplace) rules = [defaultCompoundRule(path)];
+        else rules.push(defaultCompoundRule(path));
+        renderCompoundRules(rules);
+        setStatus('Campo agregado a la condición compuesta: ' + path, 'ok');
     }
 
     function syncConditionFields() {
@@ -780,6 +941,15 @@
     }
 
     function conditionInfo(step) {
+        var compoundText = compoundRulesText(step);
+        if (compoundText) {
+            return {
+                text: compoundText,
+                trueLead: 'si se cumple la condición compuesta',
+                falseLead: 'si no se cumple la condición compuesta'
+            };
+        }
+
         if (step && step.fieldPath) {
             var meta = findAvailableField(step.fieldPath) || {};
             var label = step.fieldLabel || meta.label || step.fieldPath;
@@ -857,11 +1027,29 @@
 
     function findBranchOwnerIndex(step, stepIndex, ownerType) {
         if (!step) return -1;
-        if (step.branchSourceId) {
+
+        // fix40c: cuando el destino fue elegido por clic visual, branchSourceId llega
+        // desde el DOM como texto. Los ids internos de guideSteps suelen ser numéricos.
+        // Si se compara con ===, no matchea y el fallback termina asociando el paso
+        // a la última tarea/condición anterior, que puede ser otra rama profunda.
+        // Con source explícito, nunca hay que caer por fallback a otro dueño.
+        var explicitSourceId = step.branchSourceId !== undefined &&
+            step.branchSourceId !== null &&
+            String(step.branchSourceId) !== '';
+
+        if (explicitSourceId) {
+            var wanted = String(step.branchSourceId);
             for (var i = 0; i < guideSteps.length; i++) {
-                if (guideSteps[i] && guideSteps[i].id === step.branchSourceId && guideSteps[i].type === ownerType) return i;
+                if (guideSteps[i] &&
+                    String(guideSteps[i].id) === wanted &&
+                    guideSteps[i].type === ownerType) {
+                    return i;
+                }
             }
+            return -1;
         }
+
+        // Compatibilidad con pasos viejos sin branchSourceId: mantener el criterio previo.
         for (var j = stepIndex - 1; j >= 0; j--) {
             if (guideSteps[j] && guideSteps[j].type === ownerType) return j;
         }
@@ -997,10 +1185,16 @@
         var type = selectedText('wfAiStepType') || 'doc_load';
         var token = '${' + path + '}';
 
-        if (type === 'condition' && setSelectOrInputValue('wfAiStepField', path)) {
-            syncConditionFields();
-            setStatus('Campo cargado en la condición: ' + path, 'ok');
-            return;
+        if (type === 'condition') {
+            if ((selectedText('wfAiStepConditionMode') || 'simple') === 'compound') {
+                applyAvailableFieldToCompoundRule(path);
+                return;
+            }
+            if (setSelectOrInputValue('wfAiStepField', path)) {
+                syncConditionFields();
+                setStatus('Campo cargado en la condición: ' + path, 'ok');
+                return;
+            }
         }
 
         if (type === 'state_set') {
@@ -1235,6 +1429,26 @@
         return '';
     }
 
+    function cleanGuidePhraseText(text) {
+        var t = String(text == null ? '' : text);
+
+        // Defensa UX: en algunos recorridos/copias podía quedar texto de etiqueta del
+        // formulario dentro de la frase enviada al intérprete, por ejemplo "Agregar paso:".
+        // No cambia el grafo ni las acciones; solo limpia ruido antes de armar/interpretar.
+        t = t.replace(/(^|[\r\n,;.])\s*Agregar\s+paso\s*:\s*/gi, function (m, sep) {
+            return sep ? (sep + ' ') : '';
+        });
+
+        // Normalización suave para evitar dobles separadores después de limpiar etiquetas.
+        t = t.replace(/\s+,\s+/g, ', ')
+            .replace(/,\s*,+/g, ',')
+            .replace(/\s+\./g, '.')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+        return t;
+    }
+
     function buildIncrementalPhrase() {
         var parts = ['Quiero iniciar un flujo'];
         var ctx = { lastCondition: null, lastTaskRole: null, conditionsById: {}, tasksById: {}, branchesUsed: false, commonAfterBranchExplained: false };
@@ -1261,7 +1475,7 @@
             }
         });
 
-        return parts.join(', ') + '.';
+        return cleanGuidePhraseText(parts.join(', ') + '.');
     }
 
     function hasEndStep() {
@@ -1342,18 +1556,62 @@
         if (!guideSteps.length) return result;
 
         var maps = buildStructuredBranchMaps();
-        var mainIndexes = mainStepIndexesForValidation();
+        var allIndexes = [];
+        guideSteps.forEach(function (step, idx) {
+            if (step) allIndexes.push(idx);
+        });
+
+        function branchSourceKey(step) {
+            return String(step && step.branchSourceId || '');
+        }
+
+        function sameSequenceIndexes(idx) {
+            var base = guideSteps[idx];
+            if (!base) return [];
+            var baseIsBranch = isBranchChildStep(base);
+            var baseBranch = String(base.branch || '');
+            var baseSource = branchSourceKey(base);
+            var indexes = [];
+
+            guideSteps.forEach(function (candidate, ci) {
+                if (!candidate) return;
+                if (!baseIsBranch) {
+                    if (!isBranchChildStep(candidate)) indexes.push(ci);
+                    return;
+                }
+
+                if (String(candidate.branch || '') === baseBranch && branchSourceKey(candidate) === baseSource) {
+                    indexes.push(ci);
+                }
+            });
+
+            return indexes;
+        }
+
+        function nextIndexInSameSequence(idx) {
+            var indexes = sameSequenceIndexes(idx);
+            for (var i = 0; i < indexes.length; i++) {
+                if (indexes[i] === idx) return i + 1 < indexes.length ? indexes[i + 1] : -1;
+            }
+            return -1;
+        }
+
+        function hasTaskResultBranches(taskGroups) {
+            return !!(taskGroups && ((taskGroups.ok && taskGroups.ok.length) || (taskGroups.reject && taskGroups.reject.length)));
+        }
 
         if (!hasEndStep()) {
             pushUnique(result.warnings, 'Falta finalizar el flujo. Agregá “Finalizar flujo” como último paso para dejar la propuesta cerrada.');
         }
 
-        mainIndexes.forEach(function (idx, pos) {
+        allIndexes.forEach(function (idx) {
             var step = guideSteps[idx];
             if (!step) return;
 
-            if (step.type === 'end' && pos < mainIndexes.length - 1) {
-                pushUnique(result.warnings, 'Hay pasos comunes después de “Finalizar flujo”. Revisá el orden, porque esos pasos podrían quedar fuera del recorrido principal.');
+            var nextSameIdx = nextIndexInSameSequence(idx);
+
+            if (step.type === 'end' && nextSameIdx >= 0) {
+                pushUnique(result.warnings, 'Hay pasos después de “Finalizar flujo” en la misma rama/secuencia. Revisá el orden, porque esos pasos podrían quedar fuera del recorrido.');
             }
 
             if (step.type === 'doc_load' && isProbablyTestPath(step.path)) {
@@ -1361,7 +1619,14 @@
             }
 
             if (step.type === 'condition') {
-                if (operatorNeedsValue(step.operator) && !String(step.value || '').trim()) {
+                var compoundRules = conditionRuleList(step);
+                if (compoundRules.length) {
+                    compoundRules.forEach(function (r, ri) {
+                        if (operatorNeedsValue(r.operator) && !String(r.value || '').trim()) {
+                            pushUnique(result.warnings, stepShortName(step, idx) + ': la regla ' + (ri + 1) + ' necesita un valor.');
+                        }
+                    });
+                } else if (operatorNeedsValue(step.operator) && !String(step.value || '').trim()) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': el operador seleccionado necesita un valor.');
                 }
 
@@ -1369,9 +1634,8 @@
                 if (!condGroups.si.length) pushUnique(result.warnings, stepShortName(step, idx) + ': la rama SI está vacía. Si se cumple, continuará directo al siguiente paso común.');
                 if (!condGroups.no.length) pushUnique(result.warnings, stepShortName(step, idx) + ': la rama NO está vacía. Si no se cumple, continuará directo al siguiente paso común.');
 
-                var nextIdx = nextMainIndexAfter(mainIndexes, idx);
-                if ((condGroups.si.length || condGroups.no.length) && nextIdx >= 0 && guideSteps[nextIdx] && guideSteps[nextIdx].type !== 'end') {
-                    pushUnique(result.warnings, 'Después de ' + stepShortName(step, idx) + ', el paso común “' + createStepTitle(guideSteps[nextIdx]) + '” se ejecutará luego de cualquiera de las ramas.');
+                if ((condGroups.si.length || condGroups.no.length) && nextSameIdx >= 0 && guideSteps[nextSameIdx] && guideSteps[nextSameIdx].type !== 'end') {
+                    pushUnique(result.warnings, 'Después de ' + stepShortName(step, idx) + ', el paso común “' + createStepTitle(guideSteps[nextSameIdx]) + '” se ejecutará luego de cualquiera de las ramas de esa condición.');
                 }
             }
 
@@ -1380,8 +1644,10 @@
                     pushUnique(result.warnings, stepShortName(step, idx) + ': el usuario asignado no coincide con un usuario real del catálogo.');
                 }
 
-                var taskGroups = maps.tasks[idx] || null;
-                if (taskGroups && (taskGroups.ok.length || taskGroups.reject.length)) {
+                var taskGroups = maps.tasks[idx] || { ok: [], reject: [] };
+                var hasResultBranches = hasTaskResultBranches(taskGroups);
+
+                if (hasResultBranches) {
                     if (!taskGroups.ok.length) pushUnique(result.warnings, stepShortName(step, idx) + ': falta definir qué pasa si la tarea queda APROBADA/APTA.');
                     if (!taskGroups.reject.length) pushUnique(result.warnings, stepShortName(step, idx) + ': falta definir qué pasa si la tarea queda RECHAZADA/NO APTA.');
 
@@ -1395,14 +1661,15 @@
                         pushUnique(result.warnings, stepShortName(step, idx) + ': la rama RECHAZADO/NO APTO vuelve al mismo destino (' + humanDestinationText(step) + '). Revisá si corresponde.');
                     }
 
-                    var nextTaskIdx = nextMainIndexAfter(mainIndexes, idx);
-                    if (nextTaskIdx >= 0 && guideSteps[nextTaskIdx] && guideSteps[nextTaskIdx].type !== 'end') {
-                        pushUnique(result.warnings, 'Después de ' + stepShortName(step, idx) + ', el paso común “' + createStepTitle(guideSteps[nextTaskIdx]) + '” se ejecutará luego de cualquiera de los resultados humanos.');
+                    if (nextSameIdx >= 0 && guideSteps[nextSameIdx] && guideSteps[nextSameIdx].type !== 'end') {
+                        pushUnique(result.warnings, 'Después de ' + stepShortName(step, idx) + ', el paso común “' + createStepTitle(guideSteps[nextSameIdx]) + '” se ejecutará luego de cualquiera de los resultados humanos de esa tarea.');
                     }
+                } else if (nextSameIdx < 0) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': la tarea humana no tiene un paso posterior ni ramas APROBADO/RECHAZADO definidas. Agregá un paso de salida o elegí una rama de resultado.');
                 }
 
-                if (pos + 1 < mainIndexes.length) {
-                    var nextStep = guideSteps[mainIndexes[pos + 1]];
+                if (nextSameIdx >= 0) {
+                    var nextStep = guideSteps[nextSameIdx];
                     if (nextStep && nextStep.type === 'human_task' && humanDestinationKey(step) && humanDestinationKey(step) === humanDestinationKey(nextStep)) {
                         pushUnique(result.warnings, 'Hay dos tareas humanas consecutivas para el mismo destino (' + humanDestinationText(step) + '). Es válido si son etapas distintas, pero conviene que el objetivo/título lo deje claro.');
                     }
@@ -1417,28 +1684,28 @@
                 pushUnique(result.warnings, stepShortName(step, idx) + ': el usuario de la notificación no coincide con un usuario real del catálogo.');
             }
 
-
             if (step.type === 'http_request') {
                 if (!String(step.url || '').trim()) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la URL de la solicitud HTTP.');
-                } else if (/^https?:\/\//i.test(String(step.url || '')) && !/localhost|127\.0\.0\.1|intranet/i.test(String(step.url || ''))) {
+                } else if (/^https?:\/\//i.test(String(step.url || '')) && String(step.url || '').indexOf('localhost') < 0) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': la URL parece externa. Para intranet conviene usar una URL relativa o del servidor interno.');
                 }
             }
 
             if (step.type === 'sql_query') {
-                var q = String(step.query || '').trim();
-                if (!q) {
+                if (!String(step.query || '').trim()) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la consulta/comando SQL.');
                 }
-                if (/\b(DROP|TRUNCATE|ALTER)\b/i.test(q)) {
+                var sql = String(step.query || '').trim();
+                if (/\b(drop|truncate|alter)\b/i.test(sql)) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': el SQL contiene una instrucción peligrosa. Revisalo antes de ejecutar.');
                 }
-                if (/^\s*DELETE\b/i.test(q) && !/\bWHERE\b/i.test(q)) {
+                if (/\bdelete\b/i.test(sql) && !/\bwhere\b/i.test(sql)) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': DELETE sin WHERE puede afectar demasiados registros.');
                 }
-                if (parseJsonObjectOrEmpty(step.paramsJson || '') === null) {
-                    pushUnique(result.warnings, stepShortName(step, idx) + ': los parámetros SQL deben ser JSON válido, por ejemplo {"Id":150484}.');
+                if (String(step.paramsJson || '').trim()) {
+                    try { JSON.parse(step.paramsJson); }
+                    catch (e) { pushUnique(result.warnings, stepShortName(step, idx) + ': los parámetros SQL deben ser JSON válido, por ejemplo {"Id":150484}.'); }
                 }
             }
 
@@ -1453,7 +1720,7 @@
             if (step.type === 'file_write') {
                 if (!String(step.path || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la ruta del archivo a escribir.');
                 else if (isProbablyTestPath(step.path)) pushUnique(result.warnings, stepShortName(step, idx) + ': la ruta del archivo parece una ruta de prueba (“' + String(step.path || '').trim() + '”).');
-                if (step.sourceMode === 'context') {
+                if (step.contentMode === 'fromVar') {
                     if (!String(step.origen || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la variable origen para escribir.');
                     else if (!isValidStatePath(step.origen)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable origen tiene formato inválido.');
                 } else if (!String(step.content || '').trim()) {
@@ -1468,28 +1735,25 @@
                 if (step.alias && !subflowAliasIsValid(step.alias)) pushUnique(result.warnings, stepShortName(step, idx) + ': el alias debe usar letras/números/_ y no puede empezar con número.');
                 var md = parseInt(step.maxDepth || '10', 10);
                 if (isNaN(md) || md < 1 || md > 50) pushUnique(result.warnings, stepShortName(step, idx) + ': la profundidad máxima debe estar entre 1 y 50.');
-                var aliasCount = {};
-                guideSteps.forEach(function (x) {
-                    var a = x && x.type === 'subflow' ? String(x.alias || '').trim() : '';
-                    if (a) aliasCount[normalizeKey(a)] = (aliasCount[normalizeKey(a)] || 0) + 1;
-                });
-                if (step.alias && aliasCount[normalizeKey(step.alias)] > 1) pushUnique(result.warnings, stepShortName(step, idx) + ': hay otro subflujo con el mismo alias. Conviene usar alias únicos.');
-                var subflowCount = guideSteps.filter(function (x) { return x && x.type === 'subflow'; }).length;
-                if (subflowCount > 1 && !String(step.alias || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': hay más de un subflujo. Conviene definir alias para poder distinguir salidas subflows.<alias>.*.');
             }
 
             if (step.type === 'state_set') {
-                if (isStateJsonMode(step)) {
-                    var setObj = parseJsonObjectOrEmpty(step.setJson || '');
-                    if (setObj === null) {
-                        pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar no es válido.');
+                var isAdvancedStateSet = String(step.mode || '').toLowerCase() === 'advanced';
+                if (isAdvancedStateSet) {
+                    if (!String(step.json || '').trim()) {
+                        pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el JSON a guardar.');
                     } else {
-                        var keys = Object.keys(setObj || {});
-                        if (!keys.length) pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar está vacío.');
-                        keys.forEach(function (k) {
-                            if (!isValidStatePath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable destino "' + k + '" tiene formato inválido.');
-                            if (isTechnicalOutputPath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': estás por guardar sobre una salida técnica (' + k + '). Conviene usar biz.* o wf.vars.*.');
-                        });
+                        var parsed = parseJsonObjectOrEmpty(step.json);
+                        if (parsed === null) {
+                            pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar no es válido.');
+                        } else {
+                            var keys = Object.keys(parsed || {});
+                            if (!keys.length) pushUnique(result.warnings, stepShortName(step, idx) + ': el JSON a guardar está vacío.');
+                            keys.forEach(function (k) {
+                                if (!isValidStatePath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': la variable destino "' + k + '" tiene formato inválido.');
+                                if (isTechnicalOutputPath(k)) pushUnique(result.warnings, stepShortName(step, idx) + ': estás por guardar sobre una salida técnica (' + k + '). Conviene usar biz.* o wf.vars.*.');
+                            });
+                        }
                     }
                 } else {
                     if (!String(step.key || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la variable destino.');
@@ -1512,15 +1776,15 @@
                 if (r > 10) pushUnique(result.warnings, stepShortName(step, idx) + ': muchos reintentos pueden demorar el flujo. Revisá si realmente necesitás más de 10.');
                 if (isNaN(b) || b < 0) pushUnique(result.warnings, stepShortName(step, idx) + ': el backoff debe ser 0 o mayor.');
                 if (b > 60000) pushUnique(result.warnings, stepShortName(step, idx) + ': backoff mayor a 60000 ms puede dejar la instancia esperando mucho tiempo.');
-
-                var next = guideSteps[idx + 1];
-                if (!next) {
+                var nextRetryIdx = nextIndexInSameSequence(idx);
+                var nextRetryStep = nextRetryIdx >= 0 ? guideSteps[nextRetryIdx] : null;
+                if (!nextRetryStep) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar debe ubicarse antes del nodo que querés reintentar. Ahora no tiene un paso siguiente.');
-                } else if (next.type === 'end') {
+                } else if (nextRetryStep.type === 'end') {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar antes de Finalizar flujo no aporta valor. Ubicalo antes de HTTP, SQL, correo, documento o archivo.');
-                } else if (next.type === 'human_task') {
+                } else if (nextRetryStep.type === 'human_task') {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': no conviene reintentar una tarea humana porque podría crear tareas duplicadas.');
-                } else if (next.type === 'logger' || next.type === 'state_set' || next.type === 'state_remove' || next.type === 'delay') {
+                } else if (['http_request', 'sql_query', 'email_send', 'doc_load', 'file_read', 'file_write', 'subflow'].indexOf(nextRetryStep.type) < 0) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': el siguiente paso normalmente no requiere reintento. Usalo principalmente antes de HTTP, SQL, correo, documento o archivo.');
                 }
             }
@@ -1529,17 +1793,38 @@
                 if (!String(step.message || '').trim()) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el mensaje de error.');
                 }
-                if (step.retry) {
+                if (step.action === 'retry') {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': “Volver a intentar” en util.error solo marca intención; para reintentos reales agregá el paso Reintentar antes del nodo que puede fallar.');
                 }
             }
 
-            if (step.type === 'logger' && !String(step.message || '').trim()) {
-                pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el mensaje del log.');
+            if (step.type === 'logger') {
+                if (!String(step.message || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el mensaje del log.');
             }
         });
 
-        result.ok = result.errors.length === 0;
+        var aliasCount = {};
+        var subflowCount = 0;
+        allIndexes.forEach(function (idx) {
+            var st = guideSteps[idx];
+            if (!st || st.type !== 'subflow') return;
+            subflowCount++;
+            if (st.alias) {
+                var ak = normalizeKey(st.alias);
+                aliasCount[ak] = (aliasCount[ak] || 0) + 1;
+            }
+        });
+        allIndexes.forEach(function (idx) {
+            var st = guideSteps[idx];
+            if (!st || st.type !== 'subflow') return;
+            if (st.alias && aliasCount[normalizeKey(st.alias)] > 1) pushUnique(result.warnings, stepShortName(st, idx) + ': hay otro subflujo con el mismo alias. Conviene usar alias únicos.');
+            if (subflowCount > 1 && !String(st.alias || '').trim()) pushUnique(result.warnings, stepShortName(st, idx) + ': hay más de un subflujo. Conviene definir alias para poder distinguir salidas subflows.<alias>.*.');
+        });
+
+        // fix40b: advertencias finales por ramas profundas.
+        // Antes se validaba solo el flujo principal; por eso una rama interna incompleta podía mostrar
+        // "Sin advertencias funcionales" aunque faltaran salidas APTO/NO APTO o pasos posteriores.
+        result.ok = !result.errors.length;
         return result;
     }
 
@@ -1597,10 +1882,19 @@
             var defaultField = defaultConditionField();
             var meta = findAvailableField(defaultField) || { type: 'texto' };
             return '' +
+                '<div class="wf-ai-guide-row"><label>Tipo de condición</label><select id="wfAiStepConditionMode" class="wf-ai-select"><option value="simple">Simple: una regla</option><option value="compound">Compuesta: varias reglas</option></select></div>' +
+                '<div id="wfAiStepConditionSimpleBox">' +
                 '<div class="wf-ai-guide-row"><label>Campo a validar</label><select id="wfAiStepField" class="wf-ai-select">' + availableFieldOptions(defaultField) + '</select></div>' +
                 '<div class="wf-ai-guide-hint" id="wfAiStepFieldTypeHint"></div>' +
                 '<div class="wf-ai-guide-row"><label>Operador</label><select id="wfAiStepOperator" class="wf-ai-select">' + conditionOperatorOptions(meta.type, '') + '</select></div>' +
-                '<div class="wf-ai-guide-row" id="wfAiStepValueRow"><label>Valor</label><input id="wfAiStepConditionValue" class="wf-ai-input" placeholder="Ej.: 100000, texto, fecha o campo" /></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepValueRow"><label>Valor</label><input id="wfAiStepConditionValue" class="wf-ai-input" placeholder="Ej.: 100000, texto, fecha o ${otro.campo}" /></div>' +
+                '</div>' +
+                '<div id="wfAiStepConditionCompoundBox" style="display:none">' +
+                '<div class="wf-ai-guide-row"><label>Modo</label><select id="wfAiStepRulesMode" class="wf-ai-select"><option value="all">Todas las reglas deben cumplirse / Y</option><option value="any">Cualquiera de las reglas debe cumplirse / O</option></select></div>' +
+                '<div id="wfAiCompoundRules" class="wf-ai-compound-rules"></div>' +
+                '<div class="wf-ai-guide-actions wf-ai-compound-actions"><button type="button" class="btn" id="wfAiAddCompoundRule">Agregar regla</button></div>' +
+                '<div class="wf-ai-guide-note">Ejemplo: CAE no está vacío Y total mayor que 200000 Y itemsCount mayor que 0. Podés hacer clic en Datos disponibles para agregar reglas con campos reales.</div>' +
+                '</div>' +
                 '<div class="wf-ai-guide-note">Después hacé clic en SI CUMPLE o NO CUMPLE en la columna de pasos para agregar acciones dentro de cada rama.</div>';
         }
         if (type === 'human_task') {
@@ -1762,6 +2056,7 @@
         var condition = $('wfAiStepCondition');
         var amountRow = $('wfAiStepAmountRow');
         if (condition && amountRow) amountRow.style.display = condition.value === 'total_gt' ? '' : 'none';
+        syncConditionModeFields();
         syncConditionFields();
 
         var dest = $('wfAiStepDestType');
@@ -1810,13 +2105,23 @@
             setControlValue('wfAiStepDoc', step.docTipo || firstDoc(['NOTA_CREDITO_ELECTRONICA_AR', 'FACTURA_ELECTRONICA_AR']));
             setControlValue('wfAiStepPath', step.path || 'input.filePath');
         } else if (step.type === 'condition') {
-            if (step.fieldPath) {
+            var existingRules = conditionRuleList(step);
+            if (existingRules.length) {
+                setControlValue('wfAiStepConditionMode', 'compound');
+                setControlValue('wfAiStepRulesMode', step.rulesMode || 'all');
+                syncConditionModeFields();
+                renderCompoundRules(existingRules);
+            } else if (step.fieldPath) {
+                setControlValue('wfAiStepConditionMode', 'simple');
+                syncConditionModeFields();
                 setControlValue('wfAiStepField', step.fieldPath);
                 syncConditionFields();
                 setControlValue('wfAiStepOperator', step.operator || 'not_empty');
                 syncConditionFields();
                 setControlValue('wfAiStepConditionValue', step.value || '');
             } else {
+                setControlValue('wfAiStepConditionMode', 'simple');
+                syncConditionModeFields();
                 // Compatibilidad con pasos creados antes de fix24.
                 var fallback = defaultConditionField();
                 if (step.condition === 'cae') {
@@ -1956,6 +2261,17 @@
         var condition = $('wfAiStepCondition');
         if (condition) condition.addEventListener('change', syncDynamicStepFields);
 
+        var conditionMode = $('wfAiStepConditionMode');
+        if (conditionMode) conditionMode.addEventListener('change', syncDynamicStepFields);
+
+        var addCompoundRule = $('wfAiAddCompoundRule');
+        if (addCompoundRule) addCompoundRule.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            var rules = collectCompoundRulesFromForm();
+            rules.push(defaultCompoundRule());
+            renderCompoundRules(rules);
+        });
+
         var field = $('wfAiStepField');
         if (field) field.addEventListener('change', syncConditionFields);
 
@@ -1984,6 +2300,25 @@
 
     function validateCurrentStepForm() {
         var type = selectedText('wfAiStepType') || 'doc_load';
+
+        if (type === 'condition') {
+            var conditionMode = selectedText('wfAiStepConditionMode') || 'simple';
+            if (conditionMode === 'compound') {
+                var rules = collectCompoundRulesFromForm();
+                if (!rules.length) return 'La condición compuesta debe tener al menos una regla.';
+                for (var cr = 0; cr < rules.length; cr++) {
+                    if (!rules[cr].fieldPath) return 'La regla ' + (cr + 1) + ' debe tener un campo.';
+                    if (operatorNeedsValue(rules[cr].operator) && !String(rules[cr].value || '').trim()) {
+                        return 'La regla ' + (cr + 1) + ' necesita un valor para el operador seleccionado.';
+                    }
+                }
+            } else {
+                if (!selectedText('wfAiStepField')) return 'Seleccioná el campo a validar.';
+                if (operatorNeedsValue(selectedText('wfAiStepOperator')) && !selectedText('wfAiStepConditionValue')) {
+                    return 'El operador seleccionado necesita un valor.';
+                }
+            }
+        }
 
         if (type === 'notify' && selectedText('wfAiStepDestType') === 'usuario') {
             var notifyUser = resolveUserSelection(selectedText('wfAiStepUser'));
@@ -2135,19 +2470,26 @@
             step.docTipo = selectedText('wfAiStepDoc') || firstDoc(['NOTA_CREDITO_ELECTRONICA_AR']);
             step.path = selectedText('wfAiStepPath') || 'input.filePath';
         } else if (type === 'condition') {
-            var fieldPath = selectedText('wfAiStepField') || defaultConditionField();
-            var meta = findAvailableField(fieldPath) || {};
-            step.fieldPath = fieldPath;
-            step.fieldLabel = meta.label || fieldPath;
-            step.fieldType = meta.type || 'texto';
-            step.operator = selectedText('wfAiStepOperator') || 'not_empty';
-            step.value = selectedText('wfAiStepConditionValue') || '';
-            // Compatibilidad para textos antiguos y para el parser existente.
-            if (String(fieldPath || '').toLowerCase().indexOf('.total') >= 0 && step.operator === '>') {
-                step.condition = 'total_gt';
-                step.amount = step.value || '100000';
-            } else if (String(fieldPath || '').toLowerCase().indexOf('.cae') >= 0 && step.operator === 'not_empty') {
-                step.condition = 'cae';
+            var conditionMode = selectedText('wfAiStepConditionMode') || 'simple';
+            if (conditionMode === 'compound') {
+                step.rulesMode = selectedText('wfAiStepRulesMode') || 'all';
+                step.rules = collectCompoundRulesFromForm();
+                step.condition = 'compound';
+            } else {
+                var fieldPath = selectedText('wfAiStepField') || defaultConditionField();
+                var meta = findAvailableField(fieldPath) || {};
+                step.fieldPath = fieldPath;
+                step.fieldLabel = meta.label || fieldPath;
+                step.fieldType = meta.type || 'texto';
+                step.operator = selectedText('wfAiStepOperator') || 'not_empty';
+                step.value = selectedText('wfAiStepConditionValue') || '';
+                // Compatibilidad para textos antiguos y para el parser existente.
+                if (String(fieldPath || '').toLowerCase().indexOf('.total') >= 0 && step.operator === '>') {
+                    step.condition = 'total_gt';
+                    step.amount = step.value || '100000';
+                } else if (String(fieldPath || '').toLowerCase().indexOf('.cae') >= 0 && step.operator === 'not_empty') {
+                    step.condition = 'cae';
+                }
             }
         } else if (type === 'human_task') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
@@ -3046,6 +3388,25 @@
         }
 
         if (step.type === 'condition') {
+            var compoundRules = conditionRuleList(step);
+            if (compoundRules.length) {
+                var planRules = compoundRules.map(function (r) {
+                    var valueBoxRule = { value: r.value || '' };
+                    var ruleOp = normalizePlanOperator(r.operator || 'not_empty', valueBoxRule);
+                    var item = {
+                        field: r.fieldPath || defaultConditionField(),
+                        op: ruleOp
+                    };
+                    if (operatorNeedsValue(ruleOp)) item.value = valueBoxRule.value || '';
+                    if (r.transform) item.transform = r.transform;
+                    return item;
+                });
+                return makePlanAction('control.if', labelFor('Condición: ' + conditionInfo(step).text), {
+                    rulesMode: step.rulesMode || 'all',
+                    rules: planRules
+                });
+            }
+
             var valueBox = { value: step.value || '' };
             var op = normalizePlanOperator(step.operator || 'not_empty', valueBox);
             var p = {
@@ -3557,7 +3918,8 @@
 
     function interpretar() {
         var txt = $('wfAiPrompt');
-        var userText = txt ? (txt.value || '').trim() : '';
+        var userText = cleanGuidePhraseText(txt ? (txt.value || '').trim() : '');
+        if (txt && txt.value !== userText) txt.value = userText;
         if (!userText) {
             setStatus('Escribí primero qué querés construir.', 'warn');
             return;

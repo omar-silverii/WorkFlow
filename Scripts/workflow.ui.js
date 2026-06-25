@@ -738,8 +738,11 @@
             if (type === 'control.if') {
                 const hasExpr = !!(p.expression && String(p.expression).trim());
                 const hasSimple = !!(p.field && String(p.field).trim()) && !!(p.op && String(p.op).trim());
-                if (!hasExpr && !hasSimple) {
-                    errors.push("Nodo " + id + ": falta condición (modo simple: field/op o modo técnico: expression).");
+                const hasCompound = Array.isArray(p.rules) && p.rules.some(function (r) {
+                    return r && String(r.field || r.fieldPath || '').trim() && String(r.op || r.operator || '').trim();
+                });
+                if (!hasExpr && !hasSimple && !hasCompound) {
+                    errors.push("Nodo " + id + ": falta condición (simple field/op, compuesta rules[] o técnica expression).");
                 }
             }
             if (p.position) {

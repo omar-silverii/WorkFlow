@@ -1,5 +1,6 @@
 ﻿// App_Code/Handlers/HIf.cs
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -39,6 +40,19 @@ namespace Intranet.WorkflowStudio.WebForms
             bool ok;
             string logText;
 
+            // fix40: modo compuesto compatible.
+            // Si existen reglas, se evalúan como extensión del IF simple:
+            //   rulesMode: all | any
+            //   rules: [{ field, op, value, transform }]
+            // El modo simple field/op/value y expression siguen funcionando igual.
+            if (TryReadCompoundRules(p, out var rules))
+            {
+                var rulesMode = ReadStringParam(p, "rulesMode");
+                ok = EvaluarCompuesto(rules, rulesMode, ctx, out logText);
+                ctx.Log("[If] " + logText + " => " + (ok ? "True" : "False"));
+                return Task.FromResult(new ResultadoEjecucion { Etiqueta = ok ? "true" : "false" });
+            }
+
             // Si hay simple (field/op), preferimos SIMPLE
             if (!string.IsNullOrWhiteSpace(field) || !string.IsNullOrWhiteSpace(op))
             {
@@ -50,6 +64,160 @@ namespace Intranet.WorkflowStudio.WebForms
             ok = Evaluar(expr, ctx, out logText);
             ctx.Log("[If] " + logText + " => " + (ok ? "True" : "False"));
             return Task.FromResult(new ResultadoEjecucion { Etiqueta = ok ? "true" : "false" });
+        }
+
+
+        private class ReglaIf
+        {
+            public string Field { get; set; }
+            public string Op { get; set; }
+            public string Value { get; set; }
+            public string Transform { get; set; }
+        }
+
+        private static string ReadStringParam(Dictionary<string, object> p, string key)
+        {
+            if (p == null || string.IsNullOrWhiteSpace(key)) return null;
+
+            if (p.TryGetValue(key, out var direct))
+                return Convert.ToString(direct);
+
+            foreach (var kv in p)
+            {
+                if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+                    return Convert.ToString(kv.Value);
+            }
+
+            return null;
+        }
+
+        private static bool TryReadCompoundRules(Dictionary<string, object> p, out List<ReglaIf> rules)
+        {
+            rules = new List<ReglaIf>();
+            if (p == null) return false;
+
+            object raw = null;
+            if (!p.TryGetValue("rules", out raw))
+            {
+                foreach (var kv in p)
+                {
+                    if (string.Equals(kv.Key, "rules", StringComparison.OrdinalIgnoreCase))
+                    {
+                        raw = kv.Value;
+                        break;
+                    }
+                }
+            }
+
+            if (raw == null) return false;
+
+            if (raw is string rawText)
+            {
+                rawText = rawText.Trim();
+                if (string.IsNullOrWhiteSpace(rawText)) return false;
+
+                try
+                {
+                    raw = JArray.Parse(rawText);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            if (raw is JArray ja)
+            {
+                foreach (var item in ja)
+                    AddRuleFromObject(rules, item);
+            }
+            else if (raw is IEnumerable en && !(raw is string))
+            {
+                foreach (var item in en)
+                    AddRuleFromObject(rules, item);
+            }
+
+            rules.RemoveAll(r => r == null || string.IsNullOrWhiteSpace(r.Field));
+            return rules.Count > 0;
+        }
+
+        private static void AddRuleFromObject(List<ReglaIf> rules, object item)
+        {
+            if (rules == null || item == null) return;
+
+            var r = new ReglaIf();
+
+            if (item is JObject jo)
+            {
+                r.Field = ReadJObjectString(jo, "field") ?? ReadJObjectString(jo, "fieldPath");
+                r.Op = ReadJObjectString(jo, "op") ?? ReadJObjectString(jo, "operator");
+                r.Value = ReadJObjectString(jo, "value");
+                r.Transform = ReadJObjectString(jo, "transform");
+            }
+            else if (item is IDictionary<string, object> dic)
+            {
+                r.Field = ReadDictionaryString(dic, "field") ?? ReadDictionaryString(dic, "fieldPath");
+                r.Op = ReadDictionaryString(dic, "op") ?? ReadDictionaryString(dic, "operator");
+                r.Value = ReadDictionaryString(dic, "value");
+                r.Transform = ReadDictionaryString(dic, "transform");
+            }
+
+            if (string.IsNullOrWhiteSpace(r.Op)) r.Op = "not_empty";
+            if (!string.IsNullOrWhiteSpace(r.Field)) rules.Add(r);
+        }
+
+        private static string ReadJObjectString(JObject jo, string key)
+        {
+            if (jo == null || string.IsNullOrWhiteSpace(key)) return null;
+
+            if (jo.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var tok))
+                return tok == null || tok.Type == JTokenType.Null ? null : (tok is JValue jv ? Convert.ToString(jv.Value) : tok.ToString());
+
+            return null;
+        }
+
+        private static string ReadDictionaryString(IDictionary<string, object> dic, string key)
+        {
+            if (dic == null || string.IsNullOrWhiteSpace(key)) return null;
+
+            foreach (var kv in dic)
+            {
+                if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+                    return Convert.ToString(kv.Value);
+            }
+
+            return null;
+        }
+
+        private static bool EvaluarCompuesto(List<ReglaIf> rules, string rulesMode, ContextoEjecucion ctx, out string logExpr)
+        {
+            var any = IsAnyMode(rulesMode);
+            var final = any ? false : true;
+            var partes = new List<string>();
+
+            if (rules == null || rules.Count == 0)
+            {
+                logExpr = "condición compuesta sin reglas";
+                return false;
+            }
+
+            foreach (var r in rules)
+            {
+                var ok = EvaluarSimple(r.Field, r.Op, r.Value, r.Transform, ctx, out var reglaLog);
+                partes.Add(reglaLog + " => " + (ok ? "True" : "False"));
+
+                if (any) final = final || ok;
+                else final = final && ok;
+            }
+
+            logExpr = (any ? "ANY" : "ALL") + " [" + string.Join("; ", partes) + "]";
+            return final;
+        }
+
+        private static bool IsAnyMode(string rulesMode)
+        {
+            var m = (rulesMode ?? "all").Trim().ToLowerInvariant();
+            return m == "any" || m == "or" || m == "cualquiera";
         }
 
         internal static bool EvaluarSimple(string field, string op, string value, string transform, ContextoEjecucion ctx, out string logExpr)
@@ -84,6 +252,14 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 var path = mt.Groups["path"].Value.Trim();
                 right = ContextoEjecucion.ResolverPath(ctx.Estado, path);
+            }
+
+            // Alias usados por la UI: verdadero/falso se evalúan como == true/false.
+            if (opNorm == "true" || opNorm == "false")
+            {
+                right = opNorm == "true";
+                rhsExpanded = opNorm;
+                opNorm = "==";
             }
 
             logExpr = $"{field} {op} {(NeedsValue(opNorm) ? (rhsExpanded ?? "") : "")}".Trim();
@@ -124,6 +300,22 @@ namespace Intranet.WorkflowStudio.WebForms
                     case "<": return ld < rd;
                     case ">=": return ld >= rd;
                     case "<=": return ld <= rd;
+                }
+            }
+
+            // fechas
+            if (TryToDateTime(left, out var ldt) && TryToDateTime(right, out var rdt))
+            {
+                switch (opNorm)
+                {
+                    case "==":
+                    case "eq": return ldt == rdt;
+                    case "!=":
+                    case "neq": return ldt != rdt;
+                    case ">": return ldt > rdt;
+                    case "<": return ldt < rdt;
+                    case ">=": return ldt >= rdt;
+                    case "<=": return ldt <= rdt;
                 }
             }
 
@@ -383,6 +575,30 @@ namespace Intranet.WorkflowStudio.WebForms
             return false;
         }
 
+
+        private static bool TryToDateTime(object o, out DateTime dt)
+        {
+            dt = DateTime.MinValue;
+            if (o == null) return false;
+
+            if (o is JValue jv)
+                o = jv.Value;
+
+            if (o is DateTime dtt) { dt = dtt; return true; }
+
+            var s = Convert.ToString(o);
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            s = s.Trim();
+
+            if (DateTime.TryParse(s, CultureInfo.GetCultureInfo("es-AR"), DateTimeStyles.None, out dt))
+                return true;
+
+            if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+                return true;
+
+            return false;
+        }
+
         private static bool TryToDecimal(object o, out decimal d)
         {
             d = 0m;
@@ -422,6 +638,6 @@ namespace Intranet.WorkflowStudio.WebForms
             return false;
         }
 
-        
+
     }
 }
