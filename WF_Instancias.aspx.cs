@@ -34,6 +34,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            try { Topbar1.ActiveSection = "Ejecuciones"; } catch { }
+
             if (!IsPostBack)
             {
                 // 1) Leer ?inst=xxxx (si viene, manda sobre defId)
@@ -54,8 +56,7 @@ namespace Intranet.WorkflowStudio.WebForms
                     int defReal = GetDefIdByInstancia(InstIdFromQuery.Value);
                     if (defReal > 0)
                     {
-                        var it = ddlDef.Items.FindByValue(defReal.ToString());
-                        if (it != null) ddlDef.SelectedValue = defReal.ToString();
+                        SetDefPicker(defReal);
                     }
 
                     // Para que quede visible el target
@@ -100,34 +101,289 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private sealed class DefUiRow
+        {
+            public int Id { get; set; }
+            public string Key { get; set; }
+            public string Codigo { get; set; }
+            public string Nombre { get; set; }
+            public string Display { get; set; }
+            public DateTime? UltimaEjecucion { get; set; }
+            public int InstanciasCount { get; set; }
+        }
+
+        private static string Nz(object v)
+        {
+            return v == null || v == DBNull.Value ? "" : Convert.ToString(v).Trim();
+        }
+
+        private static bool HasColumn(IDataRecord rd, string columnName)
+        {
+            for (int i = 0; i < rd.FieldCount; i++)
+                if (string.Equals(rd.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        private static string BuildDefDisplay(string key, string codigo, string nombre)
+        {
+            string cod = !string.IsNullOrWhiteSpace(codigo) ? codigo.Trim() : (key ?? "").Trim();
+            string nom = (nombre ?? "").Trim();
+
+            if (!string.IsNullOrWhiteSpace(cod) && !string.IsNullOrWhiteSpace(nom))
+                return cod + " — " + nom;
+
+            if (!string.IsNullOrWhiteSpace(cod))
+                return cod;
+
+            return nom;
+        }
+
+        private DefUiRow ReadDef(SqlDataReader rd)
+        {
+            var key = Nz(rd["DefKey"]);
+            var codigo = Nz(rd["Codigo"]);
+            var nombre = Nz(rd["Nombre"]);
+
+            DateTime ultima;
+            DateTime? ultimaEjecucion = null;
+            if (HasColumn(rd, "UltimaEjecucion") && rd["UltimaEjecucion"] != DBNull.Value && DateTime.TryParse(Convert.ToString(rd["UltimaEjecucion"]), out ultima))
+                ultimaEjecucion = ultima;
+
+            int instanciasCount = 0;
+            if (HasColumn(rd, "InstanciasCount") && rd["InstanciasCount"] != DBNull.Value)
+                int.TryParse(Convert.ToString(rd["InstanciasCount"]), out instanciasCount);
+
+            return new DefUiRow
+            {
+                Id = Convert.ToInt32(rd["Id"]),
+                Key = key,
+                Codigo = codigo,
+                Nombre = nombre,
+                Display = BuildDefDisplay(key, codigo, nombre),
+                UltimaEjecucion = ultimaEjecucion,
+                InstanciasCount = instanciasCount
+            };
+        }
+
+        private static string Enc(string value)
+        {
+            return HttpUtility.HtmlEncode(value ?? "");
+        }
+
+        private static string Attr(string value)
+        {
+            return HttpUtility.HtmlAttributeEncode(value ?? "");
+        }
+
         private void BindDefiniciones()
         {
+            var defs = new List<DefUiRow>();
+
             using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
             using (var cmd = new SqlCommand(@"
-SELECT Id, [Key]
-FROM dbo.WF_Definicion
-ORDER BY Id DESC;", cn))
+SELECT d.Id,
+       ISNULL(d.[Key], '') AS DefKey,
+       ISNULL(d.Codigo, '') AS Codigo,
+       ISNULL(d.Nombre, '') AS Nombre,
+       MAX(i.FechaInicio) AS UltimaEjecucion,
+       COUNT(i.Id) AS InstanciasCount
+FROM dbo.WF_Definicion d
+LEFT JOIN dbo.WF_Instancia i ON i.WF_DefinicionId = d.Id
+GROUP BY d.Id, d.[Key], d.Codigo, d.Nombre
+ORDER BY MAX(i.FechaInicio) DESC, d.Id DESC;", cn))
             {
                 cn.Open();
-                var dt = new DataTable();
-                dt.Load(cmd.ExecuteReader());
-
-                ddlDef.DataSource = dt;
-                ddlDef.DataTextField = "Key";
-                ddlDef.DataValueField = "Id";
-                ddlDef.DataBind();
-
-                // Si NO hay inst en query, respetar defId del query
-                if (!InstIdFromQuery.HasValue)
+                using (var rd = cmd.ExecuteReader())
                 {
-                    var qsDef = Request.QueryString["defId"];
-                    if (!string.IsNullOrWhiteSpace(qsDef))
-                    {
-                        var it = ddlDef.Items.FindByValue(qsDef);
-                        if (it != null) ddlDef.SelectedValue = qsDef;
-                    }
+                    while (rd.Read())
+                        defs.Add(ReadDef(rd));
                 }
             }
+
+            var sb = new StringBuilder();
+            foreach (var d in defs)
+            {
+                if (string.IsNullOrWhiteSpace(d.Display))
+                    continue;
+
+                string codigo = !string.IsNullOrWhiteSpace(d.Codigo) ? d.Codigo : d.Key;
+                string nombre = d.Nombre;
+                string ultimaTexto = d.UltimaEjecucion.HasValue ? d.UltimaEjecucion.Value.ToString("dd/MM/yyyy HH:mm") : "";
+                string badgeTexto = d.UltimaEjecucion.HasValue ? "Última ejecución" : "Sin ejecución";
+                string badgeCss = d.UltimaEjecucion.HasValue ? "ws-def-badge" : "ws-def-badge ws-def-badge-empty";
+                string search = (d.Display + " " + codigo + " " + nombre + " " + d.Id.ToString()).Trim();
+
+                sb.Append("<button type=\"button\" class=\"ws-def-item\" role=\"option\"")
+                  .Append(" data-id=\"").Append(d.Id.ToString()).Append("\"")
+                  .Append(" data-display=\"").Append(Attr(d.Display)).Append("\"")
+                  .Append(" data-code=\"").Append(Attr(codigo)).Append("\"")
+                  .Append(" data-name=\"").Append(Attr(nombre)).Append("\"")
+                  .Append(" data-search=\"").Append(Attr(search)).Append("\">")
+                  .Append("<span class=\"ws-def-code\">").Append(Enc(codigo)).Append("</span>")
+                  .Append("<span class=\"ws-def-name\">").Append(Enc(nombre)).Append("</span>")
+                  .Append("<span class=\"ws-def-meta\">")
+                  .Append("<span class=\"").Append(badgeCss).Append("\">").Append(Enc(badgeTexto)).Append("</span>");
+
+                if (!string.IsNullOrWhiteSpace(ultimaTexto))
+                    sb.Append("<span class=\"ws-def-date\">&#128336; ").Append(Enc(ultimaTexto)).Append("</span>");
+
+                sb.Append("</span></button>");
+            }
+            litDefResults.Text = sb.ToString();
+
+            int selectedDefId = 0;
+
+            if (InstIdFromQuery.HasValue)
+                selectedDefId = GetDefIdByInstancia(InstIdFromQuery.Value);
+
+            if (selectedDefId <= 0)
+            {
+                var qsDef = Request.QueryString["defId"];
+                int.TryParse(Convert.ToString(qsDef), out selectedDefId);
+            }
+
+            if (selectedDefId <= 0 && defs.Count > 0)
+                selectedDefId = defs[0].Id;
+
+            if (selectedDefId > 0)
+                SetDefPicker(selectedDefId, defs);
+        }
+
+        private void SetDefPicker(int defId)
+        {
+            SetDefPicker(defId, null);
+        }
+
+        private void SetDefPicker(int defId, List<DefUiRow> cache)
+        {
+            if (defId <= 0)
+                return;
+
+            DefUiRow def = null;
+            if (cache != null)
+                def = cache.FirstOrDefault(x => x.Id == defId);
+
+            if (def == null)
+                def = GetDefById(defId);
+
+            if (def == null)
+                return;
+
+            hidDefId.Value = def.Id.ToString();
+            txtDef.Text = def.Display;
+        }
+
+        private DefUiRow GetDefById(int defId)
+        {
+            if (defId <= 0) return null;
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP (1) d.Id,
+       ISNULL(d.[Key], '') AS DefKey,
+       ISNULL(d.Codigo, '') AS Codigo,
+       ISNULL(d.Nombre, '') AS Nombre,
+       MAX(i.FechaInicio) AS UltimaEjecucion,
+       COUNT(i.Id) AS InstanciasCount
+FROM dbo.WF_Definicion d
+LEFT JOIN dbo.WF_Instancia i ON i.WF_DefinicionId = d.Id
+WHERE d.Id=@Id
+GROUP BY d.Id, d.[Key], d.Codigo, d.Nombre;", cn))
+            {
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = defId;
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                {
+                    if (rd.Read())
+                        return ReadDef(rd);
+                }
+            }
+
+            return null;
+        }
+
+        private int ResolverDefIdPorTexto(string texto)
+        {
+            texto = (texto ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(texto))
+                return 0;
+
+            int id;
+            if (int.TryParse(texto, out id) && GetDefById(id) != null)
+                return id;
+
+            string codigoEscrito = texto;
+            int sep = texto.IndexOf(" — ", StringComparison.Ordinal);
+            if (sep > 0)
+                codigoEscrito = texto.Substring(0, sep).Trim();
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP (1) Id
+FROM dbo.WF_Definicion
+WHERE [Key] = @Texto
+   OR Codigo = @Texto
+   OR Nombre = @Texto
+   OR [Key] = @Codigo
+   OR Codigo = @Codigo
+ORDER BY Id DESC;", cn))
+            {
+                cmd.Parameters.Add("@Texto", SqlDbType.NVarChar, 300).Value = texto;
+                cmd.Parameters.Add("@Codigo", SqlDbType.NVarChar, 300).Value = codigoEscrito;
+                cn.Open();
+                var v = cmd.ExecuteScalar();
+                if (v != null && v != DBNull.Value && int.TryParse(Convert.ToString(v), out id))
+                    return id;
+            }
+
+            if (texto.Length < 2)
+                return 0;
+
+            using (var cn = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+            using (var cmd = new SqlCommand(@"
+SELECT TOP (1) Id
+FROM dbo.WF_Definicion
+WHERE [Key] LIKE @Q
+   OR Codigo LIKE @Q
+   OR Nombre LIKE @Q
+ORDER BY Id DESC;", cn))
+            {
+                cmd.Parameters.Add("@Q", SqlDbType.NVarChar, 300).Value = "%" + texto + "%";
+                cn.Open();
+                var v = cmd.ExecuteScalar();
+                if (v != null && v != DBNull.Value && int.TryParse(Convert.ToString(v), out id))
+                    return id;
+            }
+
+            return 0;
+        }
+
+        private int GetDefIdSeleccionada(bool actualizarUi, bool mostrarAviso)
+        {
+            if (lblDefMsg != null)
+                lblDefMsg.Text = "";
+
+            int defId;
+            if (int.TryParse(Convert.ToString(hidDefId.Value), out defId) && GetDefById(defId) != null)
+            {
+                if (actualizarUi)
+                    SetDefPicker(defId);
+                return defId;
+            }
+
+            defId = ResolverDefIdPorTexto(txtDef.Text);
+            if (defId > 0)
+            {
+                if (actualizarUi)
+                    SetDefPicker(defId);
+                return defId;
+            }
+
+            if (mostrarAviso && lblDefMsg != null)
+                lblDefMsg.Text = "No se encontró una definición con ese código o nombre.";
+
+            return 0;
         }
 
         private string EstadoSeleccionado
@@ -163,11 +419,12 @@ ORDER BY Id DESC;", cn))
             CargarInstancias();
         }
 
-        protected void ddlDef_SelectedIndexChanged(object sender, EventArgs e)
+        protected void txtDef_TextChanged(object sender, EventArgs e)
         {
-            // Cambió la def manualmente => ya no estamos en deep-link
+            // Cambió la definición manualmente => ya no estamos en deep-link
             InstIdFromQuery = null;
 
+            GetDefIdSeleccionada(true, true);
             gvInst.PageIndex = 0;
             CargarInstancias();
         }
@@ -190,6 +447,28 @@ ORDER BY Id DESC;", cn))
             CargarInstancias();
         }
 
+        protected void btnAbrirMapa_Click(object sender, EventArgs e)
+        {
+            lblAbrirMapaMsg.Text = "";
+
+            int instId;
+            if (!int.TryParse((txtInstanciaMapa.Text ?? "").Trim(), out instId) || instId <= 0)
+            {
+                lblAbrirMapaMsg.Text = "Ingresá un Id de instancia válido.";
+                return;
+            }
+
+            int defId = GetDefIdByInstancia(instId);
+            if (defId <= 0)
+            {
+                lblAbrirMapaMsg.Text = "No se encontró la instancia " + Server.HtmlEncode(instId.ToString()) + ".";
+                return;
+            }
+
+            Response.Redirect("WF_Instancia_Mapa.aspx?id=" + instId, false);
+            Context.ApplicationInstance.CompleteRequest();
+        }
+
         protected void btnBuscar_Click(object sender, EventArgs e)
         {
             // Búsqueda manual => salir de deep-link
@@ -201,12 +480,18 @@ ORDER BY Id DESC;", cn))
 
         private void CargarInstancias()
         {
-            int defId = 0;
-            int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
+            int defId = GetDefIdSeleccionada(true, false);
 
             bool mostrarFinalizados = chkMostrarFinalizados.Checked;
             string estado = Convert.ToString(ddlEstado.SelectedValue ?? "").Trim();
             string q = (txtBuscar.Text ?? "").Trim();
+
+            if (defId <= 0 && !InstIdFromQuery.HasValue)
+            {
+                gvInst.DataSource = new DataTable();
+                gvInst.DataBind();
+                return;
+            }
 
             // ✅ Si estamos en deep-link por instancia, traer SOLO esa fila (Id exacto)
             if (InstIdFromQuery.HasValue && InstIdFromQuery.Value > 0)
@@ -297,8 +582,7 @@ ORDER BY Id DESC;";
         {
             try
             {
-                int defId = 0;
-                int.TryParse(Convert.ToString(ddlDef.SelectedValue), out defId);
+                int defId = GetDefIdSeleccionada(true, true);
                 if (defId <= 0) return;
 
                 string usuario = (Context?.User?.Identity?.Name ?? "").Trim();

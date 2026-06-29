@@ -6,7 +6,7 @@ namespace Intranet.WorkflowStudio.WebForms.Controls
 {
     public partial class WsTopbar : System.Web.UI.UserControl
     {
-        // "Inicio", "Workflows", "Documentos", "Tareas", "Administracion"
+        // "Inicio", "Workflows", "Documentos", "Tareas", "Ejecuciones", "Administracion"
         public string ActiveSection { get; set; }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -37,6 +37,7 @@ namespace Intranet.WorkflowStudio.WebForms.Controls
             SetActive(lnkWorkflows, ActiveSection == "Workflows");
             SetActive(lnkDocumentos, ActiveSection == "Documentos");
             SetActive(lnkTareas, ActiveSection == "Tareas");
+            SetActive(lnkEjecuciones, ActiveSection == "Ejecuciones");
             SetActive(lnkAdmin, ActiveSection == "Administracion");
         }
 

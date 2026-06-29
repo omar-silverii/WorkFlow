@@ -1,0 +1,464 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA
+
+## Cierre de sesión — 25/06/2026 — después de fix40 validado y fix41 aplicado
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send salvo pedido explícito de Omar.
+* No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+* Antes de cada fix revisar el ZIP/código real.
+* No usar fixes sueltos viejos si el ZIP completo nuevo ya los contiene.
+
+## 2. Procedimiento habitual
+
+Cuando Omar cierre sesión:
+
+1. Pide ContextPack y Prompt.
+2. Guarda el proyecto actualizado.
+3. Sube el proyecto a GitHub.
+4. En la próxima sesión pasa:
+
+   * ContextPack
+   * Prompt
+   * ZIP actualizado del proyecto desde GitHub
+   * ZIP adicional solo si corresponde
+
+En la próxima sesión, no proponer código hasta recibir y revisar el ZIP actualizado.
+
+## 3. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms
+* .NET Framework 4.8
+* C#
+* SQL Server
+* Una sola base
+* Una conexión `DefaultConnection`
+* Motor propio de workflows
+* Grafos visuales persistidos en SQL
+* Nodos ejecutados por handlers `IManejadorNodo`
+* Variables técnicas `wf.*`
+* Variables de negocio `biz.*`
+* Constructor IA offline/local con ML.NET + CSV + modelo externo
+* Sin OpenAI API
+* Sin Ollama
+* Sin dependencia externa para IA
+
+El sistema ya funciona en servidores reales de la empresa.
+
+## 4. Estado estable validado
+
+Ya están cerrados y no deben tocarse salvo bug real:
+
+* fix19  — Notificaciones por usuario
+* fix22  — Constructor amplio
+* fix22b — Modificar pasos
+* fix22c — Frase segura / datos respetados
+* fix23  — Catálogo de salidas / datos disponibles
+* fix24  — IF guiado con FieldPicker y operadores por tipo
+* fix24b — Operadores numéricos
+* fix24c — Recursión al agregar IF
+* fix24d — Datos disponibles último arriba
+* fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+* fix24f — Selector buscable de usuarios
+* fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+* fix26  — Validador funcional del constructor
+* fix27  — Solicitud HTTP en Constructor IA
+* fix28  — Consulta SQL en Constructor IA
+* fix28b — SELECT con resultados visibles en DatosContexto
+* fix29  — Logger en Constructor IA
+* fix29b — Inspector Logger Level Warn correcto
+* fix30  — Guardar / Quitar variable state.vars
+* fix30b — UX Guardar variable simple + avanzado JSON
+* fix30c — Quitar propiedad dentro de objeto JSON
+* fix31  — UX Inspector / Asistente IA colapsado
+* fix32  — Demora / Delay ya existente y validado
+* fix33  — Manejador de Error en Constructor IA
+* fix34  — Reintentar en Constructor IA
+* fix35  — Archivo Leer / Escribir en Constructor IA
+* fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+* fix37  — Logs y DatosContexto redimensionables en WF_Instancias.aspx
+* fix38  — WF_Definiciones filtra por Id exacto si el filtro es numérico
+* fix39a — descartado y revertido
+* fix39b — Constructor IA modo amplio en 3 columnas
+* fix39c — Ramas anidadas recursivas visibles
+* fix39d — UX contextual, ocultar Cuándo si la rama ya fue elegida por clic
+* fix39e — Aplicar ramas profundas al canvas y validar ejecución integral completa
+* fix40  — IF compuesto / condición compuesta
+* fix40b — Validador recursivo de ramas profundas
+* fix40c — Corrección de destino visual en ramas profundas
+* fix40d — Guardado SQL de IF compuesto
+* fix41  — Limpieza de frase del Constructor IA
+
+## 5. Validación completa de fix39e
+
+fix39e quedó validado completo con flujo integral FIX39E.
+
+Rutas reales probadas:
+
+1. CAE OK + total > 200000 + DIR_GENERAL APTO
+2. CAE faltante + COMPRAS APTO
+3. CAE faltante + COMPRAS NO APTO
+4. CAE OK + total > 200000 + DIR_GENERAL NO APTO
+5. CAE OK + total forzado > 999999 false + ADM_FIN APTO
+6. CAE OK + total forzado > 999999 false + ADM_FIN NO APTO
+
+Instancias:
+
+* 160505 — DIR_GENERAL APTO — APROBADA_DIRECCION
+* 160506 — COMPRAS APTO — CORREGIDA_COMPRAS
+* 160507 — COMPRAS NO APTO — RECHAZADA_SIN_CAE
+* 160508 — DIR_GENERAL NO APTO — RECHAZADA_DIRECCION
+* 160509 — ADM_FIN APTO — APROBADA_ADMINISTRACION
+* 160510 — ADM_FIN NO APTO — RECHAZADA_ADMINISTRACION
+
+Definiciones:
+
+* 9168 — WF-20260623-115726
+* 9169 — WF-20260623-122037
+* 9170 — WF-20260623-125444
+* 9171 — WF-20260623-132807
+
+Resultado:
+
+Constructor IA → canvas → SQL → motor → tareas humanas → ramas profundas → finalización quedó validado.
+
+## 6. fix40 — IF compuesto / condición compuesta
+
+Estado:
+
+CERRADO / VALIDADO FUNCIONALMENTE
+
+Archivos correctivos usados durante fix40:
+
+* fix40_if_compuesto.zip
+* fix40b_validador_ramas_profundas.zip
+* fix40c_destino_visual_ramas_profundas.zip
+* fix40d_guardado_sql_if_compuesto.zip
+
+Qué agregó:
+
+* IF simple sigue funcionando igual.
+* IF compuesto se agrega como extensión compatible.
+* Soporta `rulesMode`.
+* Soporta `rules[]`.
+* Modo probado: `ALL / Todas las reglas deben cumplirse`.
+* Permite varias reglas dentro de un mismo IF.
+
+Ejemplo probado:
+
+1. `biz.notaCredito.cae` no está vacío
+2. `biz.notaCredito.total` mayor que `200000`
+3. `biz.notaCredito.itemsCount` mayor que `0`
+
+## 7. fix40b — Validador recursivo de ramas profundas
+
+Estado:
+
+CERRADO / APLICADO
+
+Problema detectado:
+
+El validador funcional decía:
+
+“Sin advertencias funcionales. La estructura del flujo se ve consistente.”
+
+aunque hubiera ramas internas incompletas, por ejemplo una tarea COMPRAS con APTO definido pero NO APTO vacío.
+
+Corrección:
+
+El validador baja recursivamente por condiciones, ramas SI/NO, tareas humanas y ramas APTO/NO APTO.
+
+No toca motor, canvas, handlers, SMTP, subflow ni extractores.
+
+## 8. fix40c — Destino visual en ramas profundas
+
+Estado:
+
+CERRADO / APLICADO
+
+Problema detectado por Omar:
+
+Al hacer clic en APROBADO/APTO de DIR_GENERAL, el panel decía que el próximo paso se agregaría allí, pero al agregar “Finalizar flujo” se colocaba en APROBADO/APTO de COMPRAS.
+
+Causa:
+
+Comparación de IDs internos con tipos distintos y fallback incorrecto.
+
+Corrección:
+
+El destino visual elegido por clic se resuelve correctamente en ramas profundas.
+
+No toca motor, canvas, HIf.cs, inspectores, SMTP, subflow ni extractores.
+
+## 9. fix40d — Guardado SQL de IF compuesto
+
+Estado:
+
+CERRADO / VALIDADO
+
+Problema:
+
+El canvas se armaba, pero al guardar en SQL la definición no aparecía después en Definiciones.
+
+Causa:
+
+La validación servidor en `WorkflowUI.aspx.cs` aceptaba el IF viejo con:
+
+* `expression`
+* o `field + op`
+
+pero no aceptaba el IF compuesto nuevo con:
+
+* `rulesMode`
+* `rules[]`
+
+Corrección:
+
+Se extendió la validación servidor para aceptar IF compuesto.
+
+Resultado validado:
+
+La definición nueva se guardó correctamente en SQL.
+
+## 10. Validación real de fix40
+
+### Ruta positiva — SI CUMPLE / DIR_GENERAL / APTO
+
+Definición:
+
+* defId=10170
+* WF-20260625-083823
+
+Instancia:
+
+* 170507
+
+Logs clave:
+
+`[If] ALL [biz.notaCredito.cae not_empty => True; biz.notaCredito.total > 200000 => True; biz.notaCredito.itemsCount > 0 => True]`
+
+Resultado:
+
+* Tomó rama SI CUMPLE.
+* Creó tarea humana para DIR_GENERAL.
+* Al aprobar, evaluó `wf.tarea.resultado == apto => True`.
+* Finalizó correctamente.
+
+### Ruta negativa — NO CUMPLE / COMPRAS / APTO
+
+Definición:
+
+* defId=10171
+* WF-20260625-084551
+
+Instancia:
+
+* 170508
+
+Prueba:
+
+Se forzó una regla para que falle:
+
+`biz.notaCredito.total > 999999`
+
+Logs clave:
+
+`[If] ALL [biz.notaCredito.cae not_empty => True; biz.notaCredito.total > 999999 => False; biz.notaCredito.itemsCount > 0 => True]`
+
+Resultado:
+
+* Tomó rama NO CUMPLE.
+* Creó tarea humana para COMPRAS.
+* Al aprobar, evaluó `wf.tarea.resultado == apto => True`.
+* Finalizó correctamente.
+
+Conclusión:
+
+fix40 queda validado funcionalmente para:
+
+* IF compuesto con varias reglas.
+* Modo ALL / AND.
+* Rama SI CUMPLE.
+* Rama NO CUMPLE.
+* Guardado SQL.
+* Ejecución real del motor.
+* Tareas humanas posteriores.
+* Reanudación.
+* Finalización.
+
+## 11. fix41 — Limpieza de frase del Constructor IA
+
+Estado:
+
+APLICADO / OK VISUALMENTE
+
+Archivo entregado:
+
+* fix41_limpieza_frase_constructor.zip
+
+Objetivo:
+
+Evitar que texto residual de interfaz como:
+
+`Agregar paso:`
+
+pueda meterse en la frase generada o interpretada por el Constructor IA.
+
+Omar informó:
+
+“No aparece ‘Agregar paso:’”
+
+Conclusión:
+
+fix41 queda como pulido aplicado correctamente.
+
+No tocó:
+
+* motor
+* `HIf.cs`
+* `WorkflowUI.aspx.cs`
+* canvas
+* inspectores
+* NC_AR
+* FACTURA_AR
+* SMTP
+* subflow
+
+## 12. Cosas a no tocar salvo bug real
+
+No tocar salvo bug real explícito:
+
+* WorkflowUI canvas/aristas/zoom/minimapa
+* motor de ejecución
+* FACTURA_AR
+* NC_AR
+* extractores documentales
+* notificaciones fix19
+* SMTP/email.send
+* HEmailSend
+* HSubFlow.cs
+* WorkflowRuntime
+* handlers ya validados
+* fix37
+* fix38
+* fix39e
+* fix40
+* fix41
+
+## 13. Base de trabajo para próxima sesión
+
+Omar va a generar un nuevo ZIP completo desde GitHub con todo incorporado hasta fix41.
+
+En la próxima sesión:
+
+* Tomar ese ZIP como base única.
+* No usar fixes sueltos anteriores.
+* Revisar primero archivos reales.
+* Confirmar que el ZIP contiene lo aplicado hasta fix41.
+* Recién después proponer cambios.
+
+## 14. Pendientes futuros detectados
+
+### 14.1 Validar modo OR / ANY del IF compuesto
+
+fix40 quedó validado con ALL / AND.
+
+Pendiente opcional:
+
+Probar y, si hace falta, ajustar modo ANY / OR:
+
+Ejemplo:
+
+* CAE informado
+* O comprobante asociado informado
+
+Solo hacerlo si Omar lo pide o si se decide cerrar IF compuesto en forma completa también para OR.
+
+### 14.2 Pulidos UX del Constructor IA
+
+Se puede seguir puliendo:
+
+* compactar tarjetas
+* mejorar navegación en flujos grandes
+* mejorar visualización de paso común posterior a ramas
+* mantener datos disponibles siempre visibles y cómodos
+* reducir combos innecesarios
+* mejorar ayudas contextuales
+
+No hacer cambios grandes sin conversar.
+
+### 14.3 Demo formal del Constructor IA
+
+Pendiente recomendado:
+
+Preparar una demo formal basada en lo validado:
+
+* FIX39E como demo grande
+* fix40 como demo de IF compuesto
+* circuito simple para usuarios nuevos
+* guía paso a paso
+* qué mostrar primero
+* qué evitar mostrar todavía
+* datos de prueba recomendados
+
+### 14.4 Mapa visual de instancia / expediente
+
+Pendiente futuro importante:
+
+Crear un visor visual de ejecución de instancia usando el grafo de la definición.
+
+Idea:
+
+`WF_Instancia_Mapa.aspx?id=...`
+
+Debe mostrar por nodo:
+
+* si pasó o no
+* estado del nodo
+* rama tomada
+* tareas creadas
+* responsable / rol / usuario
+* fechas
+* tiempos
+* logs asociados
+* documentos asociados
+* estado actual de la instancia
+* errores
+
+No implementar sin análisis previo.
+
+## 15. Recomendación profesional para próxima sesión
+
+Después de recibir el ZIP completo nuevo:
+
+1. Confirmar lectura de ContextPack.
+2. Revisar ZIP real.
+3. Verificar que fix40/fix41 están incorporados.
+4. No tocar lo estable.
+5. Recomendar como próximo paso una de estas dos opciones:
+
+Opción A — Preparar demo formal / checklist operativo del Constructor IA completo.
+Opción B — Diseñar fix42 orientado a producto, no a parche: mejora de demo, documentación operativa o primer análisis del mapa visual de instancia.
+
+Recomendación principal:
+
+Antes de seguir agregando nodos grandes, conviene hacer una pasada de producto/demo para mostrar bien lo que ya funciona y detectar huecos operativos reales.

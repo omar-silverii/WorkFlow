@@ -57,9 +57,9 @@
                         <div class="list-group list-group-flush">
                             <a class="list-group-item list-group-item-action px-0" href="WorkflowUI.aspx">🔀 Editor de Workflow</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Definiciones.aspx">📋 Definiciones</a>
-                            <a class="list-group-item list-group-item-action px-0" href="WF_Tarea.aspx">🧑‍💻 Mis tareas</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Tareas.aspx">🧑‍💻 Mis tareas</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Gerente_Tareas.aspx">🧑‍💼 Tareas (Gerencia)</a>
-                            <a class="list-group-item list-group-item-action px-0" href="WF_Instancias.aspx">▶ Ejecuciones (Instancias)</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Instancias.aspx">🧭 Ejecuciones / Expedientes</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Entidades.aspx">🧾 Entidades (Casos)</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipo.aspx">📁 Tipos de Documento</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipoReglas.aspx">🧠 Reglas Extract</a>
@@ -72,7 +72,7 @@
                             <li>Definí el <b>DocTipo</b> del documento.</li>
                             <li>Cargá las <b>Reglas</b> de extracción.</li>
                             <li>Diseñá el <b>Workflow</b> en el editor.</li>
-                            <li>Ejecutá y revisá <b>ejecuciones</b> (instancias/logs).</li>
+                            <li>Consultá <b>ejecuciones / expedientes</b> (instancias, datos y logs).</li>
                             <li>Resolvé <b>tus tareas</b> (bandeja del usuario).</li>
                             <li>Supervisá <b>tareas</b> (gerencia).</li>
                             <li>Asociá <b>documentos</b> al caso (integración DMS).</li>
@@ -213,6 +213,22 @@
                                     </div>
                                     <div class="d-flex gap-2 mt-3">
                                         <a class="btn btn-primary" href="WF_Gerente_Tareas.aspx">Ver tareas</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 5b: Ejecuciones / Expedientes -->
+                        <div class="col-12 col-md-6">
+                            <div class="card ws-card h-100">
+                                <div class="card-body">
+                                    <div class="ws-icon">🧭</div>
+                                    <h5 class="mt-2 mb-1">Ejecuciones / Expedientes</h5>
+                                    <div class="ws-muted">
+                                        Seguimiento operativo de instancias reales: estado, definición, DatosContexto, logs y trazabilidad básica.
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <a class="btn btn-primary" href="WF_Instancias.aspx">Ver ejecuciones</a>
                                     </div>
                                 </div>
                             </div>

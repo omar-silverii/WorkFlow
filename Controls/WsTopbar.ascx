@@ -66,8 +66,16 @@
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Tareas.aspx") %>">🧑‍💻 Mis tareas</a></li>
                         <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Gerente_Tareas.aspx") %>">🧑‍💼 Gerencia</a></li>
-                        <li><hr class="dropdown-divider" /></li>
-                        <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Instancias.aspx") %>">▶ Ejecuciones (Instancias)</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <a id="lnkEjecuciones" runat="server" class="nav-link dropdown-toggle" href="#"
+                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Ejecuciones
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Instancias.aspx") %>">▶ Instancias / Expedientes</a></li>
                     </ul>
                 </li>
 

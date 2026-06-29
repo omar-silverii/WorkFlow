@@ -25,6 +25,31 @@
         .table> :not(caption)>*>* { vertical-align: middle; }
         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
+
+
+        .ws-def-picker { position: relative; }
+        .ws-def-input-wrap { position: relative; }
+        .ws-def-input { padding-left: 34px; padding-right: 58px; }
+        .ws-def-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: rgba(0,0,0,.45); pointer-events: none; font-size: .95rem; }
+        .ws-def-clear { position: absolute; right: 34px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: rgba(0,0,0,.48); line-height: 1; padding: 0 4px; }
+        .ws-def-caret { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: rgba(0,0,0,.48); pointer-events: none; font-size: .85rem; }
+        .ws-def-results { display: none; position: absolute; z-index: 1050; left: 0; right: 0; top: calc(100% + 4px); max-height: 360px; overflow-y: auto; background: #fff; border: 1px solid rgba(16,24,40,.12); border-radius: 12px; box-shadow: 0 16px 34px rgba(16,24,40,.16); }
+        .ws-def-results.show { display: block; }
+        .ws-def-item { width: 100%; border: 0; background: #fff; text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(16,24,40,.08); display: grid; grid-template-columns: minmax(160px, 220px) minmax(220px, 1fr) auto; gap: 12px; align-items: center; }
+        .ws-def-item:hover, .ws-def-item:focus { background: rgba(13,110,253,.06); outline: none; }
+        .ws-def-code { font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ws-def-name { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ws-def-meta { text-align: right; min-width: 118px; }
+        .ws-def-badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; background: rgba(13,110,253,.10); color: #0d6efd; }
+        .ws-def-badge-empty { background: rgba(108,117,125,.12); color: #6c757d; }
+        .ws-def-date { display: block; margin-top: 3px; color: rgba(0,0,0,.55); font-size: .72rem; }
+        .ws-def-empty { padding: 12px; color: rgba(0,0,0,.55); font-size: .86rem; display: none; }
+        .ws-def-empty.show { display: block; }
+        .ws-def-more { padding: 8px 12px; color: #0d6efd; font-size: .82rem; border-top: 1px solid rgba(16,24,40,.08); }
+        @media (max-width: 768px) {
+            .ws-def-item { grid-template-columns: 1fr; gap: 3px; }
+            .ws-def-meta { text-align: left; }
+        }
     </style>
 </head>
 <body>
@@ -50,13 +75,53 @@
                 </div>
             </div>
 
+            <div class="card ws-card mb-3">
+                <div class="card-body py-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4 col-lg-3">
+                            <label class="form-label mb-0">Abrir expediente por instancia</label>
+                            <asp:TextBox ID="txtInstanciaMapa" runat="server"
+                                CssClass="form-control form-control-sm"
+                                placeholder="Ej: 170508" />
+                        </div>
+                        <div class="col-md-auto d-grid">
+                            <asp:Button ID="btnAbrirMapa" runat="server"
+                                Text="Abrir mapa"
+                                CssClass="btn btn-sm btn-outline-dark"
+                                OnClick="btnAbrirMapa_Click" />
+                        </div>
+                        <div class="col-md">
+                            <div class="ws-muted small mb-1">Usalo cuando ya tenés el número de instancia y no sabés a qué definición pertenece.</div>
+                            <asp:Label ID="lblAbrirMapaMsg" runat="server" CssClass="small text-danger" EnableViewState="false" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row g-2 align-items-end mb-2">
                 <div class="col-md-4">
                     <label class="form-label mb-0">Definición:</label>
-                    <asp:DropDownList ID="ddlDef" runat="server"
-                        CssClass="form-select form-select-sm"
-                        AutoPostBack="true"
-                        OnSelectedIndexChanged="ddlDef_SelectedIndexChanged" />
+                    <asp:HiddenField ID="hidDefId" runat="server" />
+                    <div class="ws-def-picker" id="defPicker">
+                        <div class="ws-def-input-wrap">
+                            <span class="ws-def-icon">&#128269;</span>
+                            <asp:TextBox ID="txtDef" runat="server"
+                                CssClass="form-control form-control-sm ws-def-input"
+                                AutoPostBack="true"
+                                OnTextChanged="txtDef_TextChanged"
+                                autocomplete="off"
+                                placeholder="Buscá por código o nombre de la definición..." />
+                            <button type="button" class="ws-def-clear" id="btnDefClear" title="Limpiar definición">&times;</button>
+                            <span class="ws-def-caret">&#9662;</span>
+                        </div>
+                        <div class="ws-def-results" id="defResults" role="listbox" aria-label="Definiciones">
+                            <asp:Literal ID="litDefResults" runat="server" />
+                            <div class="ws-def-empty" id="defEmpty">No se encontraron definiciones.</div>
+                            <div class="ws-def-more" id="defMore">Escribí para filtrar por código, nombre o parte del texto.</div>
+                        </div>
+                    </div>
+                    <div class="ws-muted small mt-1">Buscá por código, nombre o parte del texto. La lista muestra la última ejecución si existe.</div>
+                    <asp:Label ID="lblDefMsg" runat="server" CssClass="small text-danger" EnableViewState="false" />
                 </div>
 
                 <div class="col-md-2">
@@ -77,10 +142,10 @@
                 </div>
 
                 <div class="col-md-3">
-                    <label class="form-label mb-0">Buscar:</label>
+                    <label class="form-label mb-0">Buscar dentro de la definición:</label>
                     <asp:TextBox ID="txtBuscar" runat="server"
                         CssClass="form-control form-control-sm"
-                        placeholder="Id / texto (OC, proveedor, etc.)" />
+                        placeholder="Id / texto dentro de esta definición" />
                 </div>
 
                 <div class="col-md-2">
@@ -142,6 +207,8 @@
 
                                     <asp:TemplateField HeaderText="Acciones">
                                         <ItemTemplate>
+                                            <asp:HyperLink runat="server" CssClass="btn btn-sm btn-outline-dark"
+                                                NavigateUrl='<%# "WF_Instancia_Mapa.aspx?id=" + Eval("Id") %>'>Mapa</asp:HyperLink>
                                             <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-primary"
                                                 CommandName="Datos" CommandArgument='<%# Eval("Id") %>'>Datos</asp:LinkButton>
                                             <asp:LinkButton runat="server" CssClass="btn btn-sm btn-outline-secondary"
@@ -347,6 +414,116 @@
 
             return true;
         }
+    </script>
+
+
+    <script>
+        (function () {
+            function norm(v) { return (v || '').toString().trim().toLowerCase(); }
+
+            function getEls() {
+                return {
+                    txt: document.getElementById('<%= txtDef.ClientID %>'),
+                    hid: document.getElementById('<%= hidDefId.ClientID %>'),
+                    box: document.getElementById('defResults'),
+                    empty: document.getElementById('defEmpty'),
+                    clear: document.getElementById('btnDefClear'),
+                    form: document.getElementById('<%= form1.ClientID %>')
+                };
+            }
+
+            function items(box) {
+                return box ? Array.prototype.slice.call(box.querySelectorAll('.ws-def-item')) : [];
+            }
+
+            function openBox(e) {
+                if (e.box) e.box.classList.add('show');
+                filterDefs(e);
+            }
+
+            function closeBox(e) {
+                if (e.box) e.box.classList.remove('show');
+            }
+
+            function syncDefId(e) {
+                if (!e.txt || !e.hid || !e.box) return;
+                var val = norm(e.txt.value);
+                var found = '';
+                items(e.box).some(function (it) {
+                    var display = norm(it.getAttribute('data-display'));
+                    var code = norm(it.getAttribute('data-code'));
+                    var name = norm(it.getAttribute('data-name'));
+                    if (display === val || code === val || name === val) {
+                        found = it.getAttribute('data-id') || '';
+                        return true;
+                    }
+                    return false;
+                });
+                e.hid.value = found;
+            }
+
+            function filterDefs(e) {
+                if (!e.txt || !e.box) return;
+                var q = norm(e.txt.value);
+                var visible = 0;
+                items(e.box).forEach(function (it) {
+                    var search = norm(it.getAttribute('data-search'));
+                    var show = !q || search.indexOf(q) >= 0;
+                    if (show && visible < 80) {
+                        it.style.display = '';
+                        visible++;
+                    } else {
+                        it.style.display = 'none';
+                    }
+                });
+                if (e.empty) e.empty.classList.toggle('show', visible === 0);
+            }
+
+            function selectItem(e, it) {
+                if (!e.txt || !e.hid || !it) return;
+                e.txt.value = it.getAttribute('data-display') || '';
+                e.hid.value = it.getAttribute('data-id') || '';
+                closeBox(e);
+            }
+
+            function wireDefPicker() {
+                var e = getEls();
+                if (!e.txt || !e.box) return;
+
+                e.txt.addEventListener('focus', function () { openBox(e); });
+                e.txt.addEventListener('click', function () { openBox(e); });
+                e.txt.addEventListener('input', function () {
+                    if (e.hid) e.hid.value = '';
+                    openBox(e);
+                });
+                e.txt.addEventListener('change', function () { syncDefId(e); });
+                e.txt.addEventListener('blur', function () {
+                    window.setTimeout(function () { syncDefId(e); closeBox(e); }, 180);
+                });
+
+                items(e.box).forEach(function (it) {
+                    it.addEventListener('mousedown', function (ev) {
+                        ev.preventDefault();
+                        selectItem(e, it);
+                    });
+                });
+
+                if (e.clear) {
+                    e.clear.addEventListener('mousedown', function (ev) {
+                        ev.preventDefault();
+                        e.txt.value = '';
+                        if (e.hid) e.hid.value = '';
+                        openBox(e);
+                        e.txt.focus();
+                    });
+                }
+
+                if (e.form) e.form.addEventListener('submit', function () { syncDefId(e); });
+            }
+
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireDefPicker);
+            else wireDefPicker();
+        })();
     </script>
 
 </form>
