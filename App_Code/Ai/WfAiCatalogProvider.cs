@@ -28,7 +28,7 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.start", Label = "Inicio", Params = new List<string>() });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.end", Label = "Fin", Params = new List<string>() });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "doc.load", Label = "Documento: Cargar archivo", Params = new List<string> { "path", "mode", "docTipoCodigo", "outputPrefix" } });
-            catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.if", Label = "Condición (If)", Params = new List<string> { "field", "op", "value", "expression", "transform" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.if", Label = "Condición (If)", Params = new List<string> { "field", "op", "value", "expression", "transform", "rulesMode", "rules" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "human.task", Label = "Tarea humana", Params = new List<string> { "rol", "usuarioAsignado", "titulo", "descripcion", "scopeKey", "deadlineMinutes", "estadoNegocioPendiente" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "email.send", Label = "Correo: Enviar", Params = new List<string> { "from", "to", "cc", "bcc", "subject", "body", "html", "modo", "useWebConfig", "isHtml" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.notify", Label = "Notificar", Params = new List<string> { "tipo", "canal", "nivel", "destinoTipo", "usuarioDestino", "rolDestino", "destino", "prioridad", "asunto", "mensaje", "urlAccion" } });

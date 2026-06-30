@@ -484,6 +484,12 @@
                 e.txt.value = it.getAttribute('data-display') || '';
                 e.hid.value = it.getAttribute('data-id') || '';
                 closeBox(e);
+
+                // Mantiene el comportamiento esperado del combo: al elegir una definición,
+                // se actualiza el listado sin obligar al usuario a presionar Buscar/Refrescar.
+                if (typeof window.__doPostBack === 'function' && e.txt.name) {
+                    window.setTimeout(function () { window.__doPostBack(e.txt.name, ''); }, 0);
+                }
             }
 
             function wireDefPicker() {

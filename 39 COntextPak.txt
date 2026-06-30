@@ -1,0 +1,786 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA
+
+## Cierre de sesión — 26/06/2026 — después de fix42 a fix42f
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send salvo pedido explícito de Omar.
+* No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+* Antes de cada fix revisar el ZIP/código real.
+* No usar fixes sueltos viejos si el ZIP completo nuevo ya los contiene.
+
+## 2. Procedimiento habitual
+
+Cuando Omar cierre sesión:
+
+1. Pide ContextPack y Prompt.
+2. Guarda el proyecto actualizado.
+3. Genera ZIP completo actualizado.
+4. Sube el proyecto a GitHub.
+5. En la próxima sesión pasa:
+
+   * Prompt
+   * ContextPack
+   * ZIP actualizado del proyecto desde GitHub
+   * ZIP adicional solo si corresponde
+
+En la próxima sesión, no proponer código hasta recibir y revisar el ZIP actualizado.
+
+## 3. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* Una conexión `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Variables técnicas `wf.*`.
+* Variables de negocio `biz.*`.
+* Constructor IA offline/local con ML.NET + CSV + modelo externo.
+* Sin OpenAI API.
+* Sin Ollama.
+* Sin dependencia externa para IA.
+
+El sistema ya funciona en servidores reales de la empresa.
+
+## 4. Estado estable validado hasta fix41
+
+Ya estaban cerrados y no deben tocarse salvo bug real:
+
+* fix19  — Notificaciones por usuario
+* fix22  — Constructor amplio
+* fix22b — Modificar pasos
+* fix22c — Frase segura / datos respetados
+* fix23  — Catálogo de salidas / datos disponibles
+* fix24  — IF guiado con FieldPicker y operadores por tipo
+* fix24b — Operadores numéricos
+* fix24c — Recursión al agregar IF
+* fix24d — Datos disponibles último arriba
+* fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+* fix24f — Selector buscable de usuarios
+* fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+* fix26  — Validador funcional del constructor
+* fix27  — Solicitud HTTP en Constructor IA
+* fix28  — Consulta SQL en Constructor IA
+* fix28b — SELECT con resultados visibles en DatosContexto
+* fix29  — Logger en Constructor IA
+* fix29b — Inspector Logger Level Warn correcto
+* fix30  — Guardar / Quitar variable state.vars
+* fix30b — UX Guardar variable simple + avanzado JSON
+* fix30c — Quitar propiedad dentro de objeto JSON
+* fix31  — UX Inspector / Asistente IA colapsado
+* fix32  — Demora / Delay ya existente y validado
+* fix33  — Manejador de Error en Constructor IA
+* fix34  — Reintentar en Constructor IA
+* fix35  — Archivo Leer / Escribir en Constructor IA
+* fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+* fix37  — Logs y DatosContexto redimensionables en WF_Instancias.aspx
+* fix38  — WF_Definiciones filtra por Id exacto si el filtro es numérico
+* fix39a — descartado y revertido
+* fix39b — Constructor IA modo amplio en 3 columnas
+* fix39c — Ramas anidadas recursivas visibles
+* fix39d — UX contextual, ocultar Cuándo si la rama ya fue elegida por clic
+* fix39e — Aplicar ramas profundas al canvas y validar ejecución integral completa
+* fix40  — IF compuesto / condición compuesta
+* fix40b — Validador recursivo de ramas profundas
+* fix40c — Corrección de destino visual en ramas profundas
+* fix40d — Guardado SQL de IF compuesto
+* fix41  — Limpieza de frase del Constructor IA
+
+## 5. Validación completa de fix39e
+
+fix39e quedó validado completo con flujo integral FIX39E.
+
+Rutas reales probadas:
+
+1. CAE OK + total > 200000 + DIR_GENERAL APTO
+2. CAE faltante + COMPRAS APTO
+3. CAE faltante + COMPRAS NO APTO
+4. CAE OK + total > 200000 + DIR_GENERAL NO APTO
+5. CAE OK + total forzado > 999999 false + ADM_FIN APTO
+6. CAE OK + total forzado > 999999 false + ADM_FIN NO APTO
+
+Instancias:
+
+* 160505 — DIR_GENERAL APTO — APROBADA_DIRECCION
+* 160506 — COMPRAS APTO — CORREGIDA_COMPRAS
+* 160507 — COMPRAS NO APTO — RECHAZADA_SIN_CAE
+* 160508 — DIR_GENERAL NO APTO — RECHAZADA_DIRECCION
+* 160509 — ADM_FIN APTO — APROBADA_ADMINISTRACION
+* 160510 — ADM_FIN NO APTO — RECHAZADA_ADMINISTRACION
+
+Resultado:
+
+Constructor IA → canvas → SQL → motor → tareas humanas → ramas profundas → finalización quedó validado.
+
+## 6. fix40 — IF compuesto / condición compuesta
+
+Estado:
+
+CERRADO / VALIDADO FUNCIONALMENTE
+
+Qué agregó:
+
+* IF simple sigue funcionando igual.
+* IF compuesto se agrega como extensión compatible.
+* Soporta `rulesMode`.
+* Soporta `rules[]`.
+* Modo probado: `ALL / Todas las reglas deben cumplirse`.
+* Permite varias reglas dentro de un mismo IF.
+
+Ejemplo probado:
+
+1. `biz.notaCredito.cae` no está vacío
+2. `biz.notaCredito.total` mayor que `200000`
+3. `biz.notaCredito.itemsCount` mayor que `0`
+
+## 7. Validación real de fix40
+
+### Ruta positiva — SI CUMPLE / DIR_GENERAL / APTO
+
+Definición:
+
+* defId=10170
+* WF-20260625-083823
+
+Instancia:
+
+* 170507
+
+Logs clave:
+
+`[If] ALL [biz.notaCredito.cae not_empty => True; biz.notaCredito.total > 200000 => True; biz.notaCredito.itemsCount > 0 => True]`
+
+Resultado:
+
+* Tomó rama SI CUMPLE.
+* Creó tarea humana para DIR_GENERAL.
+* Al aprobar, evaluó `wf.tarea.resultado == apto => True`.
+* Finalizó correctamente.
+
+### Ruta negativa — NO CUMPLE / COMPRAS / APTO
+
+Definición:
+
+* defId=10171
+* WF-20260625-084551
+
+Instancia:
+
+* 170508
+
+Prueba:
+
+Se forzó una regla para que falle:
+
+`biz.notaCredito.total > 999999`
+
+Logs clave:
+
+`[If] ALL [biz.notaCredito.cae not_empty => True; biz.notaCredito.total > 999999 => False; biz.notaCredito.itemsCount > 0 => True]`
+
+Resultado:
+
+* Tomó rama NO CUMPLE.
+* Creó tarea humana para COMPRAS.
+* Al aprobar, evaluó `wf.tarea.resultado == apto => True`.
+* Finalizó correctamente.
+
+Conclusión:
+
+fix40 queda validado funcionalmente para:
+
+* IF compuesto con varias reglas.
+* Modo ALL / AND.
+* Rama SI CUMPLE.
+* Rama NO CUMPLE.
+* Guardado SQL.
+* Ejecución real del motor.
+* Tareas humanas posteriores.
+* Reanudación.
+* Finalización.
+
+## 8. fix41 — Limpieza de frase del Constructor IA
+
+Estado:
+
+APLICADO / OK VISUALMENTE
+
+Objetivo:
+
+Evitar que texto residual de interfaz como:
+
+`Agregar paso:`
+
+pueda meterse en la frase generada o interpretada por el Constructor IA.
+
+Omar informó:
+
+“No aparece ‘Agregar paso:’”
+
+Conclusión:
+
+fix41 queda como pulido aplicado correctamente.
+
+No tocó:
+
+* motor
+* `HIf.cs`
+* `WorkflowUI.aspx.cs`
+* canvas
+* inspectores
+* NC_AR
+* FACTURA_AR
+* SMTP
+* subflow
+
+## 9. Nueva etapa fix42 — Ejecuciones / Expedientes / Mapa de instancia
+
+Después de la demo, Omar descartó preparar checklist de demo y decidió avanzar sobre operación real.
+
+Criterio acordado:
+
+El mapa visual de instancia / expediente debe estar en una separación propia del dashboard, no dentro de Tareas.
+
+Concepto:
+
+* Workflow = modelo / diseño.
+* Tarea = acción humana pendiente o resuelta.
+* Ejecución / Expediente = historia completa de una instancia real.
+
+## 10. fix42 — Ejecuciones en dashboard y navegación
+
+Estado:
+
+APLICADO
+
+Archivo entregado:
+
+* `fix42_ejecuciones_dashboard_simple.zip`
+
+Qué hizo:
+
+* Nueva separación en topbar: **Ejecuciones**.
+* Dentro: **Instancias / Expedientes** → `WF_Instancias.aspx`.
+* Se sacó **Ejecuciones (Instancias)** del menú **Tareas**.
+* En dashboard se agregó tarjeta **Ejecuciones / Expedientes**.
+* En accesos rápidos se renombró el link a **Ejecuciones / Expedientes**.
+* Se corrigió link viejo de **Mis tareas** que apuntaba a `WF_Tarea.aspx`; ahora apunta a `WF_Tareas.aspx`.
+* `WF_Instancias.aspx` marca activa la sección **Ejecuciones**.
+* Incluyó LEEME.
+
+No tocó:
+
+* motor
+* Constructor IA
+* canvas
+* handlers
+* SMTP
+* NC_AR
+* FACTURA_AR
+* subflow
+* base de datos
+
+## 11. fix42b — Mapa simple de instancia / expediente
+
+Estado:
+
+APLICADO
+
+Archivo entregado:
+
+* `fix42b_mapa_instancia_simple.zip`
+
+Motivo:
+
+Omar aplicó fix42 y vio que la sección Ejecuciones estaba, pero no aparecía el mapa. Se detectó que fix42 solo separaba navegación y no creaba la página de mapa.
+
+Qué agregó:
+
+* Botón **Mapa** en `WF_Instancias.aspx`.
+* Nueva página `WF_Instancia_Mapa.aspx?id=...`.
+* Resumen de instancia / expediente.
+* Camino ejecutado según `WF_InstanciaLog` y `WF_Tarea`.
+* Tareas humanas asociadas.
+* Nodos no ejecutados.
+* Logs principales.
+* Botón para volver a `WF_Instancias.aspx?inst=...`.
+* Actualización del `.csproj`.
+* Incluyó LEEME.
+
+No tocó:
+
+* motor
+* Constructor IA
+* canvas
+* handlers
+* SMTP
+* NC_AR
+* FACTURA_AR
+* subflow
+* base de datos
+
+## 12. fix42c — Abrir expediente por instancia
+
+Estado:
+
+APLICADO / VALIDADO VISUALMENTE POR OMAR
+
+Archivo entregado:
+
+* `fix42c_abrir_expediente_instancia.zip`
+
+Discusión previa:
+
+Omar preguntó cómo buscar una instancia si no sabía a qué definición correspondía.
+
+Se aclaró:
+
+La lógica actual de `WF_Instancias.aspx` es correcta:
+
+`Definición → Instancias de esa definición → Estado → Buscar dentro de ese conjunto`
+
+Pero para expediente/mapa existe otro caso operativo:
+
+“Tengo el número de instancia y quiero abrirla sin saber la definición.”
+
+Qué agregó:
+
+* Bloque superior nuevo en `WF_Instancias.aspx`:
+
+  * **Abrir expediente por instancia**
+  * campo `Ej: 170508`
+  * botón **Abrir mapa**
+
+* Si el Id existe, abre directo:
+
+  * `WF_Instancia_Mapa.aspx?id=170508`
+
+* Si no es numérico, muestra aviso.
+
+* Si no existe, muestra aviso.
+
+* La búsqueda actual queda igual conceptualmente:
+
+  * **Definición → Estado → Buscar dentro de la definición**
+
+* Se renombró label/placeholder para que quede claro que esa búsqueda pertenece a la definición seleccionada.
+
+Omar lo validó visualmente y dijo:
+
+“Excelente me gusta”.
+
+No tocó:
+
+* motor
+* Constructor IA
+* mapa
+* handlers
+* SMTP
+* canvas
+* base de datos
+* NC_AR
+* subflow
+
+## 13. fix42d — Definición buscable por código y nombre
+
+Estado:
+
+APLICADO, pero luego se decidió mejorar visualmente con fix42f
+
+Archivo entregado:
+
+* `fix42d_definicion_buscable_codigo_nombre.zip`
+
+Motivo:
+
+Omar dijo que nunca le gustó del todo la codificación de Definición, aunque por ahora se mantiene. Quiso mejorar el combo para poder buscar por código o por nombre, escribiendo letras.
+
+Qué cambió:
+
+* El combo **Definición** pasó a ser editable/buscable.
+* Las opciones se muestran como:
+
+`Código — Nombre`
+
+* Se puede escribir parte del código o parte del nombre.
+* Al elegir una definición, mantiene la lógica actual:
+
+`Definición → Estado → Buscar dentro de la definición`
+
+* Sigue funcionando separado el bloque:
+
+`Abrir expediente por instancia`
+
+* Si se escribe un Id de definición, código exacto, nombre exacto o parte del texto, intenta resolver la definición.
+* Si no encuentra coincidencia, muestra aviso.
+
+No tocó:
+
+* motor
+* Constructor IA
+* mapa
+* canvas
+* handlers
+* SMTP
+* NC_AR
+* FACTURA_AR
+* subflow
+* base de datos
+
+## 14. fix42e — Toolbar del mapa / Bootstrap
+
+Estado:
+
+APLICADO / VALIDADO POR OMAR
+
+Archivo entregado:
+
+* `fix42e_toolbar_mapa_bootstrap.zip`
+
+Problema detectado:
+
+Cuando Omar estaba en `WF_Instancia_Mapa.aspx` y hacía clic en los dropdowns del topbar, navegaba a:
+
+`/Controls/#`
+
+y mostraba:
+
+`HTTP Error 403.14 - Forbidden`
+
+Causa:
+
+`WF_Instancia_Mapa.aspx` usaba el topbar, pero no estaba cargando `bootstrap.bundle.min.js`. Entonces los dropdowns del menú superior no se activaban y el clic terminaba yendo a `/Controls/#`.
+
+Qué corrigió:
+
+* En el mapa, los menús superiores **Workflows / Documentos / Tareas / Ejecuciones** despliegan bien.
+* Ya no navega a `/Controls/#`.
+* Solo modificó `WF_Instancia_Mapa.aspx`.
+* Incluyó LEEME.
+
+Omar confirmó:
+
+“Ok se soluciono con el Fix42e_toolbar.”
+
+No tocó:
+
+* lógica del mapa
+* búsquedas
+* motor
+* Constructor IA
+* canvas
+* SMTP
+* handlers
+* base de datos
+
+## 15. fix42f — Combo Definición enriquecido
+
+Estado:
+
+ENTREGADO
+
+Archivo entregado:
+
+* `fix42f_combo_definicion_enriquecido.zip`
+
+Motivo:
+
+Después de fix42d, Omar pidió ver opciones visuales para mejorar el combo editable con Bootstrap/.NET.
+
+Se generaron cuatro propuestas visuales:
+
+1. Opción A — Combo único editable código + nombre.
+2. Opción B — Código y nombre por separado.
+3. Opción C — Autocomplete enriquecido.
+4. Opción D — Búsqueda + resumen de la selección.
+
+Omar eligió la tercera imagen:
+
+**Opción C — Autocomplete enriquecido**
+
+Motivo de Omar:
+
+Le gustó porque indica:
+
+* **Última ejecución**
+* fecha/hora
+
+Qué incluye fix42f:
+
+* `WF_Instancias.aspx`
+* `WF_Instancias.aspx.cs`
+* `WF_Instancias.aspx.designer.cs`
+* `LEEME_fix42f_combo_definicion_enriquecido.txt`
+
+Qué cambia:
+
+* Reemplaza el `datalist` simple por un combo visual enriquecido.
+
+* Se puede escribir por:
+
+  * código
+  * nombre
+  * parte del texto
+  * Id de definición
+
+* El desplegable muestra:
+
+  * código
+  * nombre
+  * badge **Última ejecución**
+  * fecha/hora de última ejecución
+  * o **Sin ejecución** si nunca se ejecutó
+
+* Mantiene la lógica actual:
+
+  * definición → estado → buscar dentro de la definición
+  * abrir expediente por instancia separado
+
+No toca:
+
+* motor
+* Constructor IA
+* mapa
+* handlers
+* SMTP
+* canvas
+* base de datos
+* NC_AR
+* FACTURA_AR
+* subflow
+
+Pendiente:
+
+Omar debe aplicar y validar visualmente fix42f en el proyecto real.
+
+## 16. Estado final funcional de la pantalla WF_Instancias.aspx
+
+Al cierre de esta sesión, con fix42 a fix42f, la pantalla `WF_Instancias.aspx` queda conceptualmente así:
+
+### Entrada 1 — Abrir expediente por instancia
+
+Uso:
+
+Cuando el usuario ya conoce el número de instancia pero no sabe la definición.
+
+Ejemplo:
+
+`170508`
+
+Acción:
+
+Abre directo:
+
+`WF_Instancia_Mapa.aspx?id=170508`
+
+### Entrada 2 — Buscar por definición
+
+Uso:
+
+Cuando el usuario quiere ver ejecuciones de un workflow específico.
+
+Lógica:
+
+`Definición → Estado → Buscar dentro de la definición`
+
+La definición ahora se busca por:
+
+* código
+* nombre
+* texto parcial
+* Id de definición
+
+Y el selector enriquecido muestra información operativa:
+
+* última ejecución
+* fecha/hora
+* sin ejecución si corresponde
+
+### Entrada 3 — Acciones por instancia
+
+Desde el listado:
+
+* **Mapa**
+* **Datos**
+* **Logs**
+* **Docs**
+
+## 17. Estado final del mapa WF_Instancia_Mapa.aspx
+
+Al cierre de esta sesión, el mapa es una primera versión simple y operativa.
+
+Muestra:
+
+* resumen de instancia / expediente
+* definición asociada
+* estado
+* fechas
+* camino ejecutado según logs/tareas
+* tareas humanas asociadas
+* nodos no ejecutados
+* logs principales
+* regreso a instancias
+
+Pendientes futuros del mapa:
+
+* representación visual más gráfica sobre el grafo real
+* pintar nodos ejecutados/no ejecutados
+* marcar rama tomada
+* tiempos por nodo
+* responsable / rol / usuario con más detalle
+* documentos asociados
+* errores resaltados
+* posible timeline compacto
+
+No implementar nada de esto sin análisis previo.
+
+## 18. Cosas a no tocar salvo bug real
+
+No tocar salvo bug real explícito:
+
+* WorkflowUI canvas/aristas/zoom/minimapa
+* motor de ejecución
+* FACTURA_AR
+* NC_AR
+* extractores documentales
+* notificaciones fix19
+* SMTP/email.send
+* HEmailSend
+* HSubFlow.cs
+* WorkflowRuntime
+* handlers ya validados
+* fix37
+* fix38
+* fix39e
+* fix40
+* fix41
+* navegación ya corregida en fix42/fix42e
+* lógica de abrir expediente por instancia fix42c
+* mapa simple fix42b salvo bug puntual
+* combo enriquecido fix42f salvo bug visual o funcional
+
+## 19. Base de trabajo para próxima sesión
+
+Omar va a generar un nuevo ZIP completo desde GitHub con todo incorporado hasta fix42f.
+
+En la próxima sesión:
+
+* Tomar ese ZIP como base única.
+* No usar fixes sueltos anteriores si el ZIP completo nuevo ya contiene todo.
+* Revisar primero archivos reales.
+* Confirmar que el ZIP contiene lo aplicado hasta fix42f.
+* Recién después proponer cambios.
+
+## 20. Pendientes futuros detectados
+
+### 20.1 Validar visual y funcionalmente fix42f
+
+Pendiente inmediato:
+
+Omar debe aplicar fix42f y validar:
+
+* que el combo se vea bien
+* que filtre por código
+* que filtre por nombre
+* que seleccione correctamente la definición
+* que mantenga el listado de instancias correcto
+* que muestre última ejecución / fecha
+* que no rompa búsqueda por instancia directa
+* que no afecte Datos / Logs / Docs / Mapa
+
+### 20.2 Validar modo OR / ANY del IF compuesto
+
+fix40 quedó validado con ALL / AND.
+
+Pendiente opcional:
+
+Probar y, si hace falta, ajustar modo ANY / OR.
+
+Ejemplo:
+
+* CAE informado
+* O comprobante asociado informado
+
+Solo hacerlo si Omar lo pide o si se decide cerrar IF compuesto en forma completa también para OR.
+
+### 20.3 Evolucionar mapa visual de instancia / expediente
+
+Pendiente futuro importante:
+
+Crear un visor visual de ejecución de instancia usando el grafo de la definición.
+
+Página base:
+
+`WF_Instancia_Mapa.aspx?id=...`
+
+Debe mostrar por nodo:
+
+* si pasó o no
+* estado del nodo
+* rama tomada
+* tareas creadas
+* responsable / rol / usuario
+* fechas
+* tiempos
+* logs asociados
+* documentos asociados
+* estado actual de la instancia
+* errores
+
+No implementar sin análisis previo.
+
+### 20.4 Pulidos UX del Constructor IA
+
+Se puede seguir puliendo:
+
+* compactar tarjetas
+* mejorar navegación en flujos grandes
+* mejorar visualización de paso común posterior a ramas
+* mantener datos disponibles siempre visibles y cómodos
+* reducir combos innecesarios
+* mejorar ayudas contextuales
+
+No hacer cambios grandes sin conversar.
+
+## 21. Recomendación profesional para próxima sesión
+
+Después de recibir el ZIP completo nuevo:
+
+1. Confirmar lectura de ContextPack.
+2. Revisar ZIP real.
+3. Verificar que fix42 a fix42f están incorporados.
+4. No tocar lo estable.
+5. Primero validar `WF_Instancias.aspx` y `WF_Instancia_Mapa.aspx`.
+6. Si fix42f está OK, decidir entre:
+
+   * pulido menor de UX de instancias/expediente
+   * diseño del mapa visual avanzado
+   * prueba de OR/ANY en IF compuesto
+   * otro requerimiento explícito de Omar
+
+Recomendación principal:
+
+Antes de agregar funcionalidades grandes, conviene terminar de validar que la nueva línea **Ejecuciones / Expedientes / Mapa** quedó sólida, clara y útil operativamente.

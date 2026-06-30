@@ -8,6 +8,9 @@ git add .              # agrega todos los cambios
 git commit -m "Lo que hiciste hoy" 
 git push origin main   # lo sube a GitHub
 
+
+C:\temp\NC_00002_00000001.pdf
+
 dotnet run
 Install-Package Microsoft.ML -Version 4.0.2
 C:\Users\omard\source\repos   estan los fuentes

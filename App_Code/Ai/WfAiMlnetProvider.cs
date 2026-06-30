@@ -133,6 +133,10 @@ namespace Intranet.WorkflowStudio.WebForms
             string amount = ExtractAmount(norm);
             List<GuidedConditionRequest> guidedConditions = AnalyzeGuidedConditions(userText);
             bool hasGuidedConditions = guidedConditions.Count > 0;
+            NaturalCompositeConditionRequest naturalCompositeCondition = AnalyzeNaturalCompositeCondition(userText, norm, catalog, prefix, amount);
+            bool hasNaturalCompositeCondition = naturalCompositeCondition != null && naturalCompositeCondition.IsDetected;
+            List<HumanTaskOutcomeRequest> humanTaskOutcomes = AnalyzeHumanTaskOutcomeRequests(userText, norm, catalog);
+            bool hasHumanTaskOutcome = humanTaskOutcomes != null && humanTaskOutcomes.Count > 0;
             List<EmailRequest> emailRequests = AnalyzeEmailRequests(userText, norm, catalog);
             EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
             NotifyRequest notifyRequest = AnalyzeNotifyRequest(userText, norm);
@@ -154,10 +158,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 userKey = "";
             }
 
-            bool wantsCaeValidation = !hasGuidedConditions && (ContainsToken(norm, "cae") || ContainsToken(norm, "cai"));
-            if (hasGuidedConditions)
+            bool wantsCaeValidation = !hasGuidedConditions && !hasNaturalCompositeCondition && (ContainsToken(norm, "cae") || ContainsToken(norm, "cai"));
+            if (hasGuidedConditions || hasNaturalCompositeCondition)
             {
-                // Si el constructor guiado armó un IF explícito por campo, evitamos duplicar
+                // Si el constructor guiado o la frase libre armó un IF explícito por campo, evitamos duplicar
                 // condiciones legacy por CAE/total detectadas por palabras sueltas o importes.
                 amount = "";
             }
@@ -173,6 +177,13 @@ namespace Intranet.WorkflowStudio.WebForms
             if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(norm))
                 wantsHumanTask = false;
             bool wantsLogger = HasIntent(predictions, "REGISTRAR_LOG") || ContainsAny(norm, "log", "registrar", "dejar constancia");
+            if (hasHumanTaskOutcome)
+            {
+                // fix45: si la frase ya pidió qué registrar al aprobar/rechazar una tarea humana,
+                // esos logger se agregan como ramas del resultado humano. Evitamos crear un logger común
+                // que mezcle las ramas y oculte la decisión APTO/NO APTO.
+                wantsLogger = false;
+            }
             bool wantsEnd = HasIntent(predictions, "FINALIZAR_FLUJO") || ContainsAny(norm, "finalizar", "terminar", "fin del flujo");
 
             BranchAnalysis branches = AnalyzeBranches(norm, catalog, amount);
@@ -233,6 +244,45 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 foreach (GuidedConditionRequest condition in guidedConditions)
                     AddGuidedConditionAction(actions, missing, condition);
+            }
+
+            if (hasNaturalCompositeCondition)
+            {
+                AddNaturalCompositeConditionAction(actions, missing, naturalCompositeCondition);
+
+                if (!string.IsNullOrWhiteSpace(naturalCompositeCondition.TrueRole))
+                {
+                    EnsureHumanTaskAction(actions, naturalCompositeCondition.TrueRole, HumanTaskTitle(naturalCompositeCondition.TrueRole, ""), "Rama SI CUMPLE de condición compuesta generada por el Asistente IA.");
+                    branchTasksCreated = true;
+                }
+                else
+                {
+                    missing.Add(new JObject
+                    {
+                        ["key"] = "compoundTruePath",
+                        ["question"] = "¿A qué rol o usuario querés enviar la tarea si se cumple la condición compuesta?"
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(naturalCompositeCondition.FalseRole))
+                {
+                    EnsureHumanTaskAction(actions, naturalCompositeCondition.FalseRole, HumanTaskTitle(naturalCompositeCondition.FalseRole, ""), "Rama NO CUMPLE de condición compuesta generada por el Asistente IA.");
+                    branchTasksCreated = true;
+                }
+                else
+                {
+                    missing.Add(new JObject
+                    {
+                        ["key"] = "compoundFalsePath",
+                        ["question"] = "¿A qué rol o usuario querés enviar la tarea si NO se cumple la condición compuesta?"
+                    });
+                }
+            }
+
+            if (hasHumanTaskOutcome)
+            {
+                foreach (HumanTaskOutcomeRequest humanTaskOutcome in humanTaskOutcomes)
+                    AddHumanTaskOutcomeActions(actions, humanTaskOutcome);
             }
 
             if (wantsCaeValidation)
@@ -383,7 +433,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
             EnsureWorkflowBoundaries(actions);
 
-            JObject branchPlan = BuildBranchPlan(wantsCaeValidation, amount, branches);
+            JObject branchPlan = BuildBranchPlan(wantsCaeValidation, amount, branches, naturalCompositeCondition);
             JArray proposedConnections = BuildProposedConnections(actions, branchPlan);
 
             warnings.Add("Proveedor ML.NET: interpretación local usando modelo entrenado externo. Todavía no se aplica al canvas automáticamente.");
@@ -399,7 +449,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ["assistantVersion"] = "1.13-mlnet-operational-notify-fix17",
                 ["intent"] = "build_workflow",
                 ["confidence"] = AggregateConfidence(predictions),
-                ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches),
+                ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches, naturalCompositeCondition),
                 ["actions"] = actions,
                 ["missingData"] = missing,
                 ["warnings"] = warnings,
@@ -427,6 +477,11 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["delayRequested"] = delayRequest.WantsDelay,
                         ["delayMilliseconds"] = delayRequest.Milliseconds,
                         ["delaySeconds"] = delayRequest.Seconds,
+                        ["naturalCompositeRequested"] = hasNaturalCompositeCondition,
+                        ["naturalCompositeMode"] = hasNaturalCompositeCondition ? naturalCompositeCondition.RulesMode : "",
+                        ["naturalCompositeRules"] = hasNaturalCompositeCondition ? JArray.FromObject(naturalCompositeCondition.Rules) : new JArray(),
+                        ["humanTaskOutcomeRequested"] = hasHumanTaskOutcome,
+                        ["humanTaskOutcomeRole"] = hasHumanTaskOutcome ? string.Join(",", humanTaskOutcomes.ConvertAll(x => x.TaskRole).ToArray()) : "",
                         ["caeFalseRole"] = branches.CaeFalseRole,
                         ["totalTrueRole"] = branches.TotalTrueRole,
                         ["totalFalseRole"] = branches.TotalFalseRole
@@ -458,6 +513,481 @@ namespace Intranet.WorkflowStudio.WebForms
             return node;
         }
 
+        private static List<HumanTaskOutcomeRequest> AnalyzeHumanTaskOutcomeRequests(string userText, string normalizedText, WfAiCatalog catalog)
+        {
+            var list = new List<HumanTaskOutcomeRequest>();
+            string t = Normalize(string.IsNullOrWhiteSpace(userText) ? normalizedText : userText);
+            if (string.IsNullOrWhiteSpace(t)) return list;
+
+            var byRole = new Dictionary<string, HumanTaskOutcomeRequest>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string clauseRaw in SplitClausesForBranches(t))
+            {
+                string c = Normalize(clauseRaw);
+                if (string.IsNullOrWhiteSpace(c)) continue;
+
+                bool clauseApproval = MentionsHumanTaskApproval(c);
+                bool clauseReject = MentionsHumanTaskReject(c);
+                if (!clauseApproval && !clauseReject) continue;
+
+                // No alcanza con detectar "aprobar" en una tarea humana normal
+                // (ej.: "enviarla a ADM_FIN para aprobar"). Para crear ramas APTO/NO APTO
+                // tiene que ser una frase de resultado: "si Compras aprueba/rechaza", etc.
+                if (!IsHumanTaskOutcomeClause(c)) continue;
+
+                string role = ResolveRole(c, catalog);
+                if (string.IsNullOrWhiteSpace(role)) continue;
+
+                HumanTaskOutcomeRequest request;
+                if (!byRole.TryGetValue(role, out request))
+                {
+                    request = new HumanTaskOutcomeRequest { TaskRole = role };
+                    byRole[role] = request;
+                    list.Add(request);
+                }
+
+                if (clauseApproval) request.HasApprovedBranch = true;
+                if (clauseReject) request.HasRejectedBranch = true;
+            }
+
+            foreach (HumanTaskOutcomeRequest request in list)
+            {
+                request.ApprovedMessage = ExtractHumanTaskOutcomeMessage(userText, request.TaskRole, true);
+                request.RejectedMessage = ExtractHumanTaskOutcomeMessage(userText, request.TaskRole, false);
+
+                if (request.HasApprovedBranch && string.IsNullOrWhiteSpace(request.ApprovedMessage))
+                    request.ApprovedMessage = "Tarea de " + RoleFriendlyName(request.TaskRole) + " aprobada.";
+                if (request.HasRejectedBranch && string.IsNullOrWhiteSpace(request.RejectedMessage))
+                    request.RejectedMessage = "Tarea de " + RoleFriendlyName(request.TaskRole) + " rechazada.";
+
+                request.IsDetected = request.HasApprovedBranch || request.HasRejectedBranch;
+            }
+
+            list.RemoveAll(x => x == null || !x.IsDetected || string.IsNullOrWhiteSpace(x.TaskRole));
+            return list;
+        }
+
+        private static HumanTaskOutcomeRequest AnalyzeHumanTaskOutcomeRequest(string userText, string normalizedText, WfAiCatalog catalog)
+        {
+            List<HumanTaskOutcomeRequest> requests = AnalyzeHumanTaskOutcomeRequests(userText, normalizedText, catalog);
+            return requests.Count > 0 ? requests[0] : new HumanTaskOutcomeRequest();
+        }
+
+        private static bool IsHumanTaskOutcomeClause(string normalizedClause)
+        {
+            string c = Normalize(normalizedClause);
+            if (string.IsNullOrWhiteSpace(c)) return false;
+
+            return ContainsAny(c,
+                "si ",
+                "resultado", "resultado de tarea", "resultado humano", "wf.tarea.resultado",
+                "cuando aprueba", "cuando rechaza", "cuando la aprueba", "cuando la rechaza",
+                "si aprueba", "si rechaza", "si la aprueba", "si la rechaza", "si lo aprueba", "si lo rechaza");
+        }
+
+        private static bool MentionsHumanTaskApproval(string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+            return ContainsAny(t, "aprueba", "aprueban", "aprobado", "aprobada", "aprobar")
+                || (ContainsAny(t, "apto", "apta") && !ContainsAny(t, "no apto", "no apta"));
+        }
+
+        private static bool MentionsHumanTaskReject(string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+            return ContainsAny(t, "rechaza", "rechazan", "rechazado", "rechazada", "rechazar", "no apto", "no apta", "no aprobado", "no aprobada");
+        }
+
+        private static string ExtractHumanTaskOutcomeMessage(string userText, bool approved)
+        {
+            return ExtractHumanTaskOutcomeMessage(userText, "", approved);
+        }
+
+        private static string ExtractHumanTaskOutcomeMessage(string userText, string role, bool approved)
+        {
+            if (string.IsNullOrWhiteSpace(userText)) return "";
+
+            string roleNorm = Normalize(role).Trim();
+            string friendlyNorm = Normalize(RoleFriendlyName(role)).Trim();
+
+            string[] parts = Regex.Split(userText, @"(?<!\d)[\.;](?!\d)|\r?\n");
+            foreach (string raw in parts)
+            {
+                string original = (raw ?? "").Trim();
+                if (original.Length == 0) continue;
+
+                string c = Normalize(original);
+                bool matches = approved ? MentionsHumanTaskApproval(c) : MentionsHumanTaskReject(c);
+                if (!matches) continue;
+                if (!ContainsAny(c, "registrar", "evento", "advertencia", "log")) continue;
+
+                if (!string.IsNullOrWhiteSpace(roleNorm)
+                    && !ContainsPhrase(c, roleNorm)
+                    && !ContainsPhrase(c, friendlyNorm))
+                    continue;
+
+                Match m = Regex.Match(original, @"indicando\s+que\s+(?<msg>.*?)(?:\s+y\s+finalizar|\s+finalizar|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (m.Success)
+                {
+                    string msg = CleanOutcomeMessage(m.Groups["msg"].Value);
+                    if (msg.Length > 0) return msg;
+                }
+
+                m = Regex.Match(original, @"registrar(?:\s+un|\s+una)?(?:\s+evento|\s+informativo|\s+advertencia)?\s+(?<msg>.*?)(?:\s+y\s+finalizar|\s+finalizar|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (m.Success)
+                {
+                    string msg = CleanOutcomeMessage(m.Groups["msg"].Value);
+                    if (msg.Length > 0) return msg;
+                }
+            }
+
+            return "";
+        }
+
+        private static string CleanOutcomeMessage(string value)
+        {
+            string msg = (value ?? "").Trim();
+            msg = Regex.Replace(msg, @"\s+", " ").Trim();
+            msg = Regex.Replace(msg, @"^(que\s+)+", "", RegexOptions.IgnoreCase).Trim();
+            msg = msg.Trim(' ', '.', ',', ';', ':');
+            return msg;
+        }
+
+        private static void AddHumanTaskOutcomeActions(JArray actions, HumanTaskOutcomeRequest request)
+        {
+            if (actions == null || request == null || !request.IsDetected || string.IsNullOrWhiteSpace(request.TaskRole)) return;
+
+            string role = request.TaskRole.Trim();
+            string friendly = RoleFriendlyName(role);
+
+            bool hasResultIf = false;
+            string expectedLabel = Normalize("Resultado de " + role + " aprobado").Trim();
+            string expectedFriendlyLabel = Normalize("Resultado de " + friendly + " aprobado").Trim();
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["field"] ?? "").Trim(), "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string label = Normalize(ActionLabel(a)).Trim();
+                if (string.Equals(label, expectedLabel, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(label, expectedFriendlyLabel, StringComparison.OrdinalIgnoreCase)
+                    || ContainsPhrase(label, Normalize(role).Trim())
+                    || ContainsPhrase(label, Normalize(friendly).Trim()))
+                {
+                    hasResultIf = true;
+                    break;
+                }
+            }
+
+            if (!hasResultIf)
+            {
+                actions.Add(AddNode("control.if", "Resultado de " + role + " aprobado", new JObject
+                {
+                    ["field"] = "wf.tarea.resultado",
+                    ["op"] = "==",
+                    ["value"] = "apto"
+                }));
+            }
+
+            if (request.HasApprovedBranch)
+            {
+                actions.Add(AddNode("util.logger", "Registrar aprobación de " + role, new JObject
+                {
+                    ["level"] = "Info",
+                    ["message"] = request.ApprovedMessage ?? ("Tarea de " + friendly + " aprobada.")
+                }));
+            }
+
+            if (request.HasRejectedBranch)
+            {
+                actions.Add(AddNode("util.logger", "Registrar rechazo de " + role, new JObject
+                {
+                    ["level"] = "Warn",
+                    ["message"] = request.RejectedMessage ?? ("Tarea de " + friendly + " rechazada.")
+                }));
+            }
+        }
+
+        private static NaturalCompositeConditionRequest AnalyzeNaturalCompositeCondition(string userText, string normalizedText, WfAiCatalog catalog, string prefix, string amount)
+        {
+            var request = new NaturalCompositeConditionRequest();
+            string t = Normalize(string.IsNullOrWhiteSpace(userText) ? normalizedText : userText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool explicitComposite = ContainsAny(t,
+                "condicion compuesta", "condición compuesta",
+                "cualquiera de las reglas", "cualquier regla", "al menos una regla", "una de las reglas",
+                "todas las reglas", "cada regla",
+                "modo cualquiera", "modo any", "modo or", "modo o", "modo todas", "modo all", "modo and", "modo y");
+
+            bool hasOrBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai)\b.*\bo\b.*\b(comprobante\s+asociado|asociado|total|items|itemscount)\b", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(t, @"\b(comprobante\s+asociado|asociado)\b.*\bo\b.*\b(cae|cai|total|items|itemscount)\b", RegexOptions.IgnoreCase);
+
+            bool hasAndBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai|comprobante\s+asociado|asociado|total|items|itemscount)\b.*\by\b.*\b(cae|cai|comprobante\s+asociado|asociado|total|items|itemscount)\b", RegexOptions.IgnoreCase);
+
+            if (!explicitComposite && !hasOrBetweenKnownRules && !hasAndBetweenKnownRules)
+                return request;
+
+            string contextPrefix = ResolveNaturalConditionPrefix(prefix, t);
+            request.RulesMode = ResolveNaturalRulesMode(t);
+            request.Rules.AddRange(ExtractNaturalCompositeRules(t, contextPrefix, amount));
+            ForceNaturalMissingOperators(t, request.Rules);
+            request.TrueRole = ExtractNaturalCompositeBranchRole(t, catalog, true);
+            request.FalseRole = ExtractNaturalCompositeBranchRole(t, catalog, false);
+
+            request.IsDetected = request.Rules.Count > 0;
+            return request;
+        }
+
+        private static void ForceNaturalMissingOperators(string normalizedText, List<NaturalConditionRule> rules)
+        {
+            if (rules == null || rules.Count == 0) return;
+
+            string t = Normalize(normalizedText);
+
+            bool caeMissing = ContainsAny(t,
+                "no tiene cae", "no tenga cae", "no posee cae", "sin cae",
+                "falta cae", "falta el cae", "falta la cae",
+                "cae faltante", "cae vacio", "cae vacío", "cae en blanco",
+                "cae no informado", "cae sin informar");
+
+            bool comprobanteMissing = ContainsAny(t,
+                "no tiene comprobante asociado", "no tenga comprobante asociado", "sin comprobante asociado",
+                "falta comprobante asociado", "falta el comprobante asociado",
+                "comprobante asociado faltante", "comprobante asociado vacio", "comprobante asociado vacío",
+                "comprobante asociado en blanco", "comprobante asociado no informado", "comprobante asociado sin informar",
+                "no tiene numero asociado", "no tiene número asociado", "sin numero asociado", "sin número asociado",
+                "falta numero asociado", "falta número asociado", "falta el numero asociado", "falta el número asociado",
+                "numero asociado faltante", "número asociado faltante");
+
+            foreach (NaturalConditionRule rule in rules)
+            {
+                if (rule == null || string.IsNullOrWhiteSpace(rule.Field)) continue;
+
+                string f = rule.Field.Trim();
+
+                if (caeMissing && Regex.IsMatch(f, @"(^|\.)cae$", RegexOptions.IgnoreCase))
+                {
+                    rule.Op = "empty";
+                    rule.Value = "";
+                    continue;
+                }
+
+                if (comprobanteMissing && Regex.IsMatch(f, @"comprobanteAsociado\.numero$", RegexOptions.IgnoreCase))
+                {
+                    rule.Op = "empty";
+                    rule.Value = "";
+                    continue;
+                }
+            }
+        }
+
+        private static string ResolveNaturalRulesMode(string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+
+            if (ContainsAny(t, "cualquiera", "cualquier regla", "al menos una", "una de las reglas", "modo any", "modo or", "modo o")
+                || Regex.IsMatch(t, @"\bo\b", RegexOptions.IgnoreCase))
+                return "any";
+
+            return "all";
+        }
+
+        private static string ResolveNaturalConditionPrefix(string prefix, string normalizedText)
+        {
+            if (!string.IsNullOrWhiteSpace(prefix)) return prefix.Trim();
+
+            string t = Normalize(normalizedText);
+            if (ContainsAny(t, "nota de credito", "nota credito", "nc", "cae", "comprobante asociado"))
+                return "notaCredito";
+
+            return "";
+        }
+
+        private static List<NaturalConditionRule> ExtractNaturalCompositeRules(string normalizedText, string prefix, string amount)
+        {
+            var rules = new List<NaturalConditionRule>();
+            string t = Normalize(normalizedText);
+            string basePath = string.IsNullOrWhiteSpace(prefix) ? "biz" : "biz." + prefix.Trim();
+
+            if (ContainsAny(t, "cae_prueba_faltante", "cae prueba faltante"))
+                AddNaturalRule(rules, basePath + ".cae_prueba_faltante", ResolveNaturalPresenceOperator(t, "cae"), "", "CAE prueba faltante");
+            else if (ContainsToken(t, "cae") || ContainsToken(t, "cai"))
+                AddNaturalRule(rules, basePath + ".cae", ResolveNaturalPresenceOperator(t, "cae"), "", "CAE");
+
+            if (ContainsAny(t, "comprobante asociado", "comprobante asociada", "asociado", "comprobanteAsociado", "comprobante asociado numero", "comprobante asociado número"))
+                AddNaturalRule(rules, basePath + ".comprobanteAsociado.numero", ResolveNaturalPresenceOperator(t, "comprobanteAsociado"), "", "Comprobante asociado");
+
+            if (ContainsAny(t, "itemscount", "items count", "cantidad de items", "cantidad de ítems", "items", "ítems"))
+                AddNaturalRule(rules, basePath + ".itemsCount", ">", "0", "Items");
+
+            if (ContainsToken(t, "total"))
+            {
+                string op = ">";
+                if (ContainsAny(t, "menor o igual", "menor igual", "no supera", "no mayor")) op = "<=";
+                else if (ContainsAny(t, "menor que", "menor a")) op = "<";
+                else if (ContainsAny(t, "mayor o igual", "mayor igual")) op = ">=";
+                else if (ContainsAny(t, "igual a", "es igual")) op = "==";
+
+                string value = string.IsNullOrWhiteSpace(amount) ? ExtractAmount(t) : amount;
+                if (!string.IsNullOrWhiteSpace(value))
+                    AddNaturalRule(rules, basePath + ".total", op, value, "Total");
+            }
+
+            return rules;
+        }
+
+        private static string ResolveNaturalPresenceOperator(string normalizedText, string fieldKind)
+        {
+            string t = Normalize(normalizedText);
+            string k = Normalize(fieldKind);
+
+            if (k == "cae" || k == "cai")
+            {
+                if (ContainsAny(t,
+                    "no tiene cae", "no tenga cae", "no posee cae", "sin cae",
+                    "falta cae", "falta el cae", "falta la cae", "si falta cae", "si falta el cae",
+                    "cae faltante", "cae vacio", "cae vacío", "cae en blanco", "cae no informado", "cae sin informar"))
+                    return "empty";
+
+                return "not_empty";
+            }
+
+            if (k == "comprobanteasociado" || k == "asociado" || k == "numeroasociado")
+            {
+                if (ContainsAny(t,
+                    "no tiene comprobante asociado", "no tenga comprobante asociado", "sin comprobante asociado",
+                    "falta comprobante asociado", "falta el comprobante asociado", "comprobante asociado faltante",
+                    "comprobante asociado vacio", "comprobante asociado vacío", "comprobante asociado en blanco",
+                    "comprobante asociado no informado", "comprobante asociado sin informar",
+                    "no tiene numero asociado", "no tiene número asociado", "sin numero asociado", "sin número asociado",
+                    "falta numero asociado", "falta número asociado", "falta el numero asociado", "falta el número asociado",
+                    "numero asociado faltante", "número asociado faltante"))
+                    return "empty";
+
+                return "not_empty";
+            }
+
+            return "not_empty";
+        }
+
+        private static void AddNaturalRule(List<NaturalConditionRule> rules, string field, string op, string value, string label)
+        {
+            if (rules == null || string.IsNullOrWhiteSpace(field)) return;
+
+            foreach (NaturalConditionRule r in rules)
+            {
+                if (string.Equals(r.Field, field, StringComparison.OrdinalIgnoreCase)) return;
+            }
+
+            rules.Add(new NaturalConditionRule
+            {
+                Field = field,
+                Op = string.IsNullOrWhiteSpace(op) ? "not_empty" : op,
+                Value = value ?? "",
+                Label = label ?? ""
+            });
+        }
+
+        private static string ExtractNaturalCompositeBranchRole(string normalizedText, WfAiCatalog catalog, bool trueBranch)
+        {
+            string pending = "";
+            foreach (string clauseRaw in SplitClausesForBranches(normalizedText))
+            {
+                string c = Normalize(clauseRaw);
+                if (string.IsNullOrWhiteSpace(c)) continue;
+
+                bool trueMarker = ContainsAny(c, "si cumple", "si se cumple", "si la condicion cumple", "si cumple la condicion", "si es verdadero", "si da true", "rama si", "si cumple va", "si cumple enviar");
+                bool falseMarker = ContainsAny(c, "si no cumple", "si no se cumple", "si la condicion no cumple", "si no cumple la condicion", "si es falso", "si da false", "rama no", "caso contrario", "de lo contrario");
+                bool naturalMissingConditionMarker = IsNaturalMissingConditionClause(c);
+
+                string role = ResolvePositiveDestinationRole(c, catalog);
+                if (string.IsNullOrWhiteSpace(role)) role = ResolveRole(c, catalog);
+
+                if (trueBranch && (trueMarker || naturalMissingConditionMarker))
+                {
+                    if (!string.IsNullOrWhiteSpace(role)) return role;
+                    pending = "true";
+                    continue;
+                }
+
+                if (!trueBranch && falseMarker)
+                {
+                    if (!string.IsNullOrWhiteSpace(role)) return role;
+                    pending = "false";
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(role))
+                {
+                    if (trueBranch && string.Equals(pending, "true", StringComparison.OrdinalIgnoreCase)) return role;
+                    if (!trueBranch && string.Equals(pending, "false", StringComparison.OrdinalIgnoreCase)) return role;
+                }
+            }
+
+            return "";
+        }
+
+        private static bool IsNaturalMissingConditionClause(string normalizedClause)
+        {
+            string c = Normalize(normalizedClause);
+            if (string.IsNullOrWhiteSpace(c)) return false;
+
+            return ContainsAny(c,
+                "si no tiene cae", "si no tenga cae", "si no posee cae", "si falta cae", "si falta el cae", "si esta sin cae", "si está sin cae",
+                "si no tiene comprobante asociado", "si no tenga comprobante asociado", "si falta comprobante asociado", "si falta el comprobante asociado",
+                "si esta sin comprobante asociado", "si está sin comprobante asociado",
+                "si no tiene numero asociado", "si no tiene número asociado", "si falta numero asociado", "si falta número asociado",
+                "si esta sin numero asociado", "si está sin número asociado",
+                "no tiene cae", "falta el cae", "sin cae",
+                "no tiene comprobante asociado", "falta el comprobante asociado", "sin comprobante asociado",
+                "no tiene numero asociado", "no tiene número asociado", "falta el numero asociado", "falta el número asociado", "sin numero asociado", "sin número asociado");
+        }
+
+        private static void AddNaturalCompositeConditionAction(JArray actions, JArray missing, NaturalCompositeConditionRequest request)
+        {
+            if (actions == null || request == null || request.Rules == null || request.Rules.Count == 0) return;
+
+            var rules = new JArray();
+            foreach (NaturalConditionRule rule in request.Rules)
+            {
+                if (rule == null || string.IsNullOrWhiteSpace(rule.Field)) continue;
+
+                var item = new JObject
+                {
+                    ["field"] = rule.Field,
+                    ["op"] = string.IsNullOrWhiteSpace(rule.Op) ? "not_empty" : rule.Op
+                };
+
+                if (GuidedOperatorNeedsValue(rule.Op))
+                    item["value"] = rule.Value ?? "";
+
+                rules.Add(item);
+            }
+
+            if (rules.Count == 0) return;
+
+            var p = new JObject
+            {
+                ["rulesMode"] = string.Equals(request.RulesMode, "any", StringComparison.OrdinalIgnoreCase) ? "any" : "all",
+                ["rules"] = rules
+            };
+
+            actions.Add(AddNode("control.if", NaturalCompositeConditionLabel(request), p));
+        }
+
+        private static string NaturalCompositeConditionLabel(NaturalCompositeConditionRequest request)
+        {
+            string mode = request != null && string.Equals(request.RulesMode, "any", StringComparison.OrdinalIgnoreCase)
+                ? "cualquiera"
+                : "todas";
+
+            return "Condición compuesta: " + mode + " de las reglas";
+        }
 
         private static List<GuidedConditionRequest> AnalyzeGuidedConditions(string userText)
         {
@@ -693,11 +1223,12 @@ namespace Intranet.WorkflowStudio.WebForms
             var result = new JArray();
             if (actions == null || actions.Count == 0) return result;
 
+            JObject compoundIf = FindCompoundConditionAction(actions);
             JObject caeIf = FindActionByLabel(actions, "control.if", "Validar CAE informado");
             JObject totalIf = FindActionLabelStarts(actions, "control.if", "Total mayor a ");
             JObject logger = FirstAction(actions, "util.logger");
             JObject end = FirstAction(actions, "util.end");
-            JObject firstCondition = caeIf ?? totalIf;
+            JObject firstCondition = compoundIf ?? caeIf ?? totalIf;
 
             if (firstCondition == null)
             {
@@ -706,6 +1237,60 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             AddSequentialConnectionsUntil(result, actions, firstCondition);
+
+            if (compoundIf != null)
+            {
+                JObject trueTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "compound", "truePath"));
+                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "compound", "falsePath"));
+
+                AddConnection(result, compoundIf, trueTarget, "SI");
+                AddConnection(result, compoundIf, falseTarget, "NO");
+            }
+
+            List<HumanTaskOutcomeConnection> outcomeConnections = FindHumanTaskOutcomeConnections(actions);
+            if (compoundIf != null && outcomeConnections != null && outcomeConnections.Count > 0)
+            {
+                var outcomeTasks = new List<JObject>();
+
+                foreach (HumanTaskOutcomeConnection outcomeConnection in outcomeConnections)
+                {
+                    if (outcomeConnection == null || !outcomeConnection.IsDetected) continue;
+
+                    JObject outcomeTask = FindHumanTaskByRole(actions, outcomeConnection.TaskRole);
+                    if (outcomeTask == null) continue;
+
+                    AddUniqueAction(outcomeTasks, outcomeTask);
+                    AddConnection(result, outcomeTask, outcomeConnection.ResultIf, "");
+                    AddConnection(result, outcomeConnection.ResultIf, outcomeConnection.ApprovedAction ?? end, "SI");
+                    AddConnection(result, outcomeConnection.ResultIf, outcomeConnection.RejectedAction ?? end, "NO");
+
+                    if (outcomeConnection.ApprovedAction != null)
+                        AddConnection(result, outcomeConnection.ApprovedAction, end, "");
+                    if (outcomeConnection.RejectedAction != null)
+                        AddConnection(result, outcomeConnection.RejectedAction, end, "");
+                }
+
+                List<JObject> naturalTerminals = FindBranchTerminalActions(actions, branchPlan);
+                foreach (JObject terminal in naturalTerminals)
+                {
+                    if (terminal == null) continue;
+
+                    bool terminalHasOutcome = false;
+                    foreach (JObject taskWithOutcome in outcomeTasks)
+                    {
+                        if (object.ReferenceEquals(terminal, taskWithOutcome))
+                        {
+                            terminalHasOutcome = true;
+                            break;
+                        }
+                    }
+
+                    if (!terminalHasOutcome)
+                        AddConnection(result, terminal, end, "");
+                }
+
+                return result;
+            }
 
             if (caeIf != null)
             {
@@ -832,9 +1417,139 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private static List<HumanTaskOutcomeConnection> FindHumanTaskOutcomeConnections(JArray actions)
+        {
+            var list = new List<HumanTaskOutcomeConnection>();
+            if (actions == null) return list;
+
+            foreach (JToken token in actions)
+            {
+                JObject resultIf = token as JObject;
+                if (resultIf == null || !IsAddNode(resultIf)) continue;
+                if (!string.Equals(ActionNodeType(resultIf), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JObject p = resultIf["params"] as JObject;
+                if (p == null) continue;
+
+                string field = Convert.ToString(p["field"] ?? "").Trim();
+                string op = Convert.ToString(p["op"] ?? "").Trim();
+                string value = Convert.ToString(p["value"] ?? "").Trim();
+
+                if (!string.Equals(field, "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)
+                    || !(string.Equals(op, "==", StringComparison.OrdinalIgnoreCase) || string.Equals(op, "=", StringComparison.OrdinalIgnoreCase))
+                    || !string.Equals(value, "apto", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string role = ResolveRoleFromTaskResultAction(actions, resultIf);
+                if (string.IsNullOrWhiteSpace(role)) continue;
+
+                list.Add(new HumanTaskOutcomeConnection
+                {
+                    IsDetected = true,
+                    TaskRole = role,
+                    ResultIf = resultIf,
+                    ApprovedAction = FindLoggerForOutcome(actions, role, true),
+                    RejectedAction = FindLoggerForOutcome(actions, role, false)
+                });
+            }
+
+            return list;
+        }
+
+        private static HumanTaskOutcomeConnection FindHumanTaskOutcomeConnection(JArray actions)
+        {
+            if (actions == null) return null;
+
+            JObject resultIf = null;
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+
+                string field = Convert.ToString(p["field"] ?? "").Trim();
+                string op = Convert.ToString(p["op"] ?? "").Trim();
+                string value = Convert.ToString(p["value"] ?? "").Trim();
+
+                if (string.Equals(field, "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(op, "==", StringComparison.OrdinalIgnoreCase) || string.Equals(op, "=", StringComparison.OrdinalIgnoreCase))
+                    && string.Equals(value, "apto", StringComparison.OrdinalIgnoreCase))
+                {
+                    resultIf = a;
+                    break;
+                }
+            }
+
+            if (resultIf == null) return null;
+
+            string role = ResolveRoleFromTaskResultAction(actions, resultIf);
+            if (string.IsNullOrWhiteSpace(role)) return null;
+
+            return new HumanTaskOutcomeConnection
+            {
+                IsDetected = true,
+                TaskRole = role,
+                ResultIf = resultIf,
+                ApprovedAction = FindLoggerForOutcome(actions, role, true),
+                RejectedAction = FindLoggerForOutcome(actions, role, false)
+            };
+        }
+
+        private static string ResolveRoleFromTaskResultAction(JArray actions, JObject resultIf)
+        {
+            string label = Normalize(ActionLabel(resultIf));
+            if (actions == null || string.IsNullOrWhiteSpace(label)) return "";
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "human.task", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JObject p = a["params"] as JObject;
+                string role = p == null ? "" : Convert.ToString(p["rol"] ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(role)) continue;
+
+                string roleNorm = Normalize(role).Trim();
+                string friendlyNorm = Normalize(RoleFriendlyName(role)).Trim();
+
+                if (roleNorm.Length > 0 && ContainsPhrase(label, roleNorm)) return role;
+                if (friendlyNorm.Length > 0 && ContainsPhrase(label, friendlyNorm)) return role;
+            }
+
+            return "";
+        }
+
+        private static JObject FindLoggerForOutcome(JArray actions, string role, bool approved)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return null;
+
+            string prefix = approved ? "registrar aprobacion de " : "registrar rechazo de ";
+            string prefixNormRole = Normalize(prefix + role).Trim();
+            string prefixNormFriendly = Normalize(prefix + RoleFriendlyName(role)).Trim();
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "util.logger", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string label = Normalize(ActionLabel(a)).Trim();
+                if (ContainsPhrase(label, prefixNormRole) || ContainsPhrase(label, prefixNormFriendly))
+                    return a;
+            }
+
+            return null;
+        }
+
         private static List<JObject> FindBranchTerminalActions(JArray actions, JObject branchPlan)
         {
             var list = new List<JObject>();
+            AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "compound", "truePath")));
+            AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "compound", "falsePath")));
             AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath")));
             AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "total", "truePath")));
             AddUniqueAction(list, FindActionForPath(actions, GetBranchPath(branchPlan, "total", "falsePath")));
@@ -911,6 +1626,25 @@ namespace Intranet.WorkflowStudio.WebForms
                 string r = p == null ? "" : Convert.ToString(p["rol"] ?? "").Trim();
                 if (string.Equals(r, role, StringComparison.OrdinalIgnoreCase))
                     return a;
+            }
+
+            return null;
+        }
+
+        private static JObject FindCompoundConditionAction(JArray actions)
+        {
+            if (actions == null) return null;
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                JArray rules = p["rules"] as JArray;
+                if (rules != null && rules.Count > 0) return a;
             }
 
             return null;
@@ -1033,11 +1767,13 @@ namespace Intranet.WorkflowStudio.WebForms
             return Convert.ToString(action == null ? "" : action["label"] ?? "").Trim();
         }
 
-        private static string BuildMessage(JArray actions, string docTipo, string role, string userKey, string amount, BranchAnalysis branches)
+        private static string BuildMessage(JArray actions, string docTipo, string role, string userKey, string amount, BranchAnalysis branches, NaturalCompositeConditionRequest naturalCompositeCondition)
         {
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(docTipo)) parts.Add("documento " + docTipo);
             if (!string.IsNullOrWhiteSpace(amount)) parts.Add("condición por total mayor a " + amount);
+            if (naturalCompositeCondition != null && naturalCompositeCondition.IsDetected)
+                parts.Add("condición compuesta " + (string.Equals(naturalCompositeCondition.RulesMode, "any", StringComparison.OrdinalIgnoreCase) ? "ANY / cualquiera" : "ALL / todas"));
 
             if (branches != null)
             {
@@ -1804,15 +2540,30 @@ namespace Intranet.WorkflowStudio.WebForms
             return result;
         }
 
-        private static JObject BuildBranchPlan(bool wantsCaeValidation, string amount, BranchAnalysis branches)
+        private static JObject BuildBranchPlan(bool wantsCaeValidation, string amount, BranchAnalysis branches, NaturalCompositeConditionRequest naturalCompositeCondition)
         {
+            bool hasNaturalCompositeBranches = naturalCompositeCondition != null
+                && naturalCompositeCondition.IsDetected
+                && (!string.IsNullOrWhiteSpace(naturalCompositeCondition.TrueRole) || !string.IsNullOrWhiteSpace(naturalCompositeCondition.FalseRole));
+
             var branchPlan = new JObject
             {
                 ["planner"] = "runtime-branch-planner-v1",
-                ["hasBranches"] = branches != null && branches.HasBranchInfo
+                ["hasBranches"] = (branches != null && branches.HasBranchInfo) || hasNaturalCompositeBranches
             };
 
             var items = new JArray();
+
+            if (naturalCompositeCondition != null && naturalCompositeCondition.IsDetected)
+            {
+                items.Add(new JObject
+                {
+                    ["condition"] = NaturalCompositeConditionLabel(naturalCompositeCondition),
+                    ["fieldKind"] = "compound",
+                    ["truePath"] = string.IsNullOrWhiteSpace(naturalCompositeCondition.TrueRole) ? "pendiente de definir" : "human.task:" + naturalCompositeCondition.TrueRole,
+                    ["falsePath"] = string.IsNullOrWhiteSpace(naturalCompositeCondition.FalseRole) ? "pendiente de definir" : "human.task:" + naturalCompositeCondition.FalseRole
+                });
+            }
 
             if (wantsCaeValidation)
             {
@@ -2178,6 +2929,69 @@ namespace Intranet.WorkflowStudio.WebForms
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out n)) return n;
             if (double.TryParse(v, NumberStyles.Any, CultureInfo.CurrentCulture, out n)) return n;
             return fallback;
+        }
+
+        private class HumanTaskOutcomeRequest
+        {
+            public bool IsDetected { get; set; }
+            public string TaskRole { get; set; }
+            public bool HasApprovedBranch { get; set; }
+            public bool HasRejectedBranch { get; set; }
+            public string ApprovedMessage { get; set; }
+            public string RejectedMessage { get; set; }
+
+            public HumanTaskOutcomeRequest()
+            {
+                IsDetected = false;
+                TaskRole = "";
+                HasApprovedBranch = false;
+                HasRejectedBranch = false;
+                ApprovedMessage = "";
+                RejectedMessage = "";
+            }
+        }
+
+        private class HumanTaskOutcomeConnection
+        {
+            public bool IsDetected { get; set; }
+            public string TaskRole { get; set; }
+            public JObject ResultIf { get; set; }
+            public JObject ApprovedAction { get; set; }
+            public JObject RejectedAction { get; set; }
+        }
+
+        private class NaturalCompositeConditionRequest
+        {
+            public bool IsDetected { get; set; }
+            public string RulesMode { get; set; }
+            public List<NaturalConditionRule> Rules { get; private set; }
+            public string TrueRole { get; set; }
+            public string FalseRole { get; set; }
+
+            public NaturalCompositeConditionRequest()
+            {
+                IsDetected = false;
+                RulesMode = "all";
+                Rules = new List<NaturalConditionRule>();
+                TrueRole = "";
+                FalseRole = "";
+            }
+        }
+
+        private class NaturalConditionRule
+        {
+            public string Field { get; set; }
+            public string Op { get; set; }
+            public string Value { get; set; }
+            public string Label { get; set; }
+
+            public NaturalConditionRule()
+            {
+                Field = "";
+                Op = "not_empty";
+                Value = "";
+                Label = "";
+            }
         }
 
         private class GuidedConditionRequest

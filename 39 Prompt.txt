@@ -1,0 +1,366 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA / Ejecuciones
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack actualizado.
+3. El ZIP actualizado del proyecto Workflow Studio WebForms, generado desde GitHub con todos los fixes aplicados hasta fix42f.
+4. Si corresponde, cualquier ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre trabajar sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora, salvo que Omar lo pida.
+* No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+
+## Estado estable actual
+
+Está cerrado y validado:
+
+* fix19  — Notificaciones por usuario
+* fix22  — Constructor amplio
+* fix22b — Modificar pasos
+* fix22c — Frase segura / datos respetados
+* fix23  — Catálogo de salidas / datos disponibles
+* fix24  — IF guiado con FieldPicker y operadores por tipo
+* fix24b — Operadores numéricos
+* fix24c — Recursión al agregar IF
+* fix24d — Datos disponibles último arriba
+* fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+* fix24f — Selector buscable de usuarios
+* fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+* fix26  — Validador funcional del constructor
+* fix27  — Solicitud HTTP en Constructor IA
+* fix28  — Consulta SQL en Constructor IA
+* fix28b — SELECT con resultados visibles en DatosContexto
+* fix29  — Logger en Constructor IA
+* fix29b — Inspector Logger Level Warn correcto
+* fix30  — Guardar / Quitar variable state.vars
+* fix30b — UX Guardar variable simple + avanzado JSON
+* fix30c — Quitar propiedad dentro de objeto JSON
+* fix31  — UX Inspector / Asistente IA colapsado
+* fix32  — Demora / Delay ya existente y validado
+* fix33  — Manejador de Error en Constructor IA
+* fix34  — Reintentar en Constructor IA
+* fix35  — Archivo Leer / Escribir en Constructor IA
+* fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+* fix37  — Logs y DatosContexto redimensionables en WF_Instancias.aspx
+* fix38  — WF_Definiciones filtra por Id exacto si el filtro es numérico
+* fix39a — descartado y revertido
+* fix39b — Constructor IA modo amplio en 3 columnas
+* fix39c — Ramas anidadas recursivas visibles
+* fix39d — UX contextual, ocultar Cuándo si la rama ya fue elegida por clic
+* fix39e — Aplicar ramas profundas al canvas y validar ejecución integral completa
+* fix40  — IF compuesto / Condición compuesta
+* fix40b — Validador funcional recursivo de ramas profundas
+* fix40c — Destino visual correcto en ramas profundas
+* fix40d — Guardado SQL de IF compuesto
+* fix41  — Limpieza de frase del Constructor IA
+
+## Nueva línea aplicada después de fix41
+
+También deberían estar aplicados en el ZIP nuevo:
+
+* fix42  — Ejecuciones / Expedientes en dashboard y topbar
+* fix42b — Mapa simple de instancia / expediente
+* fix42c — Abrir expediente por instancia
+* fix42d — Definición buscable por código y nombre
+* fix42e — Corrección toolbar Bootstrap en mapa
+* fix42f — Combo Definición enriquecido con última ejecución y fecha
+
+## No tocar salvo bug real
+
+* notificaciones fix19
+* canvas/aristas/zoom/minimapa
+* motor de ejecución
+* FACTURA_AR
+* NC_AR
+* extractores documentales
+* SMTP
+* email.send/HEmailSend
+* HSubFlow.cs
+* WorkflowRuntime
+* handlers ya validados
+* fix37
+* fix38
+* fix39e
+* fix40
+* fix41
+* fix42 navegación Ejecuciones
+* fix42b mapa simple
+* fix42c abrir expediente por instancia
+* fix42e toolbar Bootstrap del mapa
+* fix42f combo enriquecido, salvo bug visual o funcional
+
+## Base de trabajo
+
+Tomar como base el ZIP nuevo que Omar va a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta fix42f.
+
+No usar fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+## Validación fix40
+
+fix40 quedó validado con IF compuesto.
+
+Ruta SI CUMPLE:
+
+* defId=10170
+
+* instancia 170507
+
+* reglas:
+
+  * `biz.notaCredito.cae not_empty => True`
+  * `biz.notaCredito.total > 200000 => True`
+  * `biz.notaCredito.itemsCount > 0 => True`
+
+* tarea DIR_GENERAL
+
+* aprobación APTO
+
+* finalización correcta
+
+Ruta NO CUMPLE:
+
+* defId=10171
+
+* instancia 170508
+
+* regla forzada:
+
+  * `biz.notaCredito.total > 999999 => False`
+
+* tarea COMPRAS
+
+* aprobación APTO
+
+* finalización correcta
+
+Resultado:
+
+Constructor IA → IF compuesto → canvas → SQL → motor → tarea humana → reanudación → finalización quedó validado.
+
+## Validación fix41
+
+fix41 limpió texto residual de frase del Constructor IA.
+
+Omar informó:
+
+“No aparece ‘Agregar paso:’”
+
+Por ahora fix41 queda como pulido aplicado correctamente.
+
+## Validación fix42 a fix42e
+
+### fix42
+
+Se creó sección **Ejecuciones** en dashboard/topbar.
+
+`WF_Instancias.aspx` pasó a estar conceptualmente en:
+
+**Ejecuciones / Instancias / Expedientes**
+
+### fix42b
+
+Se creó:
+
+`WF_Instancia_Mapa.aspx?id=...`
+
+y botón **Mapa** en `WF_Instancias.aspx`.
+
+### fix42c
+
+Se agregó bloque:
+
+**Abrir expediente por instancia**
+
+Permite abrir directo:
+
+`WF_Instancia_Mapa.aspx?id=170508`
+
+sin saber la definición.
+
+Omar validó visualmente y dijo que le gustó.
+
+### fix42d
+
+Se hizo buscable el combo de Definición por código/nombre.
+
+Después Omar pidió una mejora más linda con Bootstrap.
+
+### fix42e
+
+Se corrigió bug del topbar en `WF_Instancia_Mapa.aspx`.
+
+Problema anterior:
+
+Al hacer clic en dropdowns del toolbar desde el mapa, iba a:
+
+`/Controls/#`
+
+y daba:
+
+`HTTP Error 403.14 - Forbidden`
+
+Causa:
+
+Faltaba `bootstrap.bundle.min.js`.
+
+Omar confirmó que se solucionó:
+
+“Ok se soluciono con el Fix42e_toolbar.”
+
+## fix42f — Pendiente de validar en próxima sesión
+
+Omar eligió visualmente la tercera opción generada:
+
+**Opción C — Autocomplete enriquecido**
+
+Porque mostraba:
+
+* **Última ejecución**
+* fecha/hora
+
+fix42f entregado:
+
+`fix42f_combo_definicion_enriquecido.zip`
+
+Debe contener:
+
+* `WF_Instancias.aspx`
+* `WF_Instancias.aspx.cs`
+* `WF_Instancias.aspx.designer.cs`
+* `LEEME_fix42f_combo_definicion_enriquecido.txt`
+
+Qué debería hacer:
+
+* Reemplazar el `datalist` simple por un combo visual enriquecido.
+
+* Buscar por:
+
+  * código
+  * nombre
+  * parte del texto
+  * Id de definición
+
+* Mostrar en el desplegable:
+
+  * código
+  * nombre
+  * badge **Última ejecución**
+  * fecha/hora de última ejecución
+  * o **Sin ejecución** si nunca se ejecutó
+
+* Mantener la lógica:
+
+  * definición → estado → buscar dentro de la definición
+  * abrir expediente por instancia separado
+
+Primero, en la próxima sesión, verificar si fix42f quedó incorporado y validarlo visualmente.
+
+## Recomendación inicial para esta sesión
+
+Primero:
+
+1. Leer ContextPack.
+2. Esperar ZIP.
+3. Revisar estructura real.
+4. Verificar que están integrados fix42, fix42b, fix42c, fix42d, fix42e y fix42f.
+5. No proponer cambios hasta revisar los archivos reales.
+
+Después:
+
+### Paso recomendado A — Validar fix42f
+
+Revisar `WF_Instancias.aspx`:
+
+* combo Definición enriquecido
+* búsqueda por código
+* búsqueda por nombre
+* búsqueda por Id de definición
+* selección correcta
+* filtrado correcto de instancias
+* badge Última ejecución / fecha
+* caso Sin ejecución
+* botón Mapa
+* Abrir expediente por instancia
+* Datos / Logs / Docs
+
+### Paso recomendado B — Si hay bug visual, corregir mínimo
+
+Si algo falla en fix42f:
+
+* corregir solo `WF_Instancias.aspx`, `.cs` o `.designer.cs` si corresponde
+* no tocar mapa salvo que el bug esté ahí
+* no tocar motor ni Constructor IA
+
+### Paso recomendado C — Si fix42f queda OK
+
+Elegir próximo camino:
+
+1. Pulido menor de UX de Ejecuciones / Expedientes.
+2. Diseño del mapa visual avanzado.
+3. Validación modo OR/ANY del IF compuesto.
+4. Otro pedido explícito de Omar.
+
+## Criterio profesional
+
+No seguir agregando funcionalidades grandes sin revisar el sentido operativo.
+
+A esta altura el Constructor IA ya puede armar flujos reales con:
+
+* documentos
+* IF simple
+* IF compuesto
+* ramas SI/NO
+* tareas humanas
+* ramas APTO/NO APTO
+* notificaciones
+* HTTP
+* SQL
+* logger
+* variables
+* delay
+* errores
+* retry
+* archivos
+* subflujos
+
+Por eso, antes de agregar mucho más, conviene consolidar cómo se consulta, cómo se sigue y cómo se audita una ejecución real.
+
+La línea actual prioritaria es:
+
+**Ejecuciones / Expedientes / Mapa visual / trazabilidad operativa.**
