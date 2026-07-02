@@ -326,6 +326,8 @@ ORDER BY Id ASC;";
             var ordered = new List<NodoRender>();
             var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            var orden = 0;
+
             foreach (var log in logs)
             {
                 var nodoId = NormalizarNodoId(log.NodoId);
@@ -341,7 +343,7 @@ ORDER BY Id ASC;";
                     n = new NodoRow { Id = nodoId, Tipo = log.NodoTipo, Label = FriendlyTipo(log.NodoTipo) };
                 }
 
-                ordered.Add(new NodoRender { Nodo = n, PrimeraFecha = log.FechaLog });
+                ordered.Add(new NodoRender { Nodo = n, PrimeraFecha = log.FechaLog, Orden = ++orden });
             }
 
             foreach (var t in tareas)
@@ -353,12 +355,11 @@ ORDER BY Id ASC;";
                 if (!nodeById.TryGetValue(nodoId, out n))
                     n = new NodoRow { Id = nodoId, Tipo = t.NodoTipo, Label = FriendlyTipo(t.NodoTipo) };
 
-                ordered.Add(new NodoRender { Nodo = n, PrimeraFecha = t.FechaCreacion });
+                ordered.Add(new NodoRender { Nodo = n, PrimeraFecha = t.FechaCreacion, Orden = ++orden });
             }
 
             ordered = ordered
-                .OrderBy(x => x.PrimeraFecha ?? DateTime.MaxValue)
-                .ThenBy(x => x.Nodo.Id)
+                .OrderBy(x => x.Orden)
                 .ToList();
 
             if (ordered.Count == 0)
@@ -711,6 +712,7 @@ ORDER BY Id ASC;";
         {
             public NodoRow Nodo { get; set; }
             public DateTime? PrimeraFecha { get; set; }
+            public int Orden { get; set; }
         }
     }
 }

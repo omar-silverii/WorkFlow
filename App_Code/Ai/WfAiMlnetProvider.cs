@@ -147,6 +147,13 @@ namespace Intranet.WorkflowStudio.WebForms
             NotifyRequest notifyRequest = AnalyzeNotifyRequest(userText, norm);
             StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(userText);
             DelayRequest delayRequest = AnalyzeDelayRequest(norm);
+            HttpRequestRequest httpRequest = AnalyzeHttpRequestRequest(userText, norm);
+            SqlRequest sqlRequest = AnalyzeSqlRequest(userText, norm);
+            FileWriteRequest fileWriteRequest = AnalyzeFileWriteRequest(userText, norm);
+            FileReadRequest fileReadRequest = AnalyzeFileReadRequest(userText, norm);
+            QueuePublishRequest queuePublishRequest = AnalyzeQueuePublishRequest(userText, norm);
+            QueueConsumeRequest queueConsumeRequest = AnalyzeQueueConsumeRequest(userText, norm);
+            StandaloneLoggerRequest standaloneLoggerRequest = AnalyzeStandaloneLoggerRequest(userText, norm);
             string preBranchRole = ExtractPreBranchHumanTaskRole(norm, catalog);
             if (!string.IsNullOrWhiteSpace(preBranchRole))
             {
@@ -177,9 +184,22 @@ namespace Intranet.WorkflowStudio.WebForms
             bool hasExplicitDocumentSignal = docTipo.Length > 0
                 || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
             bool wantsDocument = hasExplicitDocumentSignal;
+            if ((fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead)
+                && string.IsNullOrWhiteSpace(docTipo)
+                && !ContainsAny(norm, "nota credito", "nota de credito", "factura", "documento"))
+            {
+                // fix64: frases como "leer archivo" o "escribir archivo" son file.read/file.write,
+                // no doc.load. Evitamos que la palabra "leer" dispare carga documental.
+                wantsDocument = false;
+            }
 
             bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || ContainsAny(norm, "enviar a", "mandar a", "derivar a", "pasar a", "aprobar", "revision");
             if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(norm))
+                wantsHumanTask = false;
+            if ((httpRequest.WantsHttp || sqlRequest.WantsSql
+                    || fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead
+                    || queuePublishRequest.WantsQueuePublish || queueConsumeRequest.WantsQueueConsume)
+                && !HasExplicitHumanTaskSignal(norm))
                 wantsHumanTask = false;
             bool wantsLogger = HasIntent(predictions, "REGISTRAR_LOG") || ContainsAny(norm, "log", "registrar", "dejar constancia");
             if (hasHumanTaskOutcome)
@@ -230,6 +250,24 @@ namespace Intranet.WorkflowStudio.WebForms
                     });
                 }
             }
+
+            if (httpRequest.WantsHttp)
+                AddHttpRequestAction(actions, httpRequest);
+
+            if (sqlRequest.WantsSql)
+                AddSqlRequestAction(actions, sqlRequest);
+
+            if (fileWriteRequest.WantsFileWrite)
+                AddFileWriteAction(actions, fileWriteRequest);
+
+            if (fileReadRequest.WantsFileRead)
+                AddFileReadAction(actions, fileReadRequest);
+
+            if (queuePublishRequest.WantsQueuePublish)
+                AddQueuePublishAction(actions, queuePublishRequest);
+
+            if (queueConsumeRequest.WantsQueueConsume)
+                AddQueueConsumeAction(actions, queueConsumeRequest);
 
             if (emailRequests.Count > 0)
                 AddEmailRequestAction(actions, missing, emailRequests[0], emailRequests.Count > 1 ? 1 : 0);
@@ -425,10 +463,12 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (wantsLogger)
             {
-                actions.Add(AddNode("util.logger", "Registrar evento", new JObject
+                string level = string.IsNullOrWhiteSpace(standaloneLoggerRequest.Level) ? "Info" : standaloneLoggerRequest.Level;
+                string label = string.Equals(level, "Warn", StringComparison.OrdinalIgnoreCase) ? "Registrar advertencia" : "Registrar evento";
+                actions.Add(AddNode("util.logger", label, new JObject
                 {
-                    ["level"] = "Info",
-                    ["message"] = "Paso agregado por Asistente IA"
+                    ["level"] = level,
+                    ["message"] = string.IsNullOrWhiteSpace(standaloneLoggerRequest.Message) ? "Paso agregado por Asistente IA" : standaloneLoggerRequest.Message
                 }));
             }
 
@@ -2188,6 +2228,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrWhiteSpace(branches.TotalFalseRole)) parts.Add("si no supera el total derivar a " + branches.TotalFalseRole);
             }
 
+            if (FirstAction(actions, "http.request") != null) parts.Add("solicitud HTTP");
+            if (FirstAction(actions, "data.sql") != null) parts.Add("consulta SQL");
+            if (FirstAction(actions, "file.write") != null) parts.Add("escritura de archivo");
+            if (FirstAction(actions, "file.read") != null) parts.Add("lectura de archivo");
+            if (FirstAction(actions, "queue.publish") != null) parts.Add("publicación en cola");
+            if (FirstAction(actions, "queue.consume") != null) parts.Add("consumo de cola");
             if (FirstAction(actions, "state.vars") != null) parts.Add("definición de variables");
             if (FirstAction(actions, "control.delay") != null) parts.Add("demora controlada");
             if (FirstAction(actions, "util.notify") != null) parts.Add("notificación interna");
@@ -2199,6 +2245,361 @@ namespace Intranet.WorkflowStudio.WebForms
                 return "Recibí la intención y preparé una propuesta inicial para revisar.";
 
             return "Preparé una propuesta con " + string.Join(", ", parts.ToArray()) + ".";
+        }
+
+        private static HttpRequestRequest AnalyzeHttpRequestRequest(string originalText, string normalizedText)
+        {
+            var request = new HttpRequestRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "solicitud http", "request http", "http", "api", "endpoint", "servicio rest", "llamada rest");
+            if (!wants) return request;
+
+            string method = ExtractHttpMethod(originalText);
+            string url = ExtractHttpUrl(originalText);
+
+            request.WantsHttp = true;
+            request.Method = string.IsNullOrWhiteSpace(method) ? "GET" : method.ToUpperInvariant();
+            request.Url = string.IsNullOrWhiteSpace(url) ? "/Api/Ping.ashx" : url;
+            request.Label = "Solicitud HTTP " + request.Method + " " + request.Url;
+            request.TimeoutMs = 10000;
+            request.FailOnStatus = false;
+            request.FailStatusMin = 400;
+            return request;
+        }
+
+        private static string ExtractHttpMethod(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+            var m = Regex.Match(originalText, @"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b", RegexOptions.IgnoreCase);
+            return m.Success ? m.Value.ToUpperInvariant() : "";
+        }
+
+        private static string ExtractHttpUrl(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:a|url|endpoint|api)\s+(?<url>https?://[^\s,;]+|/[^\s,;]+)",
+                RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                m = Regex.Match(originalText, @"(?<url>https?://[^\s,;]+|/[^\s,;]+)", RegexOptions.IgnoreCase);
+            }
+
+            if (!m.Success) return "";
+            string url = (m.Groups["url"].Value ?? "").Trim();
+            while (url.EndsWith(".", StringComparison.Ordinal) || url.EndsWith(",", StringComparison.Ordinal) || url.EndsWith(";", StringComparison.Ordinal))
+                url = url.Substring(0, url.Length - 1).Trim();
+            return url;
+        }
+
+        private static void AddHttpRequestAction(JArray actions, HttpRequestRequest request)
+        {
+            if (actions == null || request == null || !request.WantsHttp) return;
+
+            actions.Add(AddNode("http.request", string.IsNullOrWhiteSpace(request.Label) ? "Solicitud HTTP" : request.Label, new JObject
+            {
+                ["method"] = string.IsNullOrWhiteSpace(request.Method) ? "GET" : request.Method,
+                ["url"] = string.IsNullOrWhiteSpace(request.Url) ? "/Api/Ping.ashx" : request.Url,
+                ["headers"] = new JObject(),
+                ["query"] = new JObject(),
+                ["body"] = null,
+                ["contentType"] = "",
+                ["timeoutMs"] = request.TimeoutMs <= 0 ? 10000 : request.TimeoutMs,
+                ["failOnStatus"] = request.FailOnStatus,
+                ["failStatusMin"] = request.FailStatusMin <= 0 ? 400 : request.FailStatusMin
+            }));
+        }
+
+        private static SqlRequest AnalyzeSqlRequest(string originalText, string normalizedText)
+        {
+            var request = new SqlRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "consulta sql", "ejecutar sql", "sql", "select", "base de datos");
+            if (!wants) return request;
+
+            request.WantsSql = true;
+            request.ConnectionStringName = ExtractConnectionStringName(originalText);
+            if (string.IsNullOrWhiteSpace(request.ConnectionStringName)) request.ConnectionStringName = "DefaultConnection";
+            request.Query = ExtractSqlQuery(originalText);
+            if (string.IsNullOrWhiteSpace(request.Query)) request.Query = "SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;";
+            request.Label = "Consulta SQL";
+            return request;
+        }
+
+        private static string ExtractConnectionStringName(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:connectionstringname|connection string name|conexion|conexión|usar|con)\s+(?<name>[A-Za-z_][A-Za-z0-9_\-]*)",
+                RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                string value = (m.Groups["name"].Value ?? "").Trim();
+                if (!string.Equals(value, "sql", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(value, "una", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(value, "la", StringComparison.OrdinalIgnoreCase))
+                    return value;
+            }
+
+            if (Regex.IsMatch(originalText, @"\bDefaultConnection\b", RegexOptions.IgnoreCase))
+                return "DefaultConnection";
+
+            return "";
+        }
+
+        private static string ExtractSqlQuery(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"(?<query>select\b.+?)(?=(?:\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            string query = Regex.Replace(m.Groups["query"].Value ?? "", @"\s+", " ").Trim();
+            if (query.Length > 0 && !query.EndsWith(";", StringComparison.Ordinal)) query += ";";
+            return query;
+        }
+
+        private static void AddSqlRequestAction(JArray actions, SqlRequest request)
+        {
+            if (actions == null || request == null || !request.WantsSql) return;
+
+            actions.Add(AddNode("data.sql", string.IsNullOrWhiteSpace(request.Label) ? "Consulta SQL" : request.Label, new JObject
+            {
+                ["connectionStringName"] = string.IsNullOrWhiteSpace(request.ConnectionStringName) ? "DefaultConnection" : request.ConnectionStringName,
+                ["query"] = string.IsNullOrWhiteSpace(request.Query) ? "SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;" : request.Query,
+                ["parameters"] = new JObject()
+            }));
+        }
+
+        private static FileWriteRequest AnalyzeFileWriteRequest(string originalText, string normalizedText)
+        {
+            var request = new FileWriteRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "escribir archivo", "guardar archivo", "crear archivo", "generar archivo", "file write", "archivo escribir");
+            if (!wants) return request;
+
+            request.WantsFileWrite = true;
+            request.Path = ExtractFilePath(originalText);
+            if (string.IsNullOrWhiteSpace(request.Path)) request.Path = @"C:\temp\wf_ai_regression.txt";
+            request.Content = ExtractFileContent(originalText);
+            if (string.IsNullOrWhiteSpace(request.Content)) request.Content = "Contenido generado por Asistente IA";
+            request.Overwrite = true;
+            request.Label = "Escribir archivo";
+            return request;
+        }
+
+        private static FileReadRequest AnalyzeFileReadRequest(string originalText, string normalizedText)
+        {
+            var request = new FileReadRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "leer archivo", "abrir archivo", "file read", "archivo leer");
+            if (!wants) return request;
+
+            request.WantsFileRead = true;
+            request.Path = ExtractFilePath(originalText);
+            if (string.IsNullOrWhiteSpace(request.Path)) request.Path = @"C:\temp\wf_ai_regression.txt";
+            request.Salida = "archivo";
+            request.AsJson = false;
+            request.Label = "Leer archivo";
+            return request;
+        }
+
+        private static string ExtractFilePath(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"(?<path>[A-Za-z]:\\[^\r\n,;]+?|/[^\r\n,;]+?)(?=(?:\s+con\s+contenido\b|\s+contenido\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            return CleanExtractedSentence(m.Groups["path"].Value).Trim();
+        }
+
+        private static string ExtractFileContent(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:con\s+contenido|contenido)\s+(?<content>.+?)(?=(?:\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            return CleanExtractedSentence(m.Groups["content"].Value);
+        }
+
+        private static void AddFileWriteAction(JArray actions, FileWriteRequest request)
+        {
+            if (actions == null || request == null || !request.WantsFileWrite) return;
+
+            actions.Add(AddNode("file.write", string.IsNullOrWhiteSpace(request.Label) ? "Escribir archivo" : request.Label, new JObject
+            {
+                ["path"] = string.IsNullOrWhiteSpace(request.Path) ? @"C:\temp\wf_ai_regression.txt" : request.Path,
+                ["content"] = string.IsNullOrWhiteSpace(request.Content) ? "Contenido generado por Asistente IA" : request.Content,
+                ["encoding"] = "utf-8",
+                ["overwrite"] = request.Overwrite
+            }));
+        }
+
+        private static void AddFileReadAction(JArray actions, FileReadRequest request)
+        {
+            if (actions == null || request == null || !request.WantsFileRead) return;
+
+            actions.Add(AddNode("file.read", string.IsNullOrWhiteSpace(request.Label) ? "Leer archivo" : request.Label, new JObject
+            {
+                ["path"] = string.IsNullOrWhiteSpace(request.Path) ? @"C:\temp\wf_ai_regression.txt" : request.Path,
+                ["salida"] = string.IsNullOrWhiteSpace(request.Salida) ? "archivo" : request.Salida,
+                ["encoding"] = "utf-8",
+                ["asJson"] = request.AsJson
+            }));
+        }
+
+        private static QueuePublishRequest AnalyzeQueuePublishRequest(string originalText, string normalizedText)
+        {
+            var request = new QueuePublishRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "publicar en cola", "encolar", "queue publish", "mandar a cola", "enviar a cola");
+            if (!wants) return request;
+
+            request.WantsQueuePublish = true;
+            request.Queue = ExtractQueueName(originalText);
+            if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = "banco-regresion";
+            request.Payload = ExtractQueuePayload(originalText);
+            if (string.IsNullOrWhiteSpace(request.Payload)) request.Payload = "Mensaje generado por Asistente IA";
+            request.Broker = "sql";
+            request.ConnectionStringName = "DefaultConnection";
+            request.Label = "Publicar en cola " + request.Queue;
+            return request;
+        }
+
+        private static QueueConsumeRequest AnalyzeQueueConsumeRequest(string originalText, string normalizedText)
+        {
+            var request = new QueueConsumeRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            bool wants = ContainsAny(t, "consumir de cola", "leer de cola", "tomar mensaje", "queue consume");
+            if (!wants) return request;
+
+            request.WantsQueueConsume = true;
+            request.Queue = ExtractQueueName(originalText);
+            if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = "banco-regresion";
+            request.Take = ExtractQueueTake(originalText);
+            if (request.Take <= 0) request.Take = 1;
+            request.Broker = "sql";
+            request.ConnectionStringName = "DefaultConnection";
+            request.OutputPrefix = "queue.consume";
+            request.Label = "Consumir cola " + request.Queue;
+            return request;
+        }
+
+        private static string ExtractQueueName(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:cola|queue)\s+(?<queue>[A-Za-z0-9_\-\.]+)(?=(?:\s+con\s+payload\b|\s+payload\b|\s+tomando\b|\s+tomar\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            return CleanExtractedSentence(m.Groups["queue"].Value);
+        }
+
+        private static string ExtractQueuePayload(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\bpayload\s+(?<payload>.+?)(?=(?:\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            return CleanExtractedSentence(m.Groups["payload"].Value);
+        }
+
+        private static int ExtractQueueTake(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return 0;
+
+            var m = Regex.Match(originalText, @"\b(?:tomando|tomar|take)\s+(?<n>\d+)", RegexOptions.IgnoreCase);
+            if (!m.Success) return 0;
+
+            int n;
+            return int.TryParse(m.Groups["n"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out n) ? n : 0;
+        }
+
+        private static void AddQueuePublishAction(JArray actions, QueuePublishRequest request)
+        {
+            if (actions == null || request == null || !request.WantsQueuePublish) return;
+
+            actions.Add(AddNode("queue.publish", string.IsNullOrWhiteSpace(request.Label) ? "Publicar en cola" : request.Label, new JObject
+            {
+                ["broker"] = string.IsNullOrWhiteSpace(request.Broker) ? "sql" : request.Broker,
+                ["queue"] = string.IsNullOrWhiteSpace(request.Queue) ? "banco-regresion" : request.Queue,
+                ["payload"] = string.IsNullOrWhiteSpace(request.Payload) ? "Mensaje generado por Asistente IA" : request.Payload,
+                ["connectionStringName"] = string.IsNullOrWhiteSpace(request.ConnectionStringName) ? "DefaultConnection" : request.ConnectionStringName
+            }));
+        }
+
+        private static void AddQueueConsumeAction(JArray actions, QueueConsumeRequest request)
+        {
+            if (actions == null || request == null || !request.WantsQueueConsume) return;
+
+            actions.Add(AddNode("queue.consume", string.IsNullOrWhiteSpace(request.Label) ? "Consumir cola" : request.Label, new JObject
+            {
+                ["broker"] = string.IsNullOrWhiteSpace(request.Broker) ? "sql" : request.Broker,
+                ["queue"] = string.IsNullOrWhiteSpace(request.Queue) ? "banco-regresion" : request.Queue,
+                ["take"] = request.Take <= 0 ? 1 : request.Take,
+                ["prefetch"] = request.Take <= 0 ? 1 : request.Take,
+                ["connectionStringName"] = string.IsNullOrWhiteSpace(request.ConnectionStringName) ? "DefaultConnection" : request.ConnectionStringName,
+                ["outputPrefix"] = string.IsNullOrWhiteSpace(request.OutputPrefix) ? "queue.consume" : request.OutputPrefix,
+                ["debug"] = false
+            }));
+        }
+
+        private static StandaloneLoggerRequest AnalyzeStandaloneLoggerRequest(string originalText, string normalizedText)
+        {
+            var request = new StandaloneLoggerRequest();
+            string t = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(t)) return request;
+
+            if (!ContainsAny(t, "registrar", "log", "logger", "dejar constancia")) return request;
+
+            if (ContainsAny(t, "advertencia", "warning", "warn")) request.Level = "Warn";
+            else if (ContainsAny(t, "error", "erroneo", "erróneo")) request.Level = "Error";
+            else request.Level = "Info";
+
+            request.Message = ExtractStandaloneLoggerMessage(originalText);
+            return request;
+        }
+
+        private static string ExtractStandaloneLoggerMessage(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\bindicando(?:\s+que)?\s+(?<msg>.+?)(?=(?:\.\s|\s+y\s+finalizar\b|\s+finalizar\b|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+
+            string msg = Regex.Replace(m.Groups["msg"].Value ?? "", @"\s+", " ").Trim();
+            while (msg.EndsWith(".", StringComparison.Ordinal) || msg.EndsWith(",", StringComparison.Ordinal) || msg.EndsWith(";", StringComparison.Ordinal))
+                msg = msg.Substring(0, msg.Length - 1).Trim();
+            return msg;
         }
 
         private static NotifyRequest AnalyzeNotifyRequest(string originalText, string normalizedText)
@@ -3511,6 +3912,70 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private class HttpRequestRequest
+        {
+            public bool WantsHttp { get; set; }
+            public string Method { get; set; }
+            public string Url { get; set; }
+            public string Label { get; set; }
+            public int TimeoutMs { get; set; }
+            public bool FailOnStatus { get; set; }
+            public int FailStatusMin { get; set; }
+        }
+
+        private class SqlRequest
+        {
+            public bool WantsSql { get; set; }
+            public string ConnectionStringName { get; set; }
+            public string Query { get; set; }
+            public string Label { get; set; }
+        }
+
+        private class FileWriteRequest
+        {
+            public bool WantsFileWrite { get; set; }
+            public string Path { get; set; }
+            public string Content { get; set; }
+            public string Label { get; set; }
+            public bool Overwrite { get; set; }
+        }
+
+        private class FileReadRequest
+        {
+            public bool WantsFileRead { get; set; }
+            public string Path { get; set; }
+            public string Salida { get; set; }
+            public string Label { get; set; }
+            public bool AsJson { get; set; }
+        }
+
+        private class QueuePublishRequest
+        {
+            public bool WantsQueuePublish { get; set; }
+            public string Broker { get; set; }
+            public string Queue { get; set; }
+            public string Payload { get; set; }
+            public string ConnectionStringName { get; set; }
+            public string Label { get; set; }
+        }
+
+        private class QueueConsumeRequest
+        {
+            public bool WantsQueueConsume { get; set; }
+            public string Broker { get; set; }
+            public string Queue { get; set; }
+            public int Take { get; set; }
+            public string ConnectionStringName { get; set; }
+            public string OutputPrefix { get; set; }
+            public string Label { get; set; }
+        }
+
+        private class StandaloneLoggerRequest
+        {
+            public string Level { get; set; }
+            public string Message { get; set; }
+        }
+
         private class NotifyRequest
         {
             public bool WantsNotify { get; set; }
@@ -3631,6 +4096,7 @@ namespace Intranet.WorkflowStudio.WebForms
             AddPhraseConcept(d, n, "consulta sql base datos select", "sql", "data.sql");
             AddPhraseConcept(d, n, "http api endpoint servicio", "http", "http.request");
             AddPhraseConcept(d, n, "archivo leer escribir", "file", "file.read,file.write");
+            AddPhraseConcept(d, n, "cola queue encolar publicar consumir mensaje", "queue", "queue.publish,queue.consume");
             AddPhraseConcept(d, n, "subflujo workflow proceso", "subflow", "util.subflow");
 
             d.PrimaryRole = ResolveRole(n, null) ?? string.Empty;
@@ -3697,6 +4163,68 @@ namespace Intranet.WorkflowStudio.WebForms
                 && ContainsAny(n, "aprobar", "revisar", "corregir", "validar", "tarea");
             bool hasLogger = ContainsAny(n, "registrar", "evento", "log", "advertencia", "informativo");
             bool hasEnd = ContainsAny(n, "finalizar", "terminar", "fin");
+            bool hasHttp = ContainsAny(n, "solicitud http", "request http", "http", "api", "endpoint", "servicio rest", "llamada rest");
+            bool hasSql = ContainsAny(n, "consulta sql", "ejecutar sql", "sql", "select", "base de datos");
+            bool hasFileWrite = ContainsAny(n, "escribir archivo", "guardar archivo", "crear archivo", "generar archivo", "file write", "archivo escribir");
+            bool hasFileRead = ContainsAny(n, "leer archivo", "abrir archivo", "file read", "archivo leer");
+            bool hasStateVars = ContainsAny(n, "guardar variable", "setear variable", "definir variable", "crear variable", "asignar variable", "poner variable", "quitar variable", "eliminar variable", "borrar variable", "remover variable");
+            bool hasQueuePublish = ContainsAny(n, "publicar en cola", "encolar", "queue publish", "mandar a cola", "enviar a cola");
+            bool hasQueueConsume = ContainsAny(n, "consumir de cola", "leer de cola", "tomar mensaje", "queue consume");
+
+            // fix65: diagnóstico semántico explícito para nodos operativos simples.
+            // Estas cláusulas no son ramas humanas; se auditan contra actions para asegurar
+            // que el provider generó el nodo correcto con los parámetros esperados.
+            if (hasHttp)
+            {
+                c.AddConcept("http");
+                c.AddNodeType("http.request");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "http_request";
+            }
+
+            if (hasSql)
+            {
+                c.AddConcept("sql");
+                c.AddNodeType("data.sql");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "sql_query";
+            }
+
+            // fix66: diagnóstico semántico para archivo, variables y cola.
+            // Se mantiene separado de la generación legacy: solo audita que el nodo
+            // operativo simple esperado exista con parámetros consistentes.
+            if (hasFileWrite)
+            {
+                c.AddConcept("file");
+                c.AddNodeType("file.write");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "file_write";
+            }
+
+            if (hasFileRead)
+            {
+                c.AddConcept("file");
+                c.AddNodeType("file.read");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "file_read";
+            }
+
+            if (hasStateVars)
+            {
+                c.AddConcept("state_vars");
+                c.AddNodeType("state.vars");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "state_vars";
+            }
+
+            if (hasQueuePublish)
+            {
+                c.AddConcept("queue");
+                c.AddNodeType("queue.publish");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "queue_publish";
+            }
+
+            if (hasQueueConsume)
+            {
+                c.AddConcept("queue");
+                c.AddNodeType("queue.consume");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "queue_consume";
+            }
 
             if (hasNotify)
             {
@@ -3731,6 +4259,55 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             AnalyzePhraseClauseCondition(c, n);
+
+            // fix59: las frases de condición compuesta explícita (por ejemplo
+            // "condición compuesta donde cualquiera de las reglas... CAE no vacío o comprobante no vacío")
+            // describen el IF completo, pero el destino aparece en cláusulas posteriores
+            // ("Si cumple..." / "Si no cumple..."). No deben auditarse como condition_branch
+            // sin rol, porque eso genera warnings falsos. Se auditan como composite_condition.
+            if (IsExplicitCompositeConditionClause(n))
+            {
+                c.ClauseType = "composite_condition";
+                c.ConditionKind = "compound";
+                c.BranchSide = string.Empty;
+                c.TaskRole = string.Empty;
+            }
+
+            // fix60: frases naturales negativas compuestas, por ejemplo
+            // "Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS"
+            // no dicen literalmente "condición compuesta", pero el legacy genera un
+            // control.if con rulesMode=any y reglas empty. La auditoría semántica
+            // debe validar el IF compuesto y también la rama SI hacia el rol indicado.
+            if (IsNaturalMissingCompositeConditionBranchClause(n))
+            {
+                c.ClauseType = "composite_condition_branch";
+                c.ConditionKind = "compound";
+                c.ConditionField = string.Empty;
+                c.ConditionOperator = string.Empty;
+                c.ConditionValue = string.Empty;
+                c.BranchSide = "true";
+                c.TaskRole = string.IsNullOrWhiteSpace(c.TaskRole) ? c.Role : c.TaskRole;
+                c.AddConcept("condition");
+                c.AddNodeType("control.if");
+            }
+
+            // fix61: frases naturales compuestas ALL sin decir literalmente
+            // "condición compuesta", por ejemplo:
+            // "Si tiene CAE, el total es mayor a 200000 y tiene al menos un ítem,
+            // enviarla a DIR_GENERAL". El legacy genera rulesMode=all. La auditoría
+            // semántica debe validar las reglas CAE/total/items y la rama SI al rol.
+            if (IsNaturalAllCompositeConditionBranchClause(n))
+            {
+                c.ClauseType = "composite_condition_branch";
+                c.ConditionKind = "compound";
+                c.ConditionField = string.Empty;
+                c.ConditionOperator = string.Empty;
+                c.ConditionValue = string.Empty;
+                c.BranchSide = "true";
+                c.TaskRole = string.IsNullOrWhiteSpace(c.TaskRole) ? c.Role : c.TaskRole;
+                c.AddConcept("condition");
+                c.AddNodeType("control.if");
+            }
 
             if (!string.IsNullOrWhiteSpace(c.ConditionField))
             {
@@ -3767,6 +4344,85 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             c.ActionHint = BuildPhraseClauseActionHint(c);
+        }
+
+        private static bool IsExplicitCompositeConditionClause(string normalizedText)
+        {
+            string n = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(n)) return false;
+
+            bool explicitComposite = ContainsAny(n,
+                "condicion compuesta", "condición compuesta",
+                "cualquiera de las reglas", "cualquier regla", "al menos una regla", "una de las reglas",
+                "todas las reglas", "cada regla",
+                "modo any", "modo or", "modo all", "modo and");
+
+            if (!explicitComposite) return false;
+
+            bool mentionsKnownRule = ContainsToken(n, "cae")
+                || ContainsToken(n, "cai")
+                || ContainsAny(n, "comprobante asociado", "numero asociado", "número asociado", "total", "importe", "items", "ítems", "item", "ítem");
+
+            return mentionsKnownRule;
+        }
+
+        private static bool IsNaturalMissingCompositeConditionBranchClause(string normalizedText)
+        {
+            string n = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(n)) return false;
+
+            bool hasIf = ContainsPhrase(n, "si ") || n.TrimStart().StartsWith("si ", StringComparison.OrdinalIgnoreCase);
+            if (!hasIf) return false;
+
+            bool hasCaeMissing = ContainsAny(n,
+                "no tiene cae", "no tenga cae", "sin cae", "falta cae", "falta el cae",
+                "cae faltante", "cae vacio", "cae vacío", "cae en blanco", "cae no informado");
+
+            bool hasAssociatedMissing = ContainsAny(n,
+                "no tiene comprobante asociado", "sin comprobante asociado",
+                "falta comprobante asociado", "falta el comprobante asociado",
+                "comprobante asociado faltante", "comprobante asociado vacio", "comprobante asociado vacío",
+                "comprobante asociado en blanco", "comprobante asociado no informado",
+                "no tiene numero asociado", "no tiene número asociado",
+                "sin numero asociado", "sin número asociado",
+                "falta numero asociado", "falta número asociado",
+                "falta el numero asociado", "falta el número asociado",
+                "número asociado faltante", "numero asociado faltante");
+
+            bool hasAnyJoin = Regex.IsMatch(n, @"\bo\b", RegexOptions.IgnoreCase)
+                || ContainsAny(n, "cualquiera", "alguna de", "una de");
+
+            return hasCaeMissing && hasAssociatedMissing && hasAnyJoin;
+        }
+
+        private static bool IsNaturalAllCompositeConditionBranchClause(string normalizedText)
+        {
+            string n = Normalize(normalizedText);
+            if (string.IsNullOrWhiteSpace(n)) return false;
+
+            bool hasIf = ContainsPhrase(n, "si ") || n.TrimStart().StartsWith("si ", StringComparison.OrdinalIgnoreCase);
+            if (!hasIf) return false;
+
+            bool hasCaePresent = ContainsToken(n, "cae")
+                && ContainsAny(n,
+                    "tiene cae", "tenga cae", "con cae",
+                    "cae no esta vacio", "cae no está vacío", "cae no este vacio", "cae no esté vacío",
+                    "cae informado", "cae no vacio", "cae no vacío");
+
+            bool hasTotalCondition = ContainsAny(n, "total", "importe", "monto")
+                && ContainsAny(n, "mayor", "supera", "mas de", "más de", ">");
+
+            bool hasItemsCondition = ContainsAny(n,
+                "al menos un item", "al menos un ítem", "al menos un items", "al menos un ítems",
+                "tiene al menos un item", "tiene al menos un ítem",
+                "items", "ítems", "item", "ítem");
+
+            bool hasAllJoin = Regex.IsMatch(n, @"\by\b", RegexOptions.IgnoreCase)
+                || ContainsAny(n, "todas", "cada regla", "cumplirse todas");
+
+            // Evita capturar condiciones simples de importe o presencia: este caso solo
+            // se considera compuesto ALL cuando aparecen las tres reglas conocidas.
+            return hasCaePresent && hasTotalCondition && hasItemsCondition && hasAllJoin;
         }
 
         private static void AnalyzePhraseClauseCondition(PhraseClauseDiagnostic c, string n)
@@ -3912,7 +4568,37 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 if (clause == null) continue;
 
-                if (string.Equals(clause.ClauseType, "condition_branch", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(clause.ClauseType, "http_request", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticHttpRequest(clause, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "sql_query", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticSqlQuery(clause, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "logger", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(clause.HumanOutcome))
+                    CheckSemanticStandaloneLogger(clause, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "file_write", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticFileWrite(clause, phraseEngine.OriginalText, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "file_read", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticFileRead(clause, phraseEngine.OriginalText, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "state_vars", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticStateVars(clause, phraseEngine.OriginalText, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "queue_publish", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticQueuePublish(clause, phraseEngine.OriginalText, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "queue_consume", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticQueueConsume(clause, phraseEngine.OriginalText, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "composite_condition", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(clause.ClauseType, "composite_condition_branch", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticCompositeCondition(clause, actions, branchPlan, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "condition_branch", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(clause.ClauseType, "composite_condition_branch", StringComparison.OrdinalIgnoreCase))
                     CheckSemanticConditionBranch(clause, branchPlan, checks, warnings, errors);
 
                 if (string.Equals(clause.ClauseType, "else_human_task", StringComparison.OrdinalIgnoreCase)
@@ -3958,6 +4644,752 @@ namespace Intranet.WorkflowStudio.WebForms
             bool val;
             if (bool.TryParse(Convert.ToString(tok), out val)) return val;
             return true;
+        }
+
+        private static void CheckSemanticHttpRequest(PhraseClauseDiagnostic clause, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            HttpRequestRequest expected = AnalyzeHttpRequestRequest(clause.Text, clause.NormalizedText);
+            JObject action = FindHttpRequestAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "http_request",
+                ["expectedMethod"] = string.IsNullOrWhiteSpace(expected.Method) ? "GET" : expected.Method,
+                ["expectedUrl"] = string.IsNullOrWhiteSpace(expected.Url) ? "/Api/Ping.ashx" : expected.Url,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualMethod"] = p == null ? "" : Convert.ToString(p["method"]);
+                check["actualUrl"] = p == null ? "" : Convert.ToString(p["url"]);
+                check["actualTimeoutMs"] = p == null ? "" : Convert.ToString(p["timeoutMs"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba http.request " + (string.IsNullOrWhiteSpace(expected.Method) ? "GET" : expected.Method) + " " + (string.IsNullOrWhiteSpace(expected.Url) ? "/Api/Ping.ashx" : expected.Url) + ", pero no existe en actions.");
+        }
+
+        private static void CheckSemanticSqlQuery(PhraseClauseDiagnostic clause, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            SqlRequest expected = AnalyzeSqlRequest(clause.Text, clause.NormalizedText);
+            JObject action = FindSqlAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "sql_query",
+                ["expectedConnectionStringName"] = string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName,
+                ["expectedQuery"] = string.IsNullOrWhiteSpace(expected.Query) ? "SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;" : expected.Query,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualConnectionStringName"] = p == null ? "" : Convert.ToString(p["connectionStringName"]);
+                check["actualQuery"] = p == null ? "" : Convert.ToString(p["query"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba data.sql con conexión " + (string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName) + ", pero no existe en actions o no coincide la consulta.");
+        }
+
+        private static void CheckSemanticStandaloneLogger(PhraseClauseDiagnostic clause, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            StandaloneLoggerRequest expected = AnalyzeStandaloneLoggerRequest(clause.Text, clause.NormalizedText);
+            string expectedLevel = string.IsNullOrWhiteSpace(expected.Level) ? (string.IsNullOrWhiteSpace(clause.LoggerLevel) ? "Info" : clause.LoggerLevel) : expected.Level;
+            string expectedMessage = expected.Message ?? string.Empty;
+
+            JObject action = FindLoggerAction(actions, expectedLevel, expectedMessage);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "standalone_logger",
+                ["expectedLevel"] = expectedLevel,
+                ["expectedMessage"] = expectedMessage,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualLevel"] = p == null ? "" : Convert.ToString(p["level"]);
+                check["actualMessage"] = p == null ? "" : Convert.ToString(p["message"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba util.logger " + expectedLevel + " con mensaje \"" + expectedMessage + "\", pero no existe en actions.");
+        }
+
+        private static void CheckSemanticFileWrite(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            FileWriteRequest expected = AnalyzeFileWriteRequest(string.IsNullOrWhiteSpace(fullText) ? clause.Text : fullText, clause.NormalizedText);
+            JObject action = FindFileWriteAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "file_write",
+                ["expectedPath"] = string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path,
+                ["expectedContent"] = string.IsNullOrWhiteSpace(expected.Content) ? "Contenido generado por Asistente IA" : expected.Content,
+                ["expectedEncoding"] = "utf-8",
+                ["expectedOverwrite"] = true,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualPath"] = p == null ? "" : Convert.ToString(p["path"]);
+                check["actualContent"] = p == null ? "" : Convert.ToString(p["content"]);
+                check["actualEncoding"] = p == null ? "" : Convert.ToString(p["encoding"]);
+                check["actualOverwrite"] = p == null ? "" : Convert.ToString(p["overwrite"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba file.write path " + (string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path) + ", pero no existe en actions o no coinciden parámetros.");
+        }
+
+        private static void CheckSemanticFileRead(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            FileReadRequest expected = AnalyzeFileReadRequest(string.IsNullOrWhiteSpace(fullText) ? clause.Text : fullText, clause.NormalizedText);
+            JObject action = FindFileReadAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "file_read",
+                ["expectedPath"] = string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path,
+                ["expectedSalida"] = string.IsNullOrWhiteSpace(expected.Salida) ? "archivo" : expected.Salida,
+                ["expectedEncoding"] = "utf-8",
+                ["expectedAsJson"] = false,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualPath"] = p == null ? "" : Convert.ToString(p["path"]);
+                check["actualSalida"] = p == null ? "" : Convert.ToString(p["salida"]);
+                check["actualEncoding"] = p == null ? "" : Convert.ToString(p["encoding"]);
+                check["actualAsJson"] = p == null ? "" : Convert.ToString(p["asJson"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba file.read path " + (string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path) + ", pero no existe en actions o no coinciden parámetros.");
+        }
+
+        private static void CheckSemanticStateVars(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            StateVarsRequest expected = AnalyzeStateVarsRequest(string.IsNullOrWhiteSpace(fullText) ? clause.Text : fullText);
+            JObject action = FindStateVarsAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "state_vars",
+                ["expectedSetCount"] = expected == null ? 0 : expected.Set.Count,
+                ["expectedRemoveCount"] = expected == null ? 0 : expected.Remove.Count,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualSetCount"] = p == null || !(p["set"] is JObject) ? 0 : CountJObjectProperties((JObject)p["set"]);
+                check["actualRemoveCount"] = p == null || !(p["remove"] is JArray) ? 0 : ((JArray)p["remove"]).Count;
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba state.vars con set/remove indicado, pero no existe en actions o no coinciden parámetros.");
+        }
+
+        private static int CountJObjectProperties(JObject obj)
+        {
+            if (obj == null) return 0;
+            int count = 0;
+            foreach (var prop in obj.Properties()) count++;
+            return count;
+        }
+
+        private static void CheckSemanticQueuePublish(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            QueuePublishRequest expected = AnalyzeQueuePublishRequest(string.IsNullOrWhiteSpace(fullText) ? clause.Text : fullText, clause.NormalizedText);
+            JObject action = FindQueuePublishAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "queue_publish",
+                ["expectedBroker"] = string.IsNullOrWhiteSpace(expected.Broker) ? "sql" : expected.Broker,
+                ["expectedQueue"] = string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue,
+                ["expectedPayload"] = string.IsNullOrWhiteSpace(expected.Payload) ? "Mensaje generado por Asistente IA" : expected.Payload,
+                ["expectedConnectionStringName"] = string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualBroker"] = p == null ? "" : Convert.ToString(p["broker"]);
+                check["actualQueue"] = p == null ? "" : Convert.ToString(p["queue"]);
+                check["actualPayload"] = p == null ? "" : Convert.ToString(p["payload"]);
+                check["actualConnectionStringName"] = p == null ? "" : Convert.ToString(p["connectionStringName"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba queue.publish cola " + (string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue) + ", pero no existe en actions o no coinciden parámetros.");
+        }
+
+        private static void CheckSemanticQueueConsume(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            QueueConsumeRequest expected = AnalyzeQueueConsumeRequest(string.IsNullOrWhiteSpace(fullText) ? clause.Text : fullText, clause.NormalizedText);
+            JObject action = FindQueueConsumeAction(actions, expected);
+            bool exists = action != null;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "queue_consume",
+                ["expectedBroker"] = string.IsNullOrWhiteSpace(expected.Broker) ? "sql" : expected.Broker,
+                ["expectedQueue"] = string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue,
+                ["expectedTake"] = expected.Take <= 0 ? 1 : expected.Take,
+                ["expectedConnectionStringName"] = string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName,
+                ["expectedOutputPrefix"] = string.IsNullOrWhiteSpace(expected.OutputPrefix) ? "queue.consume" : expected.OutputPrefix,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+
+            if (exists)
+            {
+                JObject p = action["params"] as JObject;
+                check["label"] = Convert.ToString(action["label"]);
+                check["actualBroker"] = p == null ? "" : Convert.ToString(p["broker"]);
+                check["actualQueue"] = p == null ? "" : Convert.ToString(p["queue"]);
+                check["actualTake"] = p == null ? "" : Convert.ToString(p["take"]);
+                check["actualPrefetch"] = p == null ? "" : Convert.ToString(p["prefetch"]);
+                check["actualConnectionStringName"] = p == null ? "" : Convert.ToString(p["connectionStringName"]);
+                check["actualOutputPrefix"] = p == null ? "" : Convert.ToString(p["outputPrefix"]);
+            }
+
+            checks.Add(check);
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba queue.consume cola " + (string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue) + ", pero no existe en actions o no coinciden parámetros.");
+        }
+
+        private static JObject FindFileWriteAction(JArray actions, FileWriteRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedPath = expected == null || string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path;
+            string expectedContent = expected == null || string.IsNullOrWhiteSpace(expected.Content) ? "Contenido generado por Asistente IA" : expected.Content;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "file.write", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                string path = Convert.ToString(p["path"]);
+                string content = Convert.ToString(p["content"]);
+                string encoding = Convert.ToString(p["encoding"]);
+                string overwrite = Convert.ToString(p["overwrite"]);
+                if (!FilePathSemanticEquals(path, expectedPath)) continue;
+                if (!string.Equals(NormalizeSemanticText(content), NormalizeSemanticText(expectedContent), StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!BoolTextEquals(overwrite, true)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindFileReadAction(JArray actions, FileReadRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedPath = expected == null || string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path;
+            string expectedSalida = expected == null || string.IsNullOrWhiteSpace(expected.Salida) ? "archivo" : expected.Salida;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "file.read", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                string path = Convert.ToString(p["path"]);
+                string salida = Convert.ToString(p["salida"]);
+                string encoding = Convert.ToString(p["encoding"]);
+                string asJson = Convert.ToString(p["asJson"]);
+                if (!FilePathSemanticEquals(path, expectedPath)) continue;
+                if (!string.Equals(salida, expectedSalida, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!BoolTextEquals(asJson, false)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindStateVarsAction(JArray actions, StateVarsRequest expected)
+        {
+            if (actions == null || expected == null || !expected.HasChanges) return null;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "state.vars", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+
+                JObject set = p["set"] as JObject;
+                JArray remove = p["remove"] as JArray;
+
+                bool ok = true;
+                foreach (var kv in expected.Set)
+                {
+                    if (set == null || set[kv.Key] == null) { ok = false; break; }
+                    string actual = NormalizeSemanticText(Convert.ToString(set[kv.Key]));
+                    string exp = NormalizeSemanticText(kv.Value == null ? "" : Convert.ToString(kv.Value, CultureInfo.InvariantCulture));
+                    if (!string.Equals(actual, exp, StringComparison.OrdinalIgnoreCase)) { ok = false; break; }
+                }
+                if (!ok) continue;
+
+                foreach (string key in expected.Remove)
+                {
+                    bool found = false;
+                    if (remove != null)
+                    {
+                        foreach (JToken tok in remove)
+                        {
+                            if (string.Equals(Convert.ToString(tok), key, StringComparison.OrdinalIgnoreCase)) { found = true; break; }
+                        }
+                    }
+                    if (!found) { ok = false; break; }
+                }
+                if (!ok) continue;
+
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindQueuePublishAction(JArray actions, QueuePublishRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedBroker = expected == null || string.IsNullOrWhiteSpace(expected.Broker) ? "sql" : expected.Broker;
+            string expectedQueue = expected == null || string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue;
+            string expectedPayload = expected == null || string.IsNullOrWhiteSpace(expected.Payload) ? "Mensaje generado por Asistente IA" : expected.Payload;
+            string expectedConnection = expected == null || string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "queue.publish", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["broker"]), expectedBroker, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(p["queue"]), expectedQueue, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(NormalizeSemanticText(Convert.ToString(p["payload"])), NormalizeSemanticText(expectedPayload), StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(p["connectionStringName"]), expectedConnection, StringComparison.OrdinalIgnoreCase)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindQueueConsumeAction(JArray actions, QueueConsumeRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedBroker = expected == null || string.IsNullOrWhiteSpace(expected.Broker) ? "sql" : expected.Broker;
+            string expectedQueue = expected == null || string.IsNullOrWhiteSpace(expected.Queue) ? "banco-regresion" : expected.Queue;
+            int expectedTake = expected == null || expected.Take <= 0 ? 1 : expected.Take;
+            string expectedConnection = expected == null || string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName;
+            string expectedOutputPrefix = expected == null || string.IsNullOrWhiteSpace(expected.OutputPrefix) ? "queue.consume" : expected.OutputPrefix;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "queue.consume", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["broker"]), expectedBroker, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(p["queue"]), expectedQueue, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!IntTextEquals(Convert.ToString(p["take"]), expectedTake)) continue;
+                if (!IntTextEquals(Convert.ToString(p["prefetch"]), expectedTake)) continue;
+                if (!string.Equals(Convert.ToString(p["connectionStringName"]), expectedConnection, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(p["outputPrefix"]), expectedOutputPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        // fix66: al igual que con URLs, el splitter puede cortar rutas con extensión
+        // (por ejemplo .txt). Para la auditoría aceptamos equivalencia exacta o prefijo
+        // seguro cuando solo falta la extensión dentro de la cláusula diagnóstica.
+        private static bool FilePathSemanticEquals(string actualPath, string expectedPath)
+        {
+            string actual = NormalizeFilePathForSemantic(actualPath);
+            string expected = NormalizeFilePathForSemantic(expectedPath);
+            if (string.IsNullOrWhiteSpace(actual) || string.IsNullOrWhiteSpace(expected)) return false;
+            if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)) return true;
+            if (!expected.Contains(".") && actual.Length > expected.Length && actual.StartsWith(expected + ".", StringComparison.OrdinalIgnoreCase)) return true;
+            if (!actual.Contains(".") && expected.Length > actual.Length && expected.StartsWith(actual + ".", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        private static string NormalizeFilePathForSemantic(string value)
+        {
+            string s = (value ?? string.Empty).Trim();
+            while (s.EndsWith(",", StringComparison.Ordinal) || s.EndsWith(";", StringComparison.Ordinal))
+                s = s.Substring(0, s.Length - 1).Trim();
+            return s;
+        }
+
+        private static bool BoolTextEquals(string value, bool expected)
+        {
+            bool parsed;
+            if (bool.TryParse(value, out parsed)) return parsed == expected;
+            string s = (value ?? string.Empty).Trim();
+            if (expected) return string.Equals(s, "1", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "si", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "sí", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(s, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "no", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(s);
+        }
+
+        private static bool IntTextEquals(string value, int expected)
+        {
+            int parsed;
+            return int.TryParse((value ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) && parsed == expected;
+        }
+
+        private static JObject FindHttpRequestAction(JArray actions, HttpRequestRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedMethod = expected == null || string.IsNullOrWhiteSpace(expected.Method) ? "GET" : expected.Method;
+            string expectedUrl = expected == null || string.IsNullOrWhiteSpace(expected.Url) ? "/Api/Ping.ashx" : expected.Url;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "http.request", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                string method = Convert.ToString(p["method"]);
+                string url = Convert.ToString(p["url"]);
+                if (!string.Equals(method, expectedMethod, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!HttpUrlSemanticEquals(url, expectedUrl)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        // fix65b: el separador de cláusulas puede cortar URLs por el punto de la extensión
+        // (ej.: /Api/Ping.ashx queda como /Api/Ping dentro de la cláusula HTTP). Para la
+        // auditoría semántica aceptamos coincidencia exacta o prefijo seguro con extensión,
+        // sin relajar el método ni el nodo generado.
+        private static bool HttpUrlSemanticEquals(string actualUrl, string expectedUrl)
+        {
+            string actual = NormalizeHttpUrlForSemantic(actualUrl);
+            string expected = NormalizeHttpUrlForSemantic(expectedUrl);
+
+            if (string.IsNullOrWhiteSpace(expected)) expected = "/Api/Ping.ashx";
+            if (string.IsNullOrWhiteSpace(actual)) return false;
+
+            if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)) return true;
+
+            if (!expected.Contains(".")
+                && actual.Length > expected.Length
+                && actual.StartsWith(expected + ".", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!actual.Contains(".")
+                && expected.Length > actual.Length
+                && expected.StartsWith(actual + ".", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
+        }
+
+        private static string NormalizeHttpUrlForSemantic(string url)
+        {
+            string s = (url ?? string.Empty).Trim();
+            while (s.EndsWith(",", StringComparison.Ordinal) || s.EndsWith(";", StringComparison.Ordinal))
+                s = s.Substring(0, s.Length - 1).Trim();
+            return s;
+        }
+
+        private static JObject FindSqlAction(JArray actions, SqlRequest expected)
+        {
+            if (actions == null) return null;
+            string expectedConnection = expected == null || string.IsNullOrWhiteSpace(expected.ConnectionStringName) ? "DefaultConnection" : expected.ConnectionStringName;
+            string expectedQuery = expected == null || string.IsNullOrWhiteSpace(expected.Query) ? "SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;" : expected.Query;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "data.sql", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                string connection = Convert.ToString(p["connectionStringName"]);
+                string query = Convert.ToString(p["query"]);
+                if (!string.Equals(connection, expectedConnection, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!SqlTextEquals(query, expectedQuery)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindLoggerAction(JArray actions, string expectedLevel, string expectedMessage)
+        {
+            if (actions == null) return null;
+            string levelExpected = string.IsNullOrWhiteSpace(expectedLevel) ? "Info" : expectedLevel;
+            string messageExpected = NormalizeSemanticText(expectedMessage);
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "util.logger", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+
+                string level = Convert.ToString(p["level"]);
+                string message = NormalizeSemanticText(Convert.ToString(p["message"]));
+                if (!string.Equals(level, levelExpected, StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (string.IsNullOrWhiteSpace(messageExpected) || string.Equals(message, messageExpected, StringComparison.OrdinalIgnoreCase))
+                    return action;
+            }
+            return null;
+        }
+
+        private static bool SqlTextEquals(string a, string b)
+        {
+            return string.Equals(NormalizeSqlText(a), NormalizeSqlText(b), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeSqlText(string value)
+        {
+            string s = Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+            while (s.EndsWith(";", StringComparison.Ordinal)) s = s.Substring(0, s.Length - 1).Trim();
+            return s;
+        }
+
+        private static string NormalizeSemanticText(string value)
+        {
+            return Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+        }
+
+        private static void CheckSemanticCompositeCondition(PhraseClauseDiagnostic clause, JArray actions, JObject branchPlan, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+
+            string n = clause.NormalizedText ?? string.Empty;
+            string expectedMode = ResolveSemanticCompositeMode(n);
+            JObject action = FindCompositeConditionAction(actions, expectedMode);
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "composite_condition",
+                ["expectedMode"] = expectedMode,
+                ["result"] = action == null ? "missing_action" : "ok"
+            };
+
+            if (action != null)
+                check["label"] = Convert.ToString(action["label"]);
+
+            checks.Add(check);
+
+            if (action == null)
+            {
+                errors.Add("Cláusula " + clause.Index + ": esperaba control.if de condición compuesta modo " + expectedMode + ", pero no existe en actions.");
+                return;
+            }
+
+            ValidateCompositeRuleIfMentioned(clause, action, "cae", "biz.notaCredito.cae", checks, errors);
+            ValidateCompositeRuleIfMentioned(clause, action, "associated_document", "biz.notaCredito.comprobanteAsociado.numero", checks, errors);
+            ValidateCompositeRuleIfMentioned(clause, action, "items", "biz.notaCredito.itemsCount", checks, errors);
+            ValidateCompositeRuleIfMentioned(clause, action, "total", "biz.notaCredito.total", checks, errors);
+
+            JObject branch = FindBranchByFieldKind(branchPlan, "compound");
+            bool hasBranchPlan = branch != null;
+            checks.Add(new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "composite_branch_plan",
+                ["fieldKind"] = "compound",
+                ["truePath"] = hasBranchPlan ? Convert.ToString(branch["truePath"]) : "",
+                ["falsePath"] = hasBranchPlan ? Convert.ToString(branch["falsePath"]) : "",
+                ["result"] = hasBranchPlan ? "ok" : "missing_branch_plan"
+            });
+
+            if (!hasBranchPlan)
+                errors.Add("Cláusula " + clause.Index + ": la condición compuesta existe en actions, pero no existe branchPlan fieldKind=compound.");
+        }
+
+        private static string ResolveSemanticCompositeMode(string normalizedText)
+        {
+            string n = Normalize(normalizedText);
+            if (ContainsAny(n, "cualquiera", "cualquier regla", "al menos una", "una de las reglas", "modo any", "modo or")
+                || Regex.IsMatch(n, @"\bo\b", RegexOptions.IgnoreCase))
+                return "any";
+            return "all";
+        }
+
+        private static JObject FindCompositeConditionAction(JArray actions, string expectedMode)
+        {
+            if (actions == null) return null;
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                JArray rules = p["rules"] as JArray;
+                if (rules == null || rules.Count == 0) continue;
+                string mode = Convert.ToString(p["rulesMode"]);
+                if (string.Equals(mode, expectedMode, StringComparison.OrdinalIgnoreCase)) return action;
+            }
+            return null;
+        }
+
+        private static void ValidateCompositeRuleIfMentioned(PhraseClauseDiagnostic clause, JObject action, string ruleKind, string expectedField, JArray checks, JArray errors)
+        {
+            if (clause == null || action == null) return;
+
+            string n = clause.NormalizedText ?? string.Empty;
+            bool mentioned = false;
+            string expectedOp = "not_empty";
+            string expectedValue = "";
+
+            if (string.Equals(ruleKind, "cae", StringComparison.OrdinalIgnoreCase))
+            {
+                mentioned = ContainsToken(n, "cae") || ContainsToken(n, "cai");
+                expectedOp = ResolveSemanticPresenceOperatorForClause(n, "cae");
+            }
+            else if (string.Equals(ruleKind, "associated_document", StringComparison.OrdinalIgnoreCase))
+            {
+                mentioned = ContainsAny(n, "comprobante asociado", "numero asociado", "número asociado", "asociado");
+                expectedOp = ResolveSemanticPresenceOperatorForClause(n, "associated_document");
+            }
+            else if (string.Equals(ruleKind, "items", StringComparison.OrdinalIgnoreCase))
+            {
+                mentioned = ContainsAny(n, "itemscount", "items count", "items", "ítems", "item", "ítem", "al menos un item", "al menos un ítem");
+                expectedOp = ContainsAny(n, "no tiene", "sin", "falta") ? "==" : ">";
+                expectedValue = "0";
+            }
+            else if (string.Equals(ruleKind, "total", StringComparison.OrdinalIgnoreCase))
+            {
+                mentioned = ContainsToken(n, "total") || ContainsToken(n, "importe");
+                expectedOp = ">";
+                if (ContainsAny(n, "menor o igual", "menor igual", "no supera", "no mayor")) expectedOp = "<=";
+                else if (ContainsAny(n, "menor que", "menor a")) expectedOp = "<";
+                else if (ContainsAny(n, "mayor o igual", "mayor igual")) expectedOp = ">=";
+                else if (ContainsAny(n, "igual a", "es igual")) expectedOp = "==";
+                expectedValue = ExtractAmount(n) ?? "";
+            }
+
+            if (!mentioned) return;
+
+            bool exists = CompositeRuleExists(action, expectedField, expectedOp, expectedValue);
+            checks.Add(new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "composite_rule",
+                ["ruleKind"] = ruleKind,
+                ["expectedField"] = expectedField,
+                ["expectedOp"] = expectedOp,
+                ["expectedValue"] = expectedValue,
+                ["result"] = exists ? "ok" : "missing_rule"
+            });
+
+            if (!exists)
+            {
+                string valuePart = string.IsNullOrWhiteSpace(expectedValue) ? "" : " valor " + expectedValue;
+                errors.Add("Cláusula " + clause.Index + ": esperaba regla compuesta " + expectedField + " " + expectedOp + valuePart + ", pero no existe en actions.");
+            }
+        }
+
+        private static string ResolveSemanticPresenceOperatorForClause(string normalizedText, string fieldKind)
+        {
+            string n = Normalize(normalizedText);
+            string k = Normalize(fieldKind);
+
+            if (k == "cae" || k == "cai")
+            {
+                if (ContainsAny(n, "cae no esta vacio", "cae no está vacío", "cae no este vacio", "cae no esté vacío", "cae informado", "cae no vacio", "cae no vacío"))
+                    return "not_empty";
+                if (ContainsAny(n, "no tiene cae", "no tenga cae", "sin cae", "falta cae", "falta el cae", "cae faltante", "cae vacio", "cae vacío", "cae en blanco", "cae no informado"))
+                    return "empty";
+                return "not_empty";
+            }
+
+            if (ContainsAny(n, "comprobante asociado no esta vacio", "comprobante asociado no está vacío", "comprobante asociado no este vacio", "comprobante asociado no esté vacío", "comprobante asociado informado", "numero asociado informado", "número asociado informado"))
+                return "not_empty";
+
+            if (ContainsAny(n, "no tiene comprobante asociado", "sin comprobante asociado", "falta comprobante asociado", "falta el comprobante asociado", "comprobante asociado faltante", "comprobante asociado vacio", "comprobante asociado vacío", "comprobante asociado en blanco", "comprobante asociado no informado", "no tiene numero asociado", "sin numero asociado", "falta numero asociado", "número asociado faltante"))
+                return "empty";
+
+            return "not_empty";
+        }
+
+        private static bool CompositeRuleExists(JObject action, string expectedField, string expectedOp, string expectedValue)
+        {
+            if (action == null) return false;
+            JObject p = action["params"] as JObject;
+            if (p == null) return false;
+            JArray rules = p["rules"] as JArray;
+            if (rules == null) return false;
+
+            foreach (JObject rule in rules)
+            {
+                string field = Convert.ToString(rule["field"]);
+                string op = Convert.ToString(rule["op"]);
+                string value = Convert.ToString(rule["value"]);
+
+                if (!string.Equals(field, expectedField, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(op, expectedOp, StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (!string.IsNullOrWhiteSpace(expectedValue)
+                    && !string.Equals(value, expectedValue, StringComparison.OrdinalIgnoreCase)) continue;
+
+                return true;
+            }
+
+            return false;
         }
 
         private static void CheckSemanticConditionBranch(PhraseClauseDiagnostic clause, JObject branchPlan, JArray checks, JArray warnings, JArray errors)
@@ -4107,9 +5539,16 @@ namespace Intranet.WorkflowStudio.WebForms
 
             bool taskExists = ActionExistsForNodeTypeAndRole(actions, "human.task", role);
             bool resultIfExists = HumanResultIfExists(actions, role);
-            bool loggerExists = LoggerForRoleAndOutcomeExists(actions, role, outcome);
 
-            string result = taskExists && resultIfExists && loggerExists ? "ok" : "mismatch";
+            // fix62b: una cláusula con resultado humano no siempre pide logger.
+            // Ejemplo validado: "Si Dirección la aprueba, notificar a COMPRAS..."
+            // debe validar tarea + IF + notificación por rama, pero no logger.
+            // Solo exigimos logger cuando la propia cláusula trae nivel de logger
+            // (evento informativo / advertencia).
+            bool expectsLogger = !string.IsNullOrWhiteSpace(clause.LoggerLevel);
+            bool loggerExists = expectsLogger && LoggerForRoleAndOutcomeExists(actions, role, outcome);
+
+            string result = taskExists && resultIfExists && (!expectsLogger || loggerExists) ? "ok" : "mismatch";
             checks.Add(new JObject
             {
                 ["clauseIndex"] = clause.Index,
@@ -4118,6 +5557,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ["outcome"] = outcome,
                 ["taskExists"] = taskExists,
                 ["resultIfExists"] = resultIfExists,
+                ["loggerExpected"] = expectsLogger,
                 ["loggerExists"] = loggerExists,
                 ["result"] = result
             });
@@ -4126,8 +5566,36 @@ namespace Intranet.WorkflowStudio.WebForms
                 errors.Add("Cláusula " + clause.Index + ": resultado de tarea para " + role + ", pero no existe human.task para ese rol.");
             if (!resultIfExists)
                 errors.Add("Cláusula " + clause.Index + ": resultado de tarea para " + role + ", pero no existe IF wf.tarea.resultado asociado.");
-            if (!loggerExists)
+            if (expectsLogger && !loggerExists)
                 errors.Add("Cláusula " + clause.Index + ": resultado " + outcome + " para " + role + ", pero no existe logger compatible.");
+
+            // fix62: para múltiples tareas humanas no alcanza con que exista algún logger
+            // compatible. El logger debe ser alcanzable desde la rama correcta del IF de
+            // resultado de la tarea correspondiente (SI/APTO o NO/NO APTO). Esto evita que
+            // un logger de COMPRAS satisfaga por error una rama de ADM_FIN, o viceversa.
+            // fix62b: solo se aplica cuando la cláusula realmente pidió logger.
+            if (expectsLogger && resultIfExists && loggerExists)
+            {
+                string expectedCondition = string.Equals(outcome, "no_apto", StringComparison.OrdinalIgnoreCase) ? "NO" : "SI";
+                string resultIfLabel = FindHumanResultIfLabel(actions, role);
+                string loggerLabel = FindReachableLoggerLabelFromConditionalBranch(actions, proposedConnections, resultIfLabel, expectedCondition, role, outcome);
+                bool reachable = !string.IsNullOrWhiteSpace(loggerLabel);
+
+                checks.Add(new JObject
+                {
+                    ["clauseIndex"] = clause.Index,
+                    ["check"] = "human_result_logger_branch",
+                    ["role"] = role,
+                    ["outcome"] = outcome,
+                    ["expectedCondition"] = expectedCondition,
+                    ["resultIf"] = resultIfLabel,
+                    ["loggerLabel"] = loggerLabel,
+                    ["result"] = reachable ? "ok" : "mismatch"
+                });
+
+                if (!reachable)
+                    errors.Add("Cláusula " + clause.Index + ": esperaba logger de resultado " + outcome + " para " + role + " en la rama " + expectedCondition + ", pero no está conectado en esa rama.");
+            }
         }
 
         private static void CheckSemanticElseLoggerBranch(PhraseClauseDiagnostic clause, JArray actions, JArray proposedConnections, JArray checks, JArray warnings, JArray errors)
@@ -4423,6 +5891,84 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             return string.Empty;
+        }
+
+        private static string FindReachableLoggerLabelFromConditionalBranch(JArray actions, JArray proposedConnections, string fromLabel, string condition, string role, string outcome)
+        {
+            if (actions == null || proposedConnections == null || string.IsNullOrWhiteSpace(fromLabel) || string.IsNullOrWhiteSpace(role)) return string.Empty;
+
+            string condExpected = Normalize(condition).Trim();
+            var starts = new List<string>();
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), fromLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                string cond = Normalize(Convert.ToString(c["condition"])).Trim();
+                if (cond == condExpected || (condExpected == "si" && cond == "true") || (condExpected == "no" && cond == "false"))
+                    starts.Add(Convert.ToString(c["to"]));
+            }
+
+            foreach (string start in starts)
+            {
+                string found = FindReachableLoggerLabel(actions, proposedConnections, start, role, outcome, 0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(found)) return found;
+            }
+
+            return string.Empty;
+        }
+
+        private static string FindReachableLoggerLabel(JArray actions, JArray proposedConnections, string current, string role, string outcome, int depth, HashSet<string> visited)
+        {
+            if (string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(role)) return string.Empty;
+            if (depth > 30) return string.Empty;
+            if (visited.Contains(current)) return string.Empty;
+            visited.Add(current);
+
+            JObject action = FindActionByLabel(actions, current);
+            if (action != null)
+            {
+                string nodeType = Convert.ToString(action["nodeType"]);
+                if (string.Equals(nodeType, "util.logger", StringComparison.OrdinalIgnoreCase)
+                    && LoggerActionMatchesRoleAndOutcome(action, role, outcome))
+                {
+                    return Convert.ToString(action["label"]);
+                }
+
+                // En una rama de resultado humano no cruzamos otra tarea ni otro IF:
+                // si ocurre eso, ya estamos en otra decisión y no en el resultado actual.
+                if (string.Equals(nodeType, "human.task", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(nodeType, "control.if", StringComparison.OrdinalIgnoreCase))
+                    return string.Empty;
+            }
+
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), current, StringComparison.OrdinalIgnoreCase)) continue;
+                string found = FindReachableLoggerLabel(actions, proposedConnections, Convert.ToString(c["to"]), role, outcome, depth + 1, visited);
+                if (!string.IsNullOrWhiteSpace(found)) return found;
+            }
+
+            return string.Empty;
+        }
+
+        private static bool LoggerActionMatchesRoleAndOutcome(JObject action, string role, string outcome)
+        {
+            if (action == null || string.IsNullOrWhiteSpace(role)) return false;
+            JObject p = action["params"] as JObject;
+            if (p == null) return false;
+
+            string expectedLevel = string.Equals(outcome, "no_apto", StringComparison.OrdinalIgnoreCase) ? "Warn" : "Info";
+            string level = Convert.ToString(p["level"]);
+            if (!string.Equals(level, expectedLevel, StringComparison.OrdinalIgnoreCase)) return false;
+
+            string text = Normalize(Convert.ToString(action["label"]) + " " + Convert.ToString(p["message"]));
+            string roleNorm = Normalize(role);
+
+            if (text.Contains(roleNorm)) return true;
+            if (string.Equals(role, "COMPRAS", StringComparison.OrdinalIgnoreCase) && text.Contains("compras")) return true;
+            if (string.Equals(role, "DIR_GENERAL", StringComparison.OrdinalIgnoreCase) && ContainsAny(text, "direccion", "dir general", "dir_general")) return true;
+            if (string.Equals(role, "ADM_FIN", StringComparison.OrdinalIgnoreCase) && ContainsAny(text, "administracion", "adm fin", "adm_fin", "finanzas")) return true;
+
+            return false;
         }
 
         private static bool ActionMatchesRole(JObject action, string role)

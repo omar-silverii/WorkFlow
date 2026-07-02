@@ -1,0 +1,237 @@
+# PROMPT DE ARRANQUE — Workflow Studio / Constructor IA v2 / Phrase Engine
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack actualizado.
+3. El ZIP completo nuevo del proyecto Workflow Studio WebForms, generado después de aplicar todo hasta fix56b.
+4. Si corresponde, algún ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+## Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+## Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+## Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+## Reglas obligatorias
+
+* No inventar nada.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos y precisos.
+* Siempre trabajar sobre código real del ZIP.
+* No mandar “archivo completo” si no verificaste el archivo real actual.
+* No asumir que el código quedó exactamente como en el chat.
+* Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+* Proponer siempre la mejor versión de entrada.
+* No volver atrás sobre temas ya cerrados.
+* Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send ahora, salvo que Omar lo pida.
+* No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+* Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+
+## Base de trabajo
+
+Tomar como base el ZIP nuevo que Omar va a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta:
+
+* fix50
+* fix51
+* fix52b
+* fix53c
+* fix54b
+* fix55
+* fix56
+* fix56b
+
+No usar fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+## Estado que debe estar incorporado
+
+### Línea Ejecuciones / Expedientes
+
+Debe estar validado:
+
+* fix42g combo definición enriquecido con postback.
+* WF_Instancias funcionando.
+* WF_Instancia_Mapa funcionando.
+* No tocar mapa salvo bug real.
+
+### Línea Constructor IA previa
+
+Debe seguir validado:
+
+* IF compuesto ANY/OR.
+* Negaciones “no tiene / falta”.
+* IF compuesto ALL.
+* Resultado de tareas humanas APTO/NO APTO.
+* Múltiples tareas humanas con resultados.
+* Frase “no supera 200000 / caso contrario”.
+* Validación de human.task con rol/usuario.
+* Validador de ramas SI/NO.
+
+### Línea Constructor IA v2
+
+Debe estar incorporado:
+
+* Capability map de nodos.
+* Phrase Engine base.
+* Diagnóstico activo.
+* Semántica por cláusula.
+* Validador de consistencia semántica.
+* Auditor de notificaciones por rama.
+* Generación legacy parcialmente asistida por semántica.
+* Auditor de notificación alcanzable por rama.
+
+## Archivos clave a revisar
+
+Revisar especialmente:
+
+* `App_Code/Ai/WfAiMlnetProvider.cs`
+* `App_Code/Ai/WfAiPlanValidator.cs`
+* `App_Code/Ai/WfAiCatalogProvider.cs`
+* `App_Code/Ai/WfAiNodeCapabilityMap.cs`
+* `App_Code/Ai/WfAiPhraseNormalizer.cs`
+* `App_Code/Ai/WfAiPhraseClauseSplitter.cs`
+* `App_Code/Ai/WfAiPhraseLexicon.cs`
+* `Scripts/workflow.catalog.js`
+* `.csproj`
+
+Verificar que compila y que el ZIP está completo.
+
+## Frase de regresión A — No supera / caso contrario
+
+Probar esta frase en el Constructor IA y revisar JSON técnico:
+
+“Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar.”
+
+Esperado:
+
+* `control.if` total > 200000.
+* TRUE/SI → DIR_GENERAL.
+* FALSE/NO → COMPRAS.
+* DIR_GENERAL → IF resultado `wf.tarea.resultado == apto`.
+* APTO → Logger Info “fue aprobada por Dirección”.
+* NO APTO → Logger Warn “fue rechazada por Dirección”.
+* COMPRAS → Fin.
+* `phraseSemanticConsistencyOk = true`.
+* Sin warnings ni errors en `phraseSemanticConsistency`.
+
+## Frase de regresión B — Notificaciones por rama
+
+Probar esta frase en el Constructor IA y revisar JSON técnico:
+
+“Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.”
+
+Esperado:
+
+* `control.if` total > 200000.
+* TRUE/SI → DIR_GENERAL.
+* FALSE/NO → Logger Info “no requiere aprobación de Dirección” → Fin.
+* DIR_GENERAL → IF resultado `wf.tarea.resultado == apto`.
+* APTO/SI → util.notify a COMPRAS con mensaje de aprobación → Fin.
+* NO APTO/NO → Logger Warn “fue rechazada por Dirección” → util.notify a COMPRAS con mensaje de rechazo → Fin.
+* `phraseSemanticConsistencyOk = true`.
+* `warnings = []`.
+* `errors = []`.
+
+## Qué NO hacer al inicio
+
+No avanzar directo con otro fix.
+
+Primero:
+
+1. Revisar ZIP real.
+2. Confirmar archivos.
+3. Probar frase A.
+4. Probar frase B.
+5. Confirmar que no hubo regresión.
+
+## Próximo avance recomendado después de validar
+
+Si frase A y B siguen OK, elegir uno de estos caminos:
+
+### Camino 1 — Ejecución real de frase B
+
+Ejecutar de punta a punta:
+
+1. total > 200000 → DIR_GENERAL → APTO → notify COMPRAS → Fin.
+2. total > 200000 → DIR_GENERAL → NO APTO → Logger Warn → notify COMPRAS → Fin.
+3. total <= 200000 → Logger Info → Fin.
+
+Verificar en:
+
+* instancia
+* mapa
+* logs
+* notificaciones
+
+### Camino 2 — Banco de regresión oficial
+
+Crear una pantalla/archivo/base simple con frases patrón y resultado esperado para no perder validaciones.
+
+### Camino 3 — Integrar más nodos al Phrase Engine
+
+Tomar como guía `Scripts/workflow.catalog.js` y `WfAiNodeCapabilityMap.cs`.
+
+Prioridad sugerida:
+
+* util.notify
+* util.logger
+* human.task
+* control.if
+* data.sql
+* http.request
+* file.read
+* file.write
+* state.vars
+* queue.publish
+* queue.consume
+
+No meter todos de golpe.
+
+## Criterio profesional
+
+El objetivo no es seguir inflando `WfAiMlnetProvider.cs`.
+
+El objetivo ahora es migrar progresivamente hacia:
+
+Frase humana
+→ normalización
+→ cláusulas
+→ semántica por cláusula
+→ consistencia semántica
+→ generación controlada
+→ validador funcional
+→ canvas
+
+Siempre con auditoría antes de aplicar.
+
+## Recordatorio final
+
+Si algo falla, no asumir.
+
+Pedir archivo real o JSON técnico.
+
+Trabajar sobre el ZIP nuevo completo.
+
+Cambios mínimos.
+
+ZIP correctivo con LEEME.
+
+No tocar motor ni canvas salvo bug real explícito.

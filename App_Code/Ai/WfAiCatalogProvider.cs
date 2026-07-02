@@ -36,6 +36,10 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "data.sql", Label = "Consulta SQL", Params = new List<string> { "connectionStringName", "query", "commandText", "parameters" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "file.read", Label = "Archivo: Leer", Params = new List<string> { "path", "salida", "output", "asJson", "encoding", "zipMode", "zipEntry", "useCache" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "file.write", Label = "Archivo: Escribir", Params = new List<string> { "path", "content", "origen", "encoding", "overwrite", "zipMode", "entryName", "zipEntryName" } });
+            // fix64b: el catálogo usado por el validador funcional también debe permitir los nodos de cola
+            // que ya existen en workflow.catalog.js, WfAiNodeCapabilityMap.cs y handlers runtime.
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "queue.publish", Label = "Cola: Publicar", Params = new List<string> { "broker", "queue", "payload", "connectionStringName", "correlationId", "dueAt", "priority" } });
+            catalog.Nodes.Add(new WfAiNodeInfo { Type = "queue.consume", Label = "Cola: Consumir", Params = new List<string> { "broker", "queue", "take", "prefetch", "connectionStringName", "outputPrefix", "debug" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "util.subflow", Label = "Ejecutar otro workflow", Params = new List<string> { "ref", "input", "as", "maxDepth", "usuario" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "state.vars", Label = "Variables", Params = new List<string> { "set", "remove" } });
             catalog.Nodes.Add(new WfAiNodeInfo { Type = "control.delay", Label = "Demora (Delay)", Params = new List<string> { "ms", "seconds", "message" } });
@@ -74,6 +78,11 @@ namespace Intranet.WorkflowStudio.WebForms
             catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastEncoding", Label = "Encoding de escritura" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastZipMode", Label = "Modo ZIP de escritura" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "file.write.lastError", Label = "Último error de escritura" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "queue.last", Label = "Última operación de cola" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "queue.message", Label = "Mensaje consumido de cola" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "queue.messageId", Label = "ID de mensaje de cola" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "queue.hasMessage", Label = "La cola devolvió mensaje" });
+            catalog.Fields.Add(new WfAiFieldInfo { Path = "queue.error", Label = "Último error de cola" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.instanceId", Label = "Instancia hija del subflujo" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.childState", Label = "Estado de instancia hija" });
             catalog.Fields.Add(new WfAiFieldInfo { Path = "subflow.ref", Label = "Workflow hijo ejecutado" });

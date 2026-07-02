@@ -1,0 +1,684 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA v2 / Phrase Engine / Ejecuciones
+
+## Cierre de sesión — después de fix56b
+
+Este ContextPack resume el estado completo validado de Workflow Studio hasta la línea nueva del Constructor IA v2, Phrase Engine, auditor semántico y generación legacy asistida por semántica.
+
+## 1. Regla principal de trabajo
+
+Trabajar siempre sobre el ZIP real actualizado que Omar pase en la sesión.
+
+Reglas obligatorias:
+
+* No inventar código.
+* No asumir que el código quedó igual que en el chat.
+* No mandar archivos completos si no fueron revisados desde el ZIP real actual.
+* No cambiar arquitectura sin necesidad.
+* No reescribir cosas que ya funcionan.
+* Cambios mínimos, precisos y profesionales.
+* Entregar correcciones como ZIP con estructura real de carpetas.
+* Incluir LEEME en cada ZIP correctivo.
+* Si algo no cierra, decirlo.
+* Si falta una pieza, pedirla.
+* No tocar líneas estables salvo bug real explícito.
+* No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+* No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+* No tocar SMTP/email.send salvo pedido explícito de Omar.
+* No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+* Antes de cada fix revisar el ZIP/código real.
+* No usar fixes sueltos viejos si el ZIP completo nuevo ya los contiene.
+
+## 2. Estado general del proyecto
+
+Workflow Studio sigue siendo:
+
+* ASP.NET WebForms.
+* .NET Framework 4.8.
+* C#.
+* SQL Server.
+* Una sola base.
+* ConnectionString `DefaultConnection`.
+* Motor propio de workflows.
+* Grafos visuales persistidos en SQL.
+* Nodos ejecutados por handlers `IManejadorNodo`.
+* Variables técnicas `wf.*`.
+* Variables de negocio `biz.*`.
+* Constructor IA offline/local con ML.NET + CSV + modelo externo.
+* Sin OpenAI API.
+* Sin Ollama.
+* Sin dependencia externa obligatoria para IA.
+
+## 3. Base de trabajo
+
+La base completa anterior fue:
+
+`WorkFlow-main (39x).zip`
+
+Luego se aplicaron y validaron fixes posteriores hasta `fix56b`.
+
+Omar va a cerrar una nueva versión y pasará un ZIP completo nuevo.
+
+En la próxima sesión:
+
+* Tomar ese ZIP nuevo como base única.
+* No usar `39x` ni fixes sueltos anteriores salvo comparación puntual.
+* Revisar primero los archivos reales del ZIP.
+* Recién después proponer modificaciones.
+
+## 4. Estado estable anterior a esta línea
+
+Ya estaban cerrados y no deben tocarse salvo bug real:
+
+* fix19  — Notificaciones por usuario
+* fix22  — Constructor amplio
+* fix22b — Modificar pasos
+* fix22c — Frase segura / datos respetados
+* fix23  — Catálogo de salidas / datos disponibles
+* fix24  — IF guiado con FieldPicker y operadores por tipo
+* fix24b — Operadores numéricos
+* fix24c — Recursión al agregar IF
+* fix24d — Datos disponibles último arriba
+* fix24e — Ramas TRUE/FALSE del IF dentro del constructor
+* fix24f — Selector buscable de usuarios
+* fix25  — Ramas por resultado de tarea humana APTO/NO APTO
+* fix26  — Validador funcional del constructor
+* fix27  — Solicitud HTTP en Constructor IA
+* fix28  — Consulta SQL en Constructor IA
+* fix28b — SELECT con resultados visibles en DatosContexto
+* fix29  — Logger en Constructor IA
+* fix29b — Inspector Logger Level Warn correcto
+* fix30  — Guardar / Quitar variable state.vars
+* fix30b — UX Guardar variable simple + avanzado JSON
+* fix30c — Quitar propiedad dentro de objeto JSON
+* fix31  — UX Inspector / Asistente IA colapsado
+* fix32  — Demora / Delay validado
+* fix33  — Manejador de Error en Constructor IA
+* fix34  — Reintentar en Constructor IA
+* fix35  — Archivo Leer / Escribir en Constructor IA
+* fix36  — Subflujo / Ejecutar otro workflow en Constructor IA
+* fix37  — Logs y DatosContexto redimensionables en WF_Instancias.aspx
+* fix38  — WF_Definiciones filtra por Id exacto si el filtro es numérico
+* fix39a — descartado y revertido
+* fix39b — Constructor IA modo amplio en 3 columnas
+* fix39c — Ramas anidadas recursivas visibles
+* fix39d — UX contextual, ocultar Cuándo si la rama ya fue elegida por clic
+* fix39e — Aplicar ramas profundas al canvas y validar ejecución integral completa
+* fix40  — IF compuesto / condición compuesta
+* fix40b — Validador recursivo de ramas profundas
+* fix40c — Corrección de destino visual en ramas profundas
+* fix40d — Guardado SQL de IF compuesto
+* fix41  — Limpieza de frase del Constructor IA
+
+## 5. Línea Ejecuciones / Expedientes
+
+Quedó validado:
+
+* fix42  — Ejecuciones / Expedientes en dashboard y topbar
+* fix42b — Mapa simple de instancia / expediente
+* fix42c — Abrir expediente por instancia
+* fix42d — Definición buscable por código y nombre
+* fix42e — Corrección toolbar Bootstrap en mapa
+* fix42f — Combo Definición enriquecido con última ejecución y fecha
+* fix42g — Postback/refresco inmediato del combo Definición enriquecido
+
+Estado:
+
+* `WF_Instancias.aspx` funciona con combo enriquecido.
+* `WF_Instancia_Mapa.aspx` se ve sólido operativamente.
+* No tocar mapa ni instancias salvo bug real.
+
+## 6. Constructor IA — fixes 43 a 46
+
+### fix43
+
+Se corrigió interpretación de frases humanas de IF compuesto ANY/OR.
+
+Frase validada:
+
+“Cargar una nota de crédito. Después validar una condición compuesta donde cualquiera de las reglas puede cumplirse: que el CAE no esté vacío o que el comprobante asociado no esté vacío. Si cumple, enviar una tarea a ADM_FIN para aprobar. Si no cumple, enviar una tarea a COMPRAS para corregir. Después finalizar.”
+
+Genera:
+
+* `control.if`
+* `rulesMode = any`
+* `rules[]`
+* ramas SI/NO correctas
+
+### fix43b
+
+Se corrigió validador para aceptar:
+
+* `rulesMode`
+* `rules`
+
+en `control.if`.
+
+### fix44 / fix44b
+
+Se corrigieron frases humanas con negación + caso contrario.
+
+Frase validada:
+
+“Cargar una nota de crédito. Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS para corregir. Caso contrario, enviarla a ADM_FIN para aprobar. Después finalizar.”
+
+Debe generar:
+
+* `rulesMode = any`
+* `biz.notaCredito.cae empty`
+* `biz.notaCredito.comprobanteAsociado.numero empty`
+* TRUE/SI → COMPRAS
+* FALSE/NO → ADM_FIN
+
+### fix44c
+
+Se reforzó el validador:
+
+* `human.task` no puede pasar sin `rol` ni `usuarioAsignado`.
+
+### fix45
+
+Se corrigió resultado de tarea humana para COMPRAS.
+
+Frase validada:
+
+“Si Compras la aprueba...”
+“Si Compras la rechaza...”
+
+Debe generar:
+
+* `control.if`
+* `field = wf.tarea.resultado`
+* `op = ==`
+* `value = apto`
+* rama SI → Logger Info
+* rama NO → Logger Warn
+
+### fix46
+
+Se corrigieron múltiples tareas humanas con resultado APTO/NO APTO.
+
+Frase validada:
+
+“Cargar una nota de crédito. Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS para corregir. Si Compras la aprueba, registrar un evento informativo indicando que fue corregida por Compras y finalizar. Si Compras la rechaza, registrar una advertencia indicando que fue rechazada por Compras y finalizar. Caso contrario, enviarla a ADM_FIN para aprobar. Si Administración la aprueba, registrar un evento informativo indicando que fue aprobada por Administración y finalizar. Si Administración la rechaza, registrar una advertencia indicando que fue rechazada por Administración y finalizar.”
+
+Resultado esperado:
+
+* IF faltantes ANY
+* TRUE → COMPRAS → IF resultado COMPRAS → Logger Info/Warn → Fin
+* FALSE → ADM_FIN → IF resultado ADM_FIN → Logger Info/Warn → Fin
+
+Validación real de Omar:
+
+Definición 10174.
+
+Rutas:
+
+1. Instancia 170515: faltante detectado por ANY → COMPRAS → APTO → Logger Info “fue corregida por Compras” → End.
+2. Instancia 170516: faltante detectado por ANY → COMPRAS → NO APTO → Logger Warn “fue rechazada por Compras” → End.
+3. Instancia 170517: CAE y asociado presentes → ADM_FIN → APTO → Logger Info “fue aprobada por Administración” → End.
+4. Instancia 170518: CAE y asociado presentes → ADM_FIN → NO APTO → Logger Warn “fue rechazada por Administración” → End.
+
+Conclusión:
+
+Frase humana larga → JSON/canvas → SQL → motor → reanudación de tareas → logs → mapa OK.
+
+## 7. Constructor IA — fix47
+
+Se corrigió IF compuesto ALL desde frase humana sin decir explícitamente “condición compuesta”.
+
+Frase validada:
+
+“Cargar una nota de crédito. Si tiene CAE, el total es mayor a 200000 y tiene al menos un ítem, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar. Caso contrario, enviarla a COMPRAS para revisar y después finalizar.”
+
+Genera:
+
+* `rulesMode = all`
+* `biz.notaCredito.cae not_empty`
+* `biz.notaCredito.itemsCount > 0`
+* `biz.notaCredito.total > 200000`
+* TRUE/SI → DIR_GENERAL
+* FALSE/NO → COMPRAS
+* DIR_GENERAL → IF `wf.tarea.resultado == apto`
+* APTO → Logger Info
+* NO APTO → Logger Warn
+
+Detalle menor pendiente visual:
+
+Label dice “Condición compuesta: todas de las reglas”. Debería decir “todas las reglas”, pero no afecta ejecución.
+
+## 8. Constructor IA — fix48 / fix48b
+
+Se corrigió frase con negación de importe + caso contrario.
+
+Frase validada:
+
+“Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar.”
+
+Interpretación correcta:
+
+* IF técnico: `biz.notaCredito.total > 200000`
+* TRUE/SI → DIR_GENERAL
+* FALSE/NO → COMPRAS
+
+Validación real de Omar:
+
+Definición 10175.
+
+Rutas:
+
+1. Instancia 170519: `total > 200000 => True` → DIR_GENERAL → APTO → Logger Info “fue aprobada por Dirección” → End.
+2. Instancia 170520: `total > 200000 => True` → DIR_GENERAL → NO APTO → Logger Warn “fue rechazada por Dirección” → End.
+3. Instancia 170521: total forzado `> 99999999 => False` → COMPRAS → End.
+
+Conclusión:
+
+Frase humana con “no supera” + “caso contrario” → JSON/canvas → SQL → motor → tareas/logs/mapa OK.
+
+## 9. Reflexión de arquitectura IA
+
+Omar marcó correctamente que no conviene seguir creciendo infinitamente en `WfAiMlnetProvider.cs`, que ya superaba aproximadamente 3450 líneas.
+
+Conclusión acordada:
+
+El enfoque actual era demasiado híbrido con mucho parser rígido en C#.
+
+La evolución correcta es:
+
+* IA/ML.NET para clasificar intención.
+* Phrase Engine para normalizar, separar cláusulas, reconocer semántica.
+* Diccionarios/léxico para sinónimos humanos.
+* Capability map por nodo.
+* Validador semántico fuerte.
+* Generación legacy migrada progresivamente a semántica.
+
+No hacer todo “IA mágica”, sino arquitectura profesional híbrida:
+
+Frase humana → normalizador → cláusulas → semántica → generación plan → auditor → canvas.
+
+## 10. fix50 — Capability Map de nodos
+
+Se creó inventario formal del Constructor IA v2.
+
+Archivo principal:
+
+`App_Code/Ai/WfAiNodeCapabilityMap.cs`
+
+Objetivo:
+
+Inventariar los 40 nodos de `Scripts/workflow.catalog.js` con:
+
+* grupo funcional
+* si tiene handler runtime real
+* estado IA: listo / parcial / restringido / no_habilitado
+* prioridad
+* parámetros requeridos
+* parámetros opcionales
+* sinónimos humanos
+* validaciones necesarias
+* salidas de contexto conocidas
+
+No cambia comportamiento.
+
+## 11. fix51 — Base Phrase Engine
+
+Se agregaron piezas base:
+
+* `WfAiPhraseNormalizer.cs`
+* `WfAiPhraseClauseSplitter.cs`
+* `WfAiPhraseLexicon.cs`
+
+Objetivo:
+
+* normalizar texto humano
+* separar cláusulas
+* tener léxico inicial de sinónimos/intenciones
+
+No cambió comportamiento.
+
+## 12. fix52 / fix52b — Phrase Engine diagnóstico
+
+fix52 intentó integrar `WfAiPhraseEngine.cs`, pero dio error de compilación por referencias fuertes en WebForms/App_Code.
+
+fix52b corrigió dejando diagnóstico autocontenido dentro de `WfAiMlnetProvider.cs`.
+
+Campos agregados al JSON técnico:
+
+* `phraseEngineActive`
+* `phraseConcepts`
+* `phraseNodeTypes`
+* `phraseClauseCount`
+* `phraseClauses`
+* `phrasePrimaryRole`
+* `phrasePrimaryHumanOutcome`
+* `phraseFirstNumber`
+
+Estado:
+
+* Compila.
+* No cambia canvas.
+* No cambia workflow final.
+* Modo diagnóstico.
+
+## 13. fix53 / fix53b / fix53c — Semántica por cláusula
+
+Se agregó análisis semántico por cláusula.
+
+Campos por cláusula:
+
+* `ClauseType`
+* `BranchMarker`
+* `BranchSide`
+* `Role`
+* `TaskRole`
+* `NotifyRole`
+* `HumanOutcome`
+* `LoggerLevel`
+* `Number`
+* `ConditionKind`
+* `ConditionField`
+* `ConditionOperator`
+* `ConditionValue`
+* `IsNegative`
+* `ActionHint`
+* `Concepts`
+* `NodeTypes`
+
+fix53b corrigió:
+
+* separación incorrecta de `si no supera`
+* reconocimiento de `DIR_GENERAL`
+
+fix53c corrigió:
+
+* importe implícito en “no supera los 200000 pesos”
+* ahora detecta correctamente:
+
+`ClauseType = condition_branch`
+`BranchSide = false_of_greater_than`
+`TaskRole = COMPRAS`
+`ConditionKind = total`
+`ConditionField = biz.notaCredito.total`
+`ConditionOperator = <=`
+`ConditionValue = 200000`
+`IsNegative = true`
+
+Estado:
+
+Phrase Engine entiende correctamente la frase de “no supera / caso contrario”.
+
+## 14. fix54 / fix54b — Validador de consistencia semántica
+
+Se agregó auditor que compara:
+
+* lo que entendió el Phrase Engine
+* contra lo que generó el provider legacy
+
+Campos agregados:
+
+* `phraseSemanticConsistencyActive`
+* `phraseSemanticConsistencyOk`
+* `phraseSemanticConsistency`
+
+`phraseSemanticConsistency` incluye:
+
+* `ok`
+* `mode`
+* `checks`
+* `warnings`
+* `errors`
+
+fix54b corrigió el conteo de ramas SI/NO.
+
+Validación de frase “no supera / caso contrario”:
+
+`phraseSemanticConsistencyOk = true`
+
+Checks OK:
+
+* `condition_branch`
+* `human_task`
+* `human_result` apto
+* `human_result` no_apto
+* `control_if_branches` Total mayor a 200000
+* `control_if_branches` Resultado DIR_GENERAL aprobado
+
+## 15. fix55 — Auditor avanzado de notificaciones por rama
+
+Se probó una frase más compleja con notificaciones:
+
+“Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.”
+
+El legacy inicialmente generaba mal:
+
+* SI y NO del total iban a DIR_GENERAL.
+* Faltaba logger Info en rama NO del total.
+* Faltaba notificación en rama APTO.
+* La notificación de NO APTO existía, pero el auditor debía validar ruta por rama.
+
+fix55 mejoró auditor para detectar:
+
+* notificación esperada en rama APTO
+* notificación esperada en rama NO APTO
+* logger Info esperado por caso contrario
+* IF SI/NO al mismo destino
+
+Estado fix55:
+
+Auditor semántico detecta correctamente errores, pero todavía no corrige generación.
+
+## 16. fix56 — Generación legacy asistida por semántica
+
+Se corrigió generación legacy usando lo que el Phrase Engine detectó.
+
+Para la frase de notificaciones, la generación esperada quedó:
+
+IF total > 200000
+
+Rama TRUE/SI:
+
+* `human.task` DIR_GENERAL
+* IF `wf.tarea.resultado == apto`
+
+APTO/SI:
+
+* `util.notify` a COMPRAS con mensaje “la nota de crédito fue aprobada por Dirección”
+* Fin
+
+NO APTO/NO:
+
+* `util.logger` Warn “fue rechazada por Dirección”
+* `util.notify` a COMPRAS con mensaje “fue rechazada por Dirección”
+* Fin
+
+Rama FALSE/NO del total:
+
+* `util.logger` Info “no requiere aprobación de Dirección”
+* Fin
+
+fix56 generó correctamente el grafo, pero el auditor todavía marcaba falso error porque esperaba notificación directa en rama NO APTO, sin considerar que podía estar después del Logger Warn.
+
+## 17. fix56b — Auditor de notificación alcanzable por rama
+
+Se corrigió auditor para aceptar:
+
+Resultado DIR_GENERAL NO APTO → Logger Warn → Notify COMPRAS → Fin
+
+Ya no exige conexión directa desde el IF a notify; acepta que la notificación sea alcanzable por la ruta correcta.
+
+Validación final:
+
+Para la frase de notificaciones, JSON técnico mostró:
+
+* `phraseSemanticConsistencyOk = true`
+* `warnings = []`
+* `errors = []`
+
+Rutas correctas:
+
+Total > 200000:
+
+* TRUE → Aprobación Dirección
+* FALSE → Registrar evento sin aprobación de Dirección → Fin
+
+Resultado DIR_GENERAL aprobado:
+
+* TRUE/APTO → Notificar aprobación a COMPRAS → Fin
+* FALSE/NO APTO → Registrar rechazo → Notificar rechazo a COMPRAS → Fin
+
+Conclusión:
+
+fix56 + fix56b OK.
+
+## 18. Último estado validado
+
+El Constructor IA ahora tiene:
+
+* capability map
+* phrase normalizer
+* clause splitter
+* lexicon
+* diagnóstico por cláusula
+* semántica por cláusula
+* validador de consistencia semántica
+* auditor de ramas SI/NO
+* auditor de notificaciones por rama
+* generación legacy parcialmente asistida por semántica para frase compleja con notificaciones
+
+Todavía no se reemplazó por completo `WfAiMlnetProvider.cs`.
+
+Estado estratégico:
+
+* El Phrase Engine no reemplaza todo.
+* Ya audita.
+* Ya corrige parcialmente generación en casos específicos.
+* Se debe seguir migrando de forma controlada, una intención/nodo por vez.
+
+## 19. Validaciones que NO se deben perder
+
+### Frase A — No supera / caso contrario
+
+Debe seguir OK:
+
+“Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar.”
+
+Esperado:
+
+* total > 200000
+* TRUE → DIR_GENERAL → resultado APTO/NO APTO → Logger Info/Warn → Fin
+* FALSE → COMPRAS → Fin
+* `phraseSemanticConsistencyOk = true`
+
+Esta frase fue revalidada después de fix55 y siguió OK.
+
+### Frase B — Notificaciones por rama
+
+Debe quedar OK:
+
+“Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.”
+
+Esperado:
+
+* total > 200000
+* TRUE → DIR_GENERAL
+* DIR_GENERAL APTO → notify COMPRAS aprobación → Fin
+* DIR_GENERAL NO APTO → logger Warn → notify COMPRAS rechazo → Fin
+* FALSE → logger Info no requiere aprobación → Fin
+* `phraseSemanticConsistencyOk = true`
+
+## 20. Próximos caminos posibles
+
+Después de recibir el ZIP nuevo completo:
+
+1. Revisar ZIP real.
+2. Confirmar archivos aplicados.
+3. Revalidar frase A y frase B en JSON técnico.
+4. Decidir próximo avance.
+
+Opciones recomendadas:
+
+### Opción 1 — Ejecutar flujo real de la frase B
+
+Probar en canvas / SQL / motor:
+
+* total > 200000 → DIR_GENERAL → APTO → notify COMPRAS
+* total > 200000 → DIR_GENERAL → NO APTO → logger Warn + notify COMPRAS
+* total <= 200000 → logger Info → Fin
+
+### Opción 2 — Activar bloqueo semántico real
+
+Hoy el validador está en modo diagnóstico, pero el validador funcional ya bloquea errores graves. Se puede evaluar si `phraseSemanticConsistencyOk = false` debe bloquear también el botón Aplicar al canvas.
+
+Hacerlo con cuidado.
+
+### Opción 3 — Seguir migrando nodos al Phrase Engine
+
+Próximos nodos candidatos:
+
+* `util.notify`
+* `util.logger`
+* `human.task`
+* `control.if`
+* `data.sql`
+* `http.request`
+* `file.read`
+* `file.write`
+* `state.vars`
+* `queue.publish`
+* `queue.consume`
+
+### Opción 4 — Crear banco de regresión oficial
+
+Armar listado de frases patrón con resultado esperado:
+
+* IF simple
+* IF negativo
+* IF compuesto ALL
+* IF compuesto ANY
+* caso contrario
+* APTO/NO APTO
+* notificaciones
+* logger
+* SQL
+* HTTP
+* archivos
+* variables
+* queue
+* subflow
+
+## 21. No tocar salvo bug real
+
+No tocar:
+
+* motor de ejecución
+* `HIf.cs`
+* `HHumanTask.cs`
+* `HSubFlow.cs`
+* WorkflowRuntime
+* canvas/aristas/zoom/minimapa
+* mapa de instancia
+* WF_Instancias salvo bug real
+* SMTP/email.send
+* NC_AR
+* FACTURA_AR
+* extractores documentales
+* handlers runtime ya validados
+* notificaciones runtime fix19
+* ejecuciones/mapa fix42
+* combo definición fix42f/fix42g
+
+## 22. Recomendación para próxima sesión
+
+Primero:
+
+1. Leer este ContextPack.
+2. Esperar el ZIP nuevo completo.
+3. Revisar archivos reales.
+4. Confirmar que la línea fix50–fix56b está incorporada.
+5. Revalidar rápidamente frase A y frase B usando JSON técnico.
+6. No tocar código hasta revisar el ZIP.
+
+Después:
+
+* Si todo está OK, probar ejecución real de frase B.
+* Si frase A o B falla, corregir mínimo sobre ZIP real.
+* Si ejecución real de frase B queda OK, elegir siguiente nodo del catálogo para integrar al Phrase Engine.

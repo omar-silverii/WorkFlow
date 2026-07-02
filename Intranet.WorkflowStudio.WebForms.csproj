@@ -438,6 +438,7 @@
     <Content Include="Styles\workflow.ai.assistant.css" />
     <Content Include="Styles\workflow.ui.css" />
     <Content Include="Styles\ws-theme.css" />
+    <Content Include="WF_AiRegression.aspx" />
     <Content Include="WF_Definiciones.aspx" />
     <Content Include="WF_Definicion_Adjuntos.aspx" />
     <Content Include="WF_DocTipo.aspx" />
@@ -472,6 +473,7 @@
     <Content Include="App_Data\WF_AI\workflow_intent_model.zip" />
     <Content Include="Api\WF_NotificationCounters.ashx" />
     <Content Include="Api\WF_AiCatalog.ashx" />
+    <Content Include="App_Data\WF_AI\ai_regression_cases.json" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -739,6 +741,13 @@
     </Compile>
     <Compile Include="ViewSwitcher.ascx.designer.cs">
       <DependentUpon>ViewSwitcher.ascx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_AiRegression.aspx.cs">
+      <DependentUpon>WF_AiRegression.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_AiRegression.aspx.designer.cs">
+      <DependentUpon>WF_AiRegression.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_Definiciones.aspx.cs">
       <DependentUpon>WF_Definiciones.aspx</DependentUpon>

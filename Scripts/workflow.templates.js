@@ -199,6 +199,26 @@
     merge('doc.search', { output: 'biz.doc.search', criteria: { Numero: 'OC-0001' } });
     merge('doc.load', { path: 'C:\\\\temp\\\\archivo.pdf', mode: 'auto', outputPrefix: 'payload' });
 
+
+
+    // --- QUEUE / COLAS
+    merge('queue.publish', {
+        broker: 'sql',
+        queue: 'default',
+        payload: 'Mensaje generado desde Workflow Studio',
+        connectionStringName: 'DefaultConnection'
+    });
+
+    merge('queue.consume', {
+        broker: 'sql',
+        queue: 'default',
+        take: 1,
+        prefetch: 1,
+        connectionStringName: 'DefaultConnection',
+        outputPrefix: 'queue.consume',
+        debug: false
+    });
+
     // --- STATE VARS
     merge('state.vars', { set: { 'biz.demo.flag': true } });
 

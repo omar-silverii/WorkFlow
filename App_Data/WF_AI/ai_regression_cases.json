@@ -1,0 +1,1170 @@
+[
+  {
+    "id": "A_NO_SUPERA_CASO_CONTRARIO",
+    "name": "Frase A - No supera / caso contrario",
+    "description": "Valida que 'no supera 200000' se invierta correctamente: IF técnico total > 200000, SI a DIR_GENERAL y NO a COMPRAS.",
+    "phrase": "Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Total mayor a 200000",
+          "params": {
+            "field": "biz.notaCredito.total",
+            "op": ">",
+            "value": "200000"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Aprobación Dirección",
+          "params": {
+            "rol": "DIR_GENERAL"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Compras",
+          "params": {
+            "rol": "COMPRAS"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Resultado de DIR_GENERAL aprobado",
+          "params": {
+            "field": "wf.tarea.resultado",
+            "op": "==",
+            "value": "apto"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar aprobación de DIR_GENERAL",
+          "params": {
+            "level": "Info",
+            "message": "fue aprobada por Dirección"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar rechazo de DIR_GENERAL",
+          "params": {
+            "level": "Warn",
+            "message": "fue rechazada por Dirección"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Total mayor a 200000"
+        },
+        {
+          "from": "Total mayor a 200000",
+          "to": "Aprobación Dirección",
+          "condition": "SI"
+        },
+        {
+          "from": "Total mayor a 200000",
+          "to": "Enviar a Compras",
+          "condition": "NO"
+        },
+        {
+          "from": "Aprobación Dirección",
+          "to": "Resultado de DIR_GENERAL aprobado"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Registrar aprobación de DIR_GENERAL",
+          "condition": "SI"
+        },
+        {
+          "from": "Registrar aprobación de DIR_GENERAL",
+          "to": "Fin"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Registrar rechazo de DIR_GENERAL",
+          "condition": "NO"
+        },
+        {
+          "from": "Registrar rechazo de DIR_GENERAL",
+          "to": "Fin"
+        },
+        {
+          "from": "Enviar a Compras",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "B_NOTIFY_POR_RAMA",
+    "name": "Frase B - Notificaciones por rama",
+    "description": "Valida total > 200000, tarea DIR_GENERAL, notify a COMPRAS en APTO, logger+notify en NO APTO y logger Info en caso contrario.",
+    "phrase": "Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Total mayor a 200000",
+          "params": {
+            "field": "biz.notaCredito.total",
+            "op": ">",
+            "value": "200000"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Aprobación Dirección",
+          "params": {
+            "rol": "DIR_GENERAL"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento sin aprobación de Dirección",
+          "params": {
+            "level": "Info",
+            "message": "no requiere aprobación de Dirección"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Resultado de DIR_GENERAL aprobado",
+          "params": {
+            "field": "wf.tarea.resultado",
+            "op": "==",
+            "value": "apto"
+          }
+        },
+        {
+          "type": "util.notify",
+          "label": "Notificar aprobación de DIR_GENERAL a COMPRAS",
+          "params": {
+            "rolDestino": "COMPRAS",
+            "mensaje": "la nota de crédito fue aprobada por Dirección"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar rechazo de DIR_GENERAL",
+          "params": {
+            "level": "Warn",
+            "message": "fue rechazada por Dirección"
+          }
+        },
+        {
+          "type": "util.notify",
+          "label": "Notificar rechazo de DIR_GENERAL a COMPRAS",
+          "params": {
+            "rolDestino": "COMPRAS",
+            "mensaje": "fue rechazada por Dirección"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Total mayor a 200000"
+        },
+        {
+          "from": "Total mayor a 200000",
+          "to": "Aprobación Dirección",
+          "condition": "SI"
+        },
+        {
+          "from": "Total mayor a 200000",
+          "to": "Registrar evento sin aprobación de Dirección",
+          "condition": "NO"
+        },
+        {
+          "from": "Aprobación Dirección",
+          "to": "Resultado de DIR_GENERAL aprobado"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Notificar aprobación de DIR_GENERAL a COMPRAS",
+          "condition": "SI"
+        },
+        {
+          "from": "Notificar aprobación de DIR_GENERAL a COMPRAS",
+          "to": "Fin"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Registrar rechazo de DIR_GENERAL",
+          "condition": "NO"
+        },
+        {
+          "from": "Registrar rechazo de DIR_GENERAL",
+          "to": "Notificar rechazo de DIR_GENERAL a COMPRAS"
+        },
+        {
+          "from": "Notificar rechazo de DIR_GENERAL a COMPRAS",
+          "to": "Fin"
+        },
+        {
+          "from": "Registrar evento sin aprobación de Dirección",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE",
+    "name": "IF compuesto ANY - CAE o comprobante",
+    "description": "IF compuesto ANY con CAE o comprobante asociado; desde fix59 exige auditoría semántica completa.",
+    "phrase": "Cargar una nota de crédito. Después validar una condición compuesta donde cualquiera de las reglas puede cumplirse: que el CAE no esté vacío o que el comprobante asociado no esté vacío. Si cumple, enviar una tarea a ADM_FIN para aprobar. Si no cumple, enviar una tarea a COMPRAS para corregir. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Condición compuesta: cualquiera de las reglas",
+          "params": {
+            "rulesMode": "any"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Administración",
+          "params": {
+            "rol": "ADM_FIN"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Compras",
+          "params": {
+            "rol": "COMPRAS"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Condición compuesta: cualquiera de las reglas"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Administración",
+          "condition": "SI"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Compras",
+          "condition": "NO"
+        },
+        {
+          "from": "Enviar a Administración",
+          "to": "Fin"
+        },
+        {
+          "from": "Enviar a Compras",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO",
+    "name": "Negación CAE/comprobante + caso contrario",
+    "description": "Valida no tiene CAE o falta comprobante asociado: SI a COMPRAS, caso contrario a ADM_FIN. Desde fix60 exige auditoría semántica completa.",
+    "phrase": "Cargar una nota de crédito. Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS para corregir. Caso contrario, enviarla a ADM_FIN para aprobar. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Condición compuesta: cualquiera de las reglas",
+          "params": {
+            "rulesMode": "any"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Compras",
+          "params": {
+            "rol": "COMPRAS"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Administración",
+          "params": {
+            "rol": "ADM_FIN"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Condición compuesta: cualquiera de las reglas"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Compras",
+          "condition": "SI"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Administración",
+          "condition": "NO"
+        },
+        {
+          "from": "Enviar a Compras",
+          "to": "Fin"
+        },
+        {
+          "from": "Enviar a Administración",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS",
+    "name": "IF compuesto ALL - Dirección/Compras",
+    "description": "Valida CAE + total > 200000 + al menos un ítem: SI a DIR_GENERAL con APTO/NO APTO, NO a COMPRAS. Desde fix61 exige auditoría semántica completa.",
+    "phrase": "Cargar una nota de crédito. Si tiene CAE, el total es mayor a 200000 y tiene al menos un ítem, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar. Caso contrario, enviarla a COMPRAS para revisar y después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Condición compuesta: todas de las reglas",
+          "params": {
+            "rulesMode": "all"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Aprobación Dirección",
+          "params": {
+            "rol": "DIR_GENERAL"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Compras",
+          "params": {
+            "rol": "COMPRAS"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Resultado de DIR_GENERAL aprobado",
+          "params": {
+            "field": "wf.tarea.resultado",
+            "op": "==",
+            "value": "apto"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar aprobación de DIR_GENERAL",
+          "params": {
+            "level": "Info",
+            "message": "fue aprobada por Dirección"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar rechazo de DIR_GENERAL",
+          "params": {
+            "level": "Warn",
+            "message": "fue rechazada por Dirección"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Condición compuesta: todas de las reglas"
+        },
+        {
+          "from": "Condición compuesta: todas de las reglas",
+          "to": "Aprobación Dirección",
+          "condition": "SI"
+        },
+        {
+          "from": "Condición compuesta: todas de las reglas",
+          "to": "Enviar a Compras",
+          "condition": "NO"
+        },
+        {
+          "from": "Aprobación Dirección",
+          "to": "Resultado de DIR_GENERAL aprobado"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Registrar aprobación de DIR_GENERAL",
+          "condition": "SI"
+        },
+        {
+          "from": "Registrar aprobación de DIR_GENERAL",
+          "to": "Fin"
+        },
+        {
+          "from": "Resultado de DIR_GENERAL aprobado",
+          "to": "Registrar rechazo de DIR_GENERAL",
+          "condition": "NO"
+        },
+        {
+          "from": "Registrar rechazo de DIR_GENERAL",
+          "to": "Fin"
+        },
+        {
+          "from": "Enviar a Compras",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS",
+    "name": "Múltiples tareas humanas - Compras y Administración",
+    "description": "Valida ramas COMPRAS y ADM_FIN con resultados APTO/NO APTO independientes. Desde fix62 exige auditoría semántica completa y logger alcanzable por rama de resultado humano.",
+    "phrase": "Cargar una nota de crédito. Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS para corregir. Si Compras la aprueba, registrar un evento informativo indicando que fue corregida por Compras y finalizar. Si Compras la rechaza, registrar una advertencia indicando que fue rechazada por Compras y finalizar. Caso contrario, enviarla a ADM_FIN para aprobar. Si Administración la aprueba, registrar un evento informativo indicando que fue aprobada por Administración y finalizar. Si Administración la rechaza, registrar una advertencia indicando que fue rechazada por Administración y finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "doc.load",
+          "label": "Cargar nota de crédito",
+          "params": {
+            "docTipoCodigo": "NOTA_CREDITO_ELECTRONICA_AR"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Condición compuesta: cualquiera de las reglas",
+          "params": {
+            "rulesMode": "any"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Compras",
+          "params": {
+            "rol": "COMPRAS"
+          }
+        },
+        {
+          "type": "human.task",
+          "label": "Enviar a Administración",
+          "params": {
+            "rol": "ADM_FIN"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Resultado de COMPRAS aprobado",
+          "params": {
+            "field": "wf.tarea.resultado",
+            "op": "==",
+            "value": "apto"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar aprobación de COMPRAS",
+          "params": {
+            "level": "Info",
+            "message": "fue corregida por Compras"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar rechazo de COMPRAS",
+          "params": {
+            "level": "Warn",
+            "message": "fue rechazada por Compras"
+          }
+        },
+        {
+          "type": "control.if",
+          "label": "Resultado de ADM_FIN aprobado",
+          "params": {
+            "field": "wf.tarea.resultado",
+            "op": "==",
+            "value": "apto"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar aprobación de ADM_FIN",
+          "params": {
+            "level": "Info",
+            "message": "fue aprobada por Administración"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar rechazo de ADM_FIN",
+          "params": {
+            "level": "Warn",
+            "message": "fue rechazada por Administración"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Cargar nota de crédito"
+        },
+        {
+          "from": "Cargar nota de crédito",
+          "to": "Condición compuesta: cualquiera de las reglas"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Compras",
+          "condition": "SI"
+        },
+        {
+          "from": "Condición compuesta: cualquiera de las reglas",
+          "to": "Enviar a Administración",
+          "condition": "NO"
+        },
+        {
+          "from": "Enviar a Compras",
+          "to": "Resultado de COMPRAS aprobado"
+        },
+        {
+          "from": "Resultado de COMPRAS aprobado",
+          "to": "Registrar aprobación de COMPRAS",
+          "condition": "SI"
+        },
+        {
+          "from": "Registrar aprobación de COMPRAS",
+          "to": "Fin"
+        },
+        {
+          "from": "Resultado de COMPRAS aprobado",
+          "to": "Registrar rechazo de COMPRAS",
+          "condition": "NO"
+        },
+        {
+          "from": "Registrar rechazo de COMPRAS",
+          "to": "Fin"
+        },
+        {
+          "from": "Enviar a Administración",
+          "to": "Resultado de ADM_FIN aprobado"
+        },
+        {
+          "from": "Resultado de ADM_FIN aprobado",
+          "to": "Registrar aprobación de ADM_FIN",
+          "condition": "SI"
+        },
+        {
+          "from": "Registrar aprobación de ADM_FIN",
+          "to": "Fin"
+        },
+        {
+          "from": "Resultado de ADM_FIN aprobado",
+          "to": "Registrar rechazo de ADM_FIN",
+          "condition": "NO"
+        },
+        {
+          "from": "Registrar rechazo de ADM_FIN",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "G_HTTP_REQUEST_LOGGER",
+    "name": "Solicitud HTTP + Logger",
+    "description": "Solicitud HTTP + Logger. Desde fix65 exige auditoría semántica específica para http.request y logger standalone.",
+    "phrase": "Hacer una solicitud HTTP GET a /Api/Ping.ashx. Registrar un evento informativo indicando HTTP OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "http.request",
+          "label": "Solicitud HTTP GET /Api/Ping.ashx",
+          "params": {
+            "method": "GET",
+            "url": "/Api/Ping.ashx",
+            "timeoutMs": "10000"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "HTTP OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Solicitud HTTP GET /Api/Ping.ashx"
+        },
+        {
+          "from": "Solicitud HTTP GET /Api/Ping.ashx",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "H_SQL_SELECT_LOGGER",
+    "name": "Consulta SQL + Logger",
+    "description": "Consulta SQL + Logger. Desde fix65 exige auditoría semántica específica para data.sql y logger standalone.",
+    "phrase": "Ejecutar una consulta SQL con DefaultConnection: SELECT TOP 10 Numero, Asegurado FROM PolizasDemo. Registrar un evento informativo indicando Consulta SQL OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "data.sql",
+          "label": "Consulta SQL",
+          "params": {
+            "connectionStringName": "DefaultConnection",
+            "query": "SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Consulta SQL OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Consulta SQL"
+        },
+        {
+          "from": "Consulta SQL",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "I_LOGGER_SIMPLE",
+    "name": "Logger simple",
+    "description": "Logger simple. Desde fix65 exige auditoría semántica específica para util.logger standalone.",
+    "phrase": "Registrar un evento informativo indicando Prueba de logger. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "nodes": [
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Prueba de logger"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ],
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true
+    }
+  },
+  {
+    "id": "J_FILE_WRITE_LOGGER",
+    "name": "Archivo escribir + Logger",
+    "description": "Desde fix66 exige auditoría semántica específica para file.write: path, content, encoding, overwrite, logger posterior y fin. No ejecuta el archivo; valida generación del plan.",
+    "phrase": "Escribir archivo en C:\\temp\\wf_ai_regression.txt con contenido Prueba file write. Registrar un evento informativo indicando Archivo escrito OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "file.write",
+          "label": "Escribir archivo",
+          "params": {
+            "path": "C:\\temp\\wf_ai_regression.txt",
+            "content": "Prueba file write",
+            "encoding": "utf-8",
+            "overwrite": "true"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Archivo escrito OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Escribir archivo"
+        },
+        {
+          "from": "Escribir archivo",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "K_FILE_READ_LOGGER",
+    "name": "Archivo leer + Logger",
+    "description": "Desde fix66 exige auditoría semántica específica para file.read: path, salida, encoding, asJson, logger posterior y fin. No ejecuta el archivo; valida generación del plan.",
+    "phrase": "Leer archivo C:\\temp\\wf_ai_regression.txt. Registrar un evento informativo indicando Archivo leído OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "file.read",
+          "label": "Leer archivo",
+          "params": {
+            "path": "C:\\temp\\wf_ai_regression.txt",
+            "salida": "archivo",
+            "encoding": "utf-8",
+            "asJson": "false"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Archivo leído OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Leer archivo"
+        },
+        {
+          "from": "Leer archivo",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "L_STATE_VARS_LOGGER",
+    "name": "Variables + Logger",
+    "description": "Desde fix66 exige auditoría semántica específica para state.vars set simple, logger posterior y fin.",
+    "phrase": "Guardar variable vars.regresion como OK. Registrar un evento informativo indicando Variable guardada OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "state.vars",
+          "label": "Definir variables",
+          "params": {}
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Variable guardada OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Definir variables"
+        },
+        {
+          "from": "Definir variables",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "M_QUEUE_PUBLISH_LOGGER",
+    "name": "Cola publicar + Logger",
+    "description": "Desde fix66 exige auditoría semántica específica para queue.publish SQL con cola, payload, conexión, logger posterior y fin. No ejecuta SQL; valida generación del plan.",
+    "phrase": "Publicar en cola banco-regresion con payload Prueba queue. Registrar un evento informativo indicando Cola publicada OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola banco-regresion",
+          "params": {
+            "broker": "sql",
+            "queue": "banco-regresion",
+            "payload": "Prueba queue",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Cola publicada OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola banco-regresion"
+        },
+        {
+          "from": "Publicar en cola banco-regresion",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "N_QUEUE_CONSUME_LOGGER",
+    "name": "Cola consumir + Logger",
+    "description": "Desde fix66 exige auditoría semántica específica para queue.consume SQL con cola, take/prefetch, conexión, outputPrefix, logger posterior y fin. No ejecuta SQL; valida generación del plan.",
+    "phrase": "Consumir de cola banco-regresion tomando 1 mensaje. Registrar un evento informativo indicando Cola consumida OK. Después finalizar.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.consume",
+          "label": "Consumir cola banco-regresion",
+          "params": {
+            "broker": "sql",
+            "queue": "banco-regresion",
+            "take": "1",
+            "prefetch": "1",
+            "connectionStringName": "DefaultConnection",
+            "outputPrefix": "queue.consume"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Cola consumida OK"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Consumir cola banco-regresion"
+        },
+        {
+          "from": "Consumir cola banco-regresion",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
+  }
+]

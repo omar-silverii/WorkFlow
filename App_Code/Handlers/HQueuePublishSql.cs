@@ -20,6 +20,26 @@ namespace Intranet.WorkflowStudio.Runtime
     {
         public string TipoNodo => "queue.publish";
 
+        private static bool GetBool(Dictionary<string, object> p, string key, bool def = false)
+        {
+            if (p == null || string.IsNullOrWhiteSpace(key)) return def;
+            if (!p.TryGetValue(key, out var v) || v == null) return def;
+
+            if (v is bool b) return b;
+
+            var s = Convert.ToString(v);
+            if (string.IsNullOrWhiteSpace(s)) return def;
+
+            if (bool.TryParse(s, out var parsedBool)) return parsedBool;
+            if (int.TryParse(s, out var parsedInt)) return parsedInt != 0;
+
+            return string.Equals(s, "si", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "sí", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "y", StringComparison.OrdinalIgnoreCase);
+        }
+
+
         public async Task<ResultadoEjecucion> EjecutarAsync(
             ContextoEjecucion ctx,
             NodeDef nodo,
@@ -224,6 +244,25 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);";
     {
         public string TipoNodo => "queue.consume";
 
+        private static bool GetBool(Dictionary<string, object> p, string key, bool def = false)
+        {
+            if (p == null || string.IsNullOrWhiteSpace(key)) return def;
+            if (!p.TryGetValue(key, out var v) || v == null) return def;
+
+            if (v is bool b) return b;
+
+            var s = Convert.ToString(v);
+            if (string.IsNullOrWhiteSpace(s)) return def;
+
+            if (bool.TryParse(s, out var parsedBool)) return parsedBool;
+            if (int.TryParse(s, out var parsedInt)) return parsedInt != 0;
+
+            return string.Equals(s, "si", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "sí", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "y", StringComparison.OrdinalIgnoreCase);
+        }
+
         // Aplana recursivamente un JToken en ctx.Estado, generando claves tipo:
         // payload.ocNumero
         // payload.proveedor.codigo
@@ -301,8 +340,8 @@ SELECT CAST(SCOPE_IDENTITY() AS BIGINT);";
             NodeDef nodo,
             CancellationToken ct)
         {
-            ctx.Log("[Queue.ConsumeSql/BUILD] 2026-02-01 A");
             var p = nodo.Parameters ?? new Dictionary<string, object>();
+            bool debug = GetBool(p, "debug", false);
 
             // Nombre de la cola (permite templating)
             var queueRaw = p.ContainsKey("queue") ? Convert.ToString(p["queue"]) : "default";
@@ -455,7 +494,10 @@ OUTPUT
                     {
                         try
                         {
-                            ctx.Log("[Queue.ConsumeSql/debug] payloadJson=" + payloadJson);
+                            if (debug)
+                            {
+                                ctx.Log("[Queue.ConsumeSql/debug] payloadJson=" + payloadJson);
+                            }
 
                             // 1) Parse inicial
                             JToken rootToken = JToken.Parse(payloadJson);
@@ -470,11 +512,17 @@ OUTPUT
                                     ((inner.StartsWith("{") && inner.EndsWith("}")) || (inner.StartsWith("[") && inner.EndsWith("]"))))
                                 {
                                     rootToken = JToken.Parse(inner);
-                                    ctx.Log("[Queue.ConsumeSql/debug] double-json detected -> reparsed inner JSON OK.");
+                                    if (debug)
+                                    {
+                                        ctx.Log("[Queue.ConsumeSql/debug] double-json detected -> reparsed inner JSON OK.");
+                                    }
                                 }
                                 else
                                 {
-                                    ctx.Log("[Queue.ConsumeSql/debug] rootToken is STRING but inner is not JSON object/array.");
+                                    if (debug)
+                                    {
+                                        ctx.Log("[Queue.ConsumeSql/debug] rootToken is STRING but inner is not JSON object/array.");
+                                    }
                                 }
                             }
 
@@ -502,15 +550,17 @@ OUTPUT
 
                             ctx.Log("[Queue.ConsumeSql] Mensaje Id=" + first["Id"] + " → payload en Estado['payload'].");
 
-                            // DEBUG DURO
-                            var test1 = ContextoEjecucion.ResolverPath(ctx.Estado, "payload.ocNumero");
-                            ctx.Log("[Queue.ConsumeSql/debug] ResolverPath(payload.ocNumero)=" + Convert.ToString(test1 ?? "(null)"));
+                            if (debug)
+                            {
+                                var test1 = ContextoEjecucion.ResolverPath(ctx.Estado, "payload.ocNumero");
+                                ctx.Log("[Queue.ConsumeSql/debug] ResolverPath(payload.ocNumero)=" + Convert.ToString(test1 ?? "(null)"));
 
-                            var test2 = ctx.Estado.ContainsKey("payload.ocNumero") ? ctx.Estado["payload.ocNumero"] : null;
-                            ctx.Log("[Queue.ConsumeSql/debug] Estado[payload.ocNumero]=" + Convert.ToString(test2 ?? "(null)"));
+                                var test2 = ctx.Estado.ContainsKey("payload.ocNumero") ? ctx.Estado["payload.ocNumero"] : null;
+                                ctx.Log("[Queue.ConsumeSql/debug] Estado[payload.ocNumero]=" + Convert.ToString(test2 ?? "(null)"));
 
-                            var pObj = ctx.Estado.ContainsKey("payload") ? ctx.Estado["payload"] : null;
-                            ctx.Log("[Queue.ConsumeSql/debug] payload.type=" + (pObj == null ? "(null)" : pObj.GetType().FullName));
+                                var pObj = ctx.Estado.ContainsKey("payload") ? ctx.Estado["payload"] : null;
+                                ctx.Log("[Queue.ConsumeSql/debug] payload.type=" + (pObj == null ? "(null)" : pObj.GetType().FullName));
+                            }
 
 
                         }

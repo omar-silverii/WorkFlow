@@ -212,7 +212,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 L("queue.publish.lastId", "queue.error")));
 
             list.Add(Node("queue.consume", "Cola: Consumir", "Datos e Integraciones", true, EstadoParcial, 3,
-                L("queue"), L("take", "connectionStringName", "outputPrefix"),
+                L("queue"), L("take", "prefetch", "connectionStringName", "outputPrefix", "debug"),
                 L("consumir cola", "leer de cola", "tomar mensaje", "queue consume"),
                 L("Validado recientemente con WF_Queue."),
                 L("queue obligatoria o default explícito", "take seguro"),
