@@ -8,7 +8,7 @@ git add .              # agrega todos los cambios
 git commit -m "Lo que hiciste hoy" 
 git push origin main   # lo sube a GitHub
 
-
+@calliadesigner
 C:\temp\NC_00002_00000001.pdf
 
 dotnet run

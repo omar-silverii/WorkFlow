@@ -125,6 +125,11 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private static JObject BuildPlan(string userText, List<WfAiPredictedIntent> predictions, WfAiCatalog catalog)
         {
+            // fix52: Phrase Engine v2 en modo diagnóstico/controlado.
+            // No reemplaza todavía la lógica legacy; deja disponible análisis de cláusulas, conceptos
+            // y señales léxicas para empezar a sacar lógica de este proveedor gigante sin romper lo validado.
+            PhraseEngineDiagnostic phraseEngine = BuildPhraseEngineDiagnostic(userText);
+
             string norm = Normalize(userText);
             string docTipo = ResolveDocTipo(norm, catalog);
             string prefix = ResolvePrefix(docTipo, catalog);
@@ -187,6 +192,8 @@ namespace Intranet.WorkflowStudio.WebForms
             bool wantsEnd = HasIntent(predictions, "FINALIZAR_FLUJO") || ContainsAny(norm, "finalizar", "terminar", "fin del flujo");
 
             BranchAnalysis branches = AnalyzeBranches(norm, catalog, amount);
+            BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(userText, norm, amount);
+            ApplyPhraseSemanticHintsToLegacyGeneration(phraseEngine, branches, branchLoggerRequest, humanTaskOutcomes);
             bool branchTasksCreated = false;
 
             var actions = new JArray();
@@ -279,12 +286,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
             }
 
-            if (hasHumanTaskOutcome)
-            {
-                foreach (HumanTaskOutcomeRequest humanTaskOutcome in humanTaskOutcomes)
-                    AddHumanTaskOutcomeActions(actions, humanTaskOutcome);
-            }
-
             if (wantsCaeValidation)
             {
                 string field = prefix.Length > 0 ? "biz." + prefix + ".cae" : "";
@@ -362,6 +363,19 @@ namespace Intranet.WorkflowStudio.WebForms
                     EnsureHumanTaskAction(actions, falseRole, HumanTaskTitle(falseRole, ""), "Rama negativa de importe generada por el Asistente IA.");
                     branchTasksCreated = true;
                 }
+                else if (branchLoggerRequest != null
+                    && branchLoggerRequest.IsDetected
+                    && string.Equals(branchLoggerRequest.BranchKind, "totalFalse", StringComparison.OrdinalIgnoreCase))
+                {
+                    string loggerLabel = string.IsNullOrWhiteSpace(branchLoggerRequest.Label) ? "Registrar evento" : branchLoggerRequest.Label;
+                    actions.Add(AddNode("util.logger", loggerLabel, new JObject
+                    {
+                        ["level"] = string.IsNullOrWhiteSpace(branchLoggerRequest.Level) ? "Info" : branchLoggerRequest.Level,
+                        ["message"] = string.IsNullOrWhiteSpace(branchLoggerRequest.Message) ? "Evento generado por Asistente IA." : branchLoggerRequest.Message
+                    }));
+                    branches.TotalFalseActionLabel = loggerLabel;
+                    branchTasksCreated = true;
+                }
                 else
                 {
                     missing.Add(new JObject
@@ -395,6 +409,15 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["question"] = "¿A qué rol o usuario querés enviar la tarea?"
                     });
                 }
+            }
+
+            if (hasHumanTaskOutcome)
+            {
+                // fix48: las condiciones por importe legacy crean sus tareas después del análisis de
+                // resultados humanos. Agregamos los IF wf.tarea.resultado recién después de que ya
+                // existan las human.task de las ramas, para no dejar resultados de tarea antes de la tarea real.
+                foreach (HumanTaskOutcomeRequest humanTaskOutcome in humanTaskOutcomes)
+                    AddHumanTaskOutcomeActions(actions, humanTaskOutcome);
             }
 
             if (delayRequest.WantsDelay)
@@ -436,17 +459,22 @@ namespace Intranet.WorkflowStudio.WebForms
             JObject branchPlan = BuildBranchPlan(wantsCaeValidation, amount, branches, naturalCompositeCondition);
             JArray proposedConnections = BuildProposedConnections(actions, branchPlan);
 
+            JObject phraseSemanticConsistency = BuildPhraseSemanticConsistency(phraseEngine, actions, branchPlan, proposedConnections);
+
             warnings.Add("Proveedor ML.NET: interpretación local usando modelo entrenado externo. Todavía no se aplica al canvas automáticamente.");
+            warnings.Add("Phrase Engine v2: análisis de cláusulas y léxico activo en modo diagnóstico; no reemplaza todavía el provider legacy.");
             if (branches.HasBranchInfo)
                 warnings.Add("Branch Connector v1: se generaron conexiones propuestas para revisión. Todavía no se aplican al canvas automáticamente.");
             if (emailRequest.WantsEmail)
                 warnings.Add("email.send: se genera nodo de correo, no tarea humana. El envío real depende de la configuración SMTP/Web.config.");
             if (notifyRequest.WantsNotify)
                 warnings.Add("util.notify: se genera una notificación operativa interna; no envía email real.");
+            if (!SemanticConsistencyOk(phraseSemanticConsistency))
+                warnings.Add("Phrase Engine v2: hay diferencias entre la interpretación semántica y el grafo legacy generado. Revisar phraseSemanticConsistency antes de aplicar.");
 
             return new JObject
             {
-                ["assistantVersion"] = "1.13-mlnet-operational-notify-fix17",
+                ["assistantVersion"] = "1.13-mlnet-operational-notify-fix49",
                 ["intent"] = "build_workflow",
                 ["confidence"] = AggregateConfidence(predictions),
                 ["messageToUser"] = BuildMessage(actions, docTipo, role, userKey, amount, branches, naturalCompositeCondition),
@@ -484,7 +512,19 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["humanTaskOutcomeRole"] = hasHumanTaskOutcome ? string.Join(",", humanTaskOutcomes.ConvertAll(x => x.TaskRole).ToArray()) : "",
                         ["caeFalseRole"] = branches.CaeFalseRole,
                         ["totalTrueRole"] = branches.TotalTrueRole,
-                        ["totalFalseRole"] = branches.TotalFalseRole
+                        ["totalFalseRole"] = branches.TotalFalseRole,
+                        ["phraseEngineActive"] = true,
+                        ["phraseSemanticByClause"] = true,
+                        ["phraseConcepts"] = JArray.FromObject(phraseEngine.Concepts),
+                        ["phraseNodeTypes"] = JArray.FromObject(phraseEngine.NodeTypes),
+                        ["phraseClauseCount"] = phraseEngine.Clauses.Count,
+                        ["phraseClauses"] = JArray.FromObject(phraseEngine.DebugClauses()),
+                        ["phraseSemanticConsistencyActive"] = true,
+                        ["phraseSemanticConsistencyOk"] = SemanticConsistencyOk(phraseSemanticConsistency),
+                        ["phraseSemanticConsistency"] = phraseSemanticConsistency,
+                        ["phrasePrimaryRole"] = phraseEngine.PrimaryRole,
+                        ["phrasePrimaryHumanOutcome"] = phraseEngine.PrimaryHumanOutcome,
+                        ["phraseFirstNumber"] = phraseEngine.FirstNumber
                     }
                 }
             };
@@ -513,6 +553,177 @@ namespace Intranet.WorkflowStudio.WebForms
             return node;
         }
 
+        private static void ApplyPhraseSemanticHintsToLegacyGeneration(PhraseEngineDiagnostic phraseEngine, BranchAnalysis branches, BranchLoggerRequest branchLoggerRequest, List<HumanTaskOutcomeRequest> humanTaskOutcomes)
+        {
+            // fix56: empezamos a usar el Phrase Engine como corrector controlado del legacy,
+            // pero solo para los casos ya diagnosticados/validados por fix54/fix55.
+            // No reemplaza el provider completo: corrige ramas de importe, caso contrario con logger
+            // y acciones APTO/NO_APTO con notificación/logger por rama.
+            if (phraseEngine == null) return;
+
+            ApplyPhraseSemanticBranchHints(phraseEngine, branches, branchLoggerRequest);
+            ApplyPhraseSemanticOutcomeHints(phraseEngine, humanTaskOutcomes);
+        }
+
+        private static void ApplyPhraseSemanticBranchHints(PhraseEngineDiagnostic phraseEngine, BranchAnalysis branches, BranchLoggerRequest branchLoggerRequest)
+        {
+            if (phraseEngine == null || branches == null) return;
+
+            foreach (PhraseClauseDiagnostic clause in phraseEngine.Clauses)
+            {
+                if (clause == null) continue;
+
+                string clauseType = clause.ClauseType ?? "";
+                string kind = clause.ConditionKind ?? "";
+                string side = clause.BranchSide ?? "";
+                string taskRole = clause.TaskRole ?? "";
+
+                if (string.Equals(clauseType, "condition_branch", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(kind, "total", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(taskRole))
+                {
+                    if (IsPhraseTotalTrueSide(side) && string.IsNullOrWhiteSpace(branches.TotalTrueRole))
+                        branches.TotalTrueRole = taskRole;
+
+                    if (IsPhraseTotalFalseSide(side) && string.IsNullOrWhiteSpace(branches.TotalFalseRole))
+                        branches.TotalFalseRole = taskRole;
+                }
+
+                if (IsPhraseElseLoggerClause(clause))
+                {
+                    // Caso real fix55:
+                    // "Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección..."
+                    // ResolveRole legacy podía leer "Dirección" y convertir la rama NO en human.task:DIR_GENERAL.
+                    // Si el Phrase Engine dice que es logger sin TaskRole, se limpia esa falsa tarea humana
+                    // y se deja la rama NO como logger operativo.
+                    if (!string.IsNullOrWhiteSpace(clause.Role)
+                        && string.Equals(branches.TotalFalseRole, clause.Role, StringComparison.OrdinalIgnoreCase)
+                        && string.IsNullOrWhiteSpace(clause.TaskRole))
+                    {
+                        branches.TotalFalseRole = "";
+                    }
+
+                    if (branchLoggerRequest != null)
+                    {
+                        string message = ExtractBranchLoggerMessage(clause.Text ?? "");
+                        branchLoggerRequest.IsDetected = true;
+                        branchLoggerRequest.BranchKind = "totalFalse";
+                        branchLoggerRequest.Level = string.IsNullOrWhiteSpace(clause.LoggerLevel) ? "Info" : clause.LoggerLevel;
+                        branchLoggerRequest.Message = string.IsNullOrWhiteSpace(message) ? "No requiere aprobación de Dirección." : message;
+                        branchLoggerRequest.Label = string.Equals(branchLoggerRequest.Level, "Warn", StringComparison.OrdinalIgnoreCase)
+                            ? "Registrar advertencia de rama alternativa"
+                            : "Registrar evento sin aprobación de Dirección";
+                    }
+                }
+
+                if (string.Equals(clauseType, "else_human_task", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(taskRole))
+                {
+                    if (string.IsNullOrWhiteSpace(branches.TotalTrueRole) && string.Equals(side, "opposite", StringComparison.OrdinalIgnoreCase))
+                        branches.TotalTrueRole = taskRole;
+                }
+            }
+        }
+
+        private static bool IsPhraseTotalTrueSide(string side)
+        {
+            string s = Normalize(side).Trim();
+            return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "true_of_greater_than", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPhraseTotalFalseSide(string side)
+        {
+            string s = Normalize(side).Trim();
+            return string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s, "false_of_greater_than", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPhraseElseLoggerClause(PhraseClauseDiagnostic clause)
+        {
+            if (clause == null) return false;
+            return string.Equals(clause.ClauseType ?? "", "else_branch", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(clause.LoggerLevel)
+                && string.IsNullOrWhiteSpace(clause.TaskRole)
+                && string.IsNullOrWhiteSpace(clause.NotifyRole);
+        }
+
+        private static void ApplyPhraseSemanticOutcomeHints(PhraseEngineDiagnostic phraseEngine, List<HumanTaskOutcomeRequest> humanTaskOutcomes)
+        {
+            if (phraseEngine == null || humanTaskOutcomes == null) return;
+
+            foreach (PhraseClauseDiagnostic clause in phraseEngine.Clauses)
+            {
+                if (clause == null) continue;
+                if (string.IsNullOrWhiteSpace(clause.HumanOutcome)) continue;
+                if (string.IsNullOrWhiteSpace(clause.Role)) continue;
+
+                // Solo usamos esto para cláusulas de resultado humano o notificación asociada a resultado humano.
+                bool outcomeLike = string.Equals(clause.ClauseType ?? "", "human_result", StringComparison.OrdinalIgnoreCase)
+                    || (string.Equals(clause.ClauseType ?? "", "notification", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(clause.NotifyRole));
+                if (!outcomeLike) continue;
+
+                HumanTaskOutcomeRequest request = FindOrCreateHumanTaskOutcomeRequest(humanTaskOutcomes, clause.Role);
+                if (request == null) continue;
+
+                bool approved = string.Equals(clause.HumanOutcome, "apto", StringComparison.OrdinalIgnoreCase);
+                bool rejected = string.Equals(clause.HumanOutcome, "no_apto", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(clause.HumanOutcome, "no apto", StringComparison.OrdinalIgnoreCase);
+
+                if (approved)
+                {
+                    request.HasApprovedBranch = true;
+                    if (!string.IsNullOrWhiteSpace(clause.NotifyRole))
+                        request.ApprovedNotifyRole = clause.NotifyRole;
+
+                    // Si la frase pidió notificar pero no pidió registrar, no inventamos logger.
+                    request.ApprovedWantsLogger = !string.IsNullOrWhiteSpace(clause.LoggerLevel);
+
+                    string msg = ExtractHumanTaskOutcomeMessage(phraseEngine.OriginalText, request.TaskRole, true);
+                    if (!string.IsNullOrWhiteSpace(msg)) request.ApprovedMessage = msg;
+                    if (string.IsNullOrWhiteSpace(request.ApprovedMessage))
+                        request.ApprovedMessage = "Tarea de " + RoleFriendlyName(request.TaskRole) + " aprobada.";
+                }
+
+                if (rejected)
+                {
+                    request.HasRejectedBranch = true;
+                    if (!string.IsNullOrWhiteSpace(clause.NotifyRole))
+                        request.RejectedNotifyRole = clause.NotifyRole;
+
+                    request.RejectedWantsLogger = !string.IsNullOrWhiteSpace(clause.LoggerLevel);
+
+                    string msg = ExtractHumanTaskOutcomeMessage(phraseEngine.OriginalText, request.TaskRole, false);
+                    if (!string.IsNullOrWhiteSpace(msg)) request.RejectedMessage = msg;
+                    if (string.IsNullOrWhiteSpace(request.RejectedMessage))
+                        request.RejectedMessage = "Tarea de " + RoleFriendlyName(request.TaskRole) + " rechazada.";
+                }
+
+                request.IsDetected = request.HasApprovedBranch || request.HasRejectedBranch;
+            }
+        }
+
+        private static HumanTaskOutcomeRequest FindOrCreateHumanTaskOutcomeRequest(List<HumanTaskOutcomeRequest> list, string role)
+        {
+            if (list == null || string.IsNullOrWhiteSpace(role)) return null;
+
+            foreach (HumanTaskOutcomeRequest item in list)
+            {
+                if (item == null) continue;
+                if (string.Equals(item.TaskRole, role, StringComparison.OrdinalIgnoreCase))
+                    return item;
+            }
+
+            var request = new HumanTaskOutcomeRequest
+            {
+                IsDetected = true,
+                TaskRole = role
+            };
+            list.Add(request);
+            return request;
+        }
+
         private static List<HumanTaskOutcomeRequest> AnalyzeHumanTaskOutcomeRequests(string userText, string normalizedText, WfAiCatalog catalog)
         {
             var list = new List<HumanTaskOutcomeRequest>();
@@ -521,6 +732,10 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var byRole = new Dictionary<string, HumanTaskOutcomeRequest>(StringComparer.OrdinalIgnoreCase);
 
+            HumanTaskOutcomeRequest pendingOutcome = null;
+            bool pendingApproved = false;
+            bool pendingRejected = false;
+
             foreach (string clauseRaw in SplitClausesForBranches(t))
             {
                 string c = Normalize(clauseRaw);
@@ -528,7 +743,33 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 bool clauseApproval = MentionsHumanTaskApproval(c);
                 bool clauseReject = MentionsHumanTaskReject(c);
-                if (!clauseApproval && !clauseReject) continue;
+
+                if (!clauseApproval && !clauseReject)
+                {
+                    // fix49: frases humanas reales suelen separar por coma:
+                    // "Si Dirección la aprueba, notificar a Compras..." o
+                    // "Si Dirección la rechaza, registrar advertencia..., notificar...".
+                    // La cláusula posterior pertenece al último resultado humano detectado.
+                    if (pendingOutcome != null)
+                    {
+                        string pendingNotifyRole = ExtractOutcomeNotifyRole(c, catalog);
+                        bool pendingLogger = ContainsAny(c, "registrar", "evento", "advertencia", "log");
+
+                        if (pendingApproved)
+                        {
+                            if (pendingLogger) pendingOutcome.ApprovedWantsLogger = true;
+                            if (!string.IsNullOrWhiteSpace(pendingNotifyRole)) pendingOutcome.ApprovedNotifyRole = pendingNotifyRole;
+                        }
+
+                        if (pendingRejected)
+                        {
+                            if (pendingLogger) pendingOutcome.RejectedWantsLogger = true;
+                            if (!string.IsNullOrWhiteSpace(pendingNotifyRole)) pendingOutcome.RejectedNotifyRole = pendingNotifyRole;
+                        }
+                    }
+
+                    continue;
+                }
 
                 // No alcanza con detectar "aprobar" en una tarea humana normal
                 // (ej.: "enviarla a ADM_FIN para aprobar"). Para crear ramas APTO/NO APTO
@@ -546,14 +787,36 @@ namespace Intranet.WorkflowStudio.WebForms
                     list.Add(request);
                 }
 
-                if (clauseApproval) request.HasApprovedBranch = true;
-                if (clauseReject) request.HasRejectedBranch = true;
+                string notifyRole = ExtractOutcomeNotifyRole(c, catalog);
+                bool clauseWantsLogger = ContainsAny(c, "registrar", "evento", "advertencia", "log");
+
+                if (clauseApproval)
+                {
+                    request.HasApprovedBranch = true;
+                    if (clauseWantsLogger) request.ApprovedWantsLogger = true;
+                    if (!string.IsNullOrWhiteSpace(notifyRole)) request.ApprovedNotifyRole = notifyRole;
+                }
+                if (clauseReject)
+                {
+                    request.HasRejectedBranch = true;
+                    if (clauseWantsLogger) request.RejectedWantsLogger = true;
+                    if (!string.IsNullOrWhiteSpace(notifyRole)) request.RejectedNotifyRole = notifyRole;
+                }
+
+                pendingOutcome = request;
+                pendingApproved = clauseApproval;
+                pendingRejected = clauseReject;
             }
 
             foreach (HumanTaskOutcomeRequest request in list)
             {
                 request.ApprovedMessage = ExtractHumanTaskOutcomeMessage(userText, request.TaskRole, true);
                 request.RejectedMessage = ExtractHumanTaskOutcomeMessage(userText, request.TaskRole, false);
+
+                if (request.HasApprovedBranch && !request.ApprovedWantsLogger && string.IsNullOrWhiteSpace(request.ApprovedNotifyRole))
+                    request.ApprovedWantsLogger = true;
+                if (request.HasRejectedBranch && !request.RejectedWantsLogger && string.IsNullOrWhiteSpace(request.RejectedNotifyRole))
+                    request.RejectedWantsLogger = true;
 
                 if (request.HasApprovedBranch && string.IsNullOrWhiteSpace(request.ApprovedMessage))
                     request.ApprovedMessage = "Tarea de " + RoleFriendlyName(request.TaskRole) + " aprobada.";
@@ -619,7 +882,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 string c = Normalize(original);
                 bool matches = approved ? MentionsHumanTaskApproval(c) : MentionsHumanTaskReject(c);
                 if (!matches) continue;
-                if (!ContainsAny(c, "registrar", "evento", "advertencia", "log")) continue;
+                if (!ContainsAny(c, "registrar", "evento", "advertencia", "log", "notificar", "avisar", "notificacion", "notificación")) continue;
 
                 if (!string.IsNullOrWhiteSpace(roleNorm)
                     && !ContainsPhrase(c, roleNorm)
@@ -644,11 +907,29 @@ namespace Intranet.WorkflowStudio.WebForms
             return "";
         }
 
+        private static string ExtractOutcomeNotifyRole(string normalizedClause, WfAiCatalog catalog)
+        {
+            string c = Normalize(normalizedClause);
+            if (string.IsNullOrWhiteSpace(c)) return "";
+            if (!ContainsAny(c, "notificar", "avisar", "notificacion", "notificación")) return "";
+
+            Match m = Regex.Match(c,
+                @"\b(?:notificar|avisar)\s+(?:internamente\s+|por\s+sistema\s+|en\s+el\s+sistema\s+)?(?:(?:al|a\s+la|a|para\s+el|para\s+la)\s+)(?:(?:rol|sector|area|área|usuario)\s+)?(?<dest>.+?)(?=\s+indicando\b|\s+que\b|\s+y\s+finalizar\b|\s+finalizar\b|,|\.|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!m.Success) return "";
+
+            string dest = NormalizeNotifyDestinationText(CleanExtractedSentence(m.Groups["dest"].Value));
+            string resolved = ResolveRole(Normalize(dest), catalog);
+            return string.IsNullOrWhiteSpace(resolved) ? dest : resolved;
+        }
+
         private static string CleanOutcomeMessage(string value)
         {
             string msg = (value ?? "").Trim();
             msg = Regex.Replace(msg, @"\s+", " ").Trim();
             msg = Regex.Replace(msg, @"^(que\s+)+", "", RegexOptions.IgnoreCase).Trim();
+            msg = Regex.Replace(msg, @"(?:,?\s*)\b(?:notificar|avisar)\s+(?:al|a\s+la|a|para\s+el|para\s+la)\s+.+$", "", RegexOptions.IgnoreCase).Trim();
             msg = msg.Trim(' ', '.', ',', ';', ':');
             return msg;
         }
@@ -695,20 +976,32 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (request.HasApprovedBranch)
             {
-                actions.Add(AddNode("util.logger", "Registrar aprobación de " + role, new JObject
+                if (request.ApprovedWantsLogger)
                 {
-                    ["level"] = "Info",
-                    ["message"] = request.ApprovedMessage ?? ("Tarea de " + friendly + " aprobada.")
-                }));
+                    actions.Add(AddNode("util.logger", "Registrar aprobación de " + role, new JObject
+                    {
+                        ["level"] = "Info",
+                        ["message"] = request.ApprovedMessage ?? ("Tarea de " + friendly + " aprobada.")
+                    }));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.ApprovedNotifyRole))
+                    AddOutcomeNotifyAction(actions, "Notificar aprobación de " + role + " a " + request.ApprovedNotifyRole, request.ApprovedNotifyRole, request.ApprovedMessage);
             }
 
             if (request.HasRejectedBranch)
             {
-                actions.Add(AddNode("util.logger", "Registrar rechazo de " + role, new JObject
+                if (request.RejectedWantsLogger)
                 {
-                    ["level"] = "Warn",
-                    ["message"] = request.RejectedMessage ?? ("Tarea de " + friendly + " rechazada.")
-                }));
+                    actions.Add(AddNode("util.logger", "Registrar rechazo de " + role, new JObject
+                    {
+                        ["level"] = "Warn",
+                        ["message"] = request.RejectedMessage ?? ("Tarea de " + friendly + " rechazada.")
+                    }));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.RejectedNotifyRole))
+                    AddOutcomeNotifyAction(actions, "Notificar rechazo de " + role + " a " + request.RejectedNotifyRole, request.RejectedNotifyRole, request.RejectedMessage);
             }
         }
 
@@ -724,12 +1017,18 @@ namespace Intranet.WorkflowStudio.WebForms
                 "todas las reglas", "cada regla",
                 "modo cualquiera", "modo any", "modo or", "modo o", "modo todas", "modo all", "modo and", "modo y");
 
-            bool hasOrBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai)\b.*\bo\b.*\b(comprobante\s+asociado|asociado|total|items|itemscount)\b", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(t, @"\b(comprobante\s+asociado|asociado)\b.*\bo\b.*\b(cae|cai|total|items|itemscount)\b", RegexOptions.IgnoreCase);
+            bool hasOrBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai)\b.*\bo\b.*\b(comprobante\s+asociado|asociado|total|items|item|itemscount)\b", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(t, @"\b(comprobante\s+asociado|asociado)\b.*\bo\b.*\b(cae|cai|total|items|item|itemscount)\b", RegexOptions.IgnoreCase);
 
-            bool hasAndBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai|comprobante\s+asociado|asociado|total|items|itemscount)\b.*\by\b.*\b(cae|cai|comprobante\s+asociado|asociado|total|items|itemscount)\b", RegexOptions.IgnoreCase);
+            bool hasAndBetweenKnownRules = Regex.IsMatch(t, @"\b(cae|cai|comprobante\s+asociado|asociado|total|items|item|itemscount)\b.*\by\b.*\b(cae|cai|comprobante\s+asociado|asociado|total|items|item|itemscount)\b", RegexOptions.IgnoreCase);
 
-            if (!explicitComposite && !hasOrBetweenKnownRules && !hasAndBetweenKnownRules)
+            // fix47: frases humanas tipo
+            // "Si tiene CAE, el total es mayor a 200000 y tiene al menos un item..."
+            // no dicen literalmente "condición compuesta". Detectamos composición por cantidad
+            // de campos de negocio mencionados en la misma condición.
+            bool hasMultipleKnownRules = CountKnownNaturalConditionRuleKinds(t) >= 2;
+
+            if (!explicitComposite && !hasOrBetweenKnownRules && !hasAndBetweenKnownRules && !hasMultipleKnownRules)
                 return request;
 
             string contextPrefix = ResolveNaturalConditionPrefix(prefix, t);
@@ -822,7 +1121,11 @@ namespace Intranet.WorkflowStudio.WebForms
             if (ContainsAny(t, "comprobante asociado", "comprobante asociada", "asociado", "comprobanteAsociado", "comprobante asociado numero", "comprobante asociado número"))
                 AddNaturalRule(rules, basePath + ".comprobanteAsociado.numero", ResolveNaturalPresenceOperator(t, "comprobanteAsociado"), "", "Comprobante asociado");
 
-            if (ContainsAny(t, "itemscount", "items count", "cantidad de items", "cantidad de ítems", "items", "ítems"))
+            if (ContainsAny(t,
+                "itemscount", "items count",
+                "cantidad de items", "cantidad de ítems", "cantidad de item", "cantidad de ítem",
+                "al menos un item", "al menos un ítem", "un item", "un ítem",
+                "items", "ítems", "item", "ítem"))
                 AddNaturalRule(rules, basePath + ".itemsCount", ">", "0", "Items");
 
             if (ContainsToken(t, "total"))
@@ -904,11 +1207,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 bool trueMarker = ContainsAny(c, "si cumple", "si se cumple", "si la condicion cumple", "si cumple la condicion", "si es verdadero", "si da true", "rama si", "si cumple va", "si cumple enviar");
                 bool falseMarker = ContainsAny(c, "si no cumple", "si no se cumple", "si la condicion no cumple", "si no cumple la condicion", "si es falso", "si da false", "rama no", "caso contrario", "de lo contrario");
                 bool naturalMissingConditionMarker = IsNaturalMissingConditionClause(c);
+                bool naturalPositiveConditionMarker = IsNaturalPositiveConditionClause(c);
 
                 string role = ResolvePositiveDestinationRole(c, catalog);
                 if (string.IsNullOrWhiteSpace(role)) role = ResolveRole(c, catalog);
 
-                if (trueBranch && (trueMarker || naturalMissingConditionMarker))
+                if (trueBranch && (trueMarker || naturalMissingConditionMarker || naturalPositiveConditionMarker))
                 {
                     if (!string.IsNullOrWhiteSpace(role)) return role;
                     pending = "true";
@@ -946,6 +1250,41 @@ namespace Intranet.WorkflowStudio.WebForms
                 "no tiene cae", "falta el cae", "sin cae",
                 "no tiene comprobante asociado", "falta el comprobante asociado", "sin comprobante asociado",
                 "no tiene numero asociado", "no tiene número asociado", "falta el numero asociado", "falta el número asociado", "sin numero asociado", "sin número asociado");
+        }
+
+        private static bool IsNaturalPositiveConditionClause(string normalizedClause)
+        {
+            string c = Normalize(normalizedClause);
+            if (string.IsNullOrWhiteSpace(c)) return false;
+
+            if (!ContainsAny(c, "si ", "cuando ")) return false;
+
+            bool mentionsKnownField = ContainsAny(c,
+                "cae", "cai", "comprobante asociado", "numero asociado", "número asociado",
+                "total", "importe", "items", "ítems", "item", "ítem", "itemscount");
+            if (!mentionsKnownField) return false;
+
+            if (IsNaturalMissingConditionClause(c)) return false;
+
+            return ContainsAny(c,
+                "tiene cae", "cae informado", "cae no esta vacio", "cae no está vacío",
+                "tiene comprobante asociado", "comprobante asociado informado",
+                "total mayor", "importe mayor", "mayor a", "mayor que",
+                "tiene items", "tiene ítems", "tiene item", "tiene ítem",
+                "al menos un item", "al menos un ítem");
+        }
+
+        private static int CountKnownNaturalConditionRuleKinds(string normalizedText)
+        {
+            string t = Normalize(normalizedText);
+            int count = 0;
+
+            if (ContainsToken(t, "cae") || ContainsToken(t, "cai")) count++;
+            if (ContainsAny(t, "comprobante asociado", "numero asociado", "número asociado")) count++;
+            if (ContainsToken(t, "total") || ContainsToken(t, "importe")) count++;
+            if (ContainsAny(t, "itemscount", "items count", "cantidad de items", "cantidad de ítems", "cantidad de item", "cantidad de ítem", "al menos un item", "al menos un ítem", "items", "ítems", "item", "ítem")) count++;
+
+            return count;
         }
 
         private static void AddNaturalCompositeConditionAction(JArray actions, JArray missing, NaturalCompositeConditionRequest request)
@@ -1147,6 +1486,32 @@ namespace Intranet.WorkflowStudio.WebForms
             actions.Add(AddNode("control.delay", "Demora", p));
         }
 
+        private static JObject AddOutcomeNotifyAction(JArray actions, string label, string roleDestino, string message)
+        {
+            if (actions == null) return null;
+
+            string role = (roleDestino ?? "").Trim();
+            if (role.Length == 0) return null;
+
+            var p = new JObject
+            {
+                ["tipo"] = "sistema",
+                ["canal"] = "sistema",
+                ["nivel"] = "info",
+                ["destinoTipo"] = "rol",
+                ["usuarioDestino"] = "",
+                ["rolDestino"] = role,
+                ["destino"] = role,
+                ["prioridad"] = "normal",
+                ["asunto"] = "Notificación Workflow Studio",
+                ["mensaje"] = string.IsNullOrWhiteSpace(message) ? "Notificación generada por Asistente IA." : message
+            };
+
+            JObject node = AddNode("util.notify", string.IsNullOrWhiteSpace(label) ? "Notificar" : label, p);
+            actions.Add(node);
+            return node;
+        }
+
         private static void AddNotifyAction(JArray actions, NotifyRequest request, WfAiCatalog catalog)
         {
             if (actions == null || request == null || !request.WantsNotify) return;
@@ -1247,9 +1612,30 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddConnection(result, compoundIf, falseTarget, "NO");
             }
 
-            List<HumanTaskOutcomeConnection> outcomeConnections = FindHumanTaskOutcomeConnections(actions);
-            if (compoundIf != null && outcomeConnections != null && outcomeConnections.Count > 0)
+            if (caeIf != null)
             {
+                JObject trueTarget = totalIf ?? FirstActionAfter(actions, caeIf) ?? logger ?? end;
+                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath"));
+
+                AddConnection(result, caeIf, trueTarget, "SI");
+                AddConnection(result, caeIf, falseTarget, "NO");
+            }
+
+            if (totalIf != null)
+            {
+                JObject trueTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "truePath"));
+                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "falsePath"));
+
+                AddConnection(result, totalIf, trueTarget, "SI");
+                AddConnection(result, totalIf, falseTarget, "NO");
+            }
+
+            List<HumanTaskOutcomeConnection> outcomeConnections = FindHumanTaskOutcomeConnections(actions);
+            if (outcomeConnections != null && outcomeConnections.Count > 0)
+            {
+                // fix48: los resultados de tareas humanas pueden estar en ramas de IF compuesto,
+                // CAE o importe. Conectamos la tarea con su IF de resultado y solo mandamos a Fin
+                // las ramas terminales que no tienen evaluación humana propia.
                 var outcomeTasks = new List<JObject>();
 
                 foreach (HumanTaskOutcomeConnection outcomeConnection in outcomeConnections)
@@ -1261,17 +1647,13 @@ namespace Intranet.WorkflowStudio.WebForms
 
                     AddUniqueAction(outcomeTasks, outcomeTask);
                     AddConnection(result, outcomeTask, outcomeConnection.ResultIf, "");
-                    AddConnection(result, outcomeConnection.ResultIf, outcomeConnection.ApprovedAction ?? end, "SI");
-                    AddConnection(result, outcomeConnection.ResultIf, outcomeConnection.RejectedAction ?? end, "NO");
 
-                    if (outcomeConnection.ApprovedAction != null)
-                        AddConnection(result, outcomeConnection.ApprovedAction, end, "");
-                    if (outcomeConnection.RejectedAction != null)
-                        AddConnection(result, outcomeConnection.RejectedAction, end, "");
+                    AddOutcomeBranchConnections(result, outcomeConnection.ResultIf, outcomeConnection.ApprovedAction, outcomeConnection.ApprovedFollowUpAction, end, "SI");
+                    AddOutcomeBranchConnections(result, outcomeConnection.ResultIf, outcomeConnection.RejectedAction, outcomeConnection.RejectedFollowUpAction, end, "NO");
                 }
 
-                List<JObject> naturalTerminals = FindBranchTerminalActions(actions, branchPlan);
-                foreach (JObject terminal in naturalTerminals)
+                List<JObject> terminals = FindBranchTerminalActions(actions, branchPlan);
+                foreach (JObject terminal in terminals)
                 {
                     if (terminal == null) continue;
 
@@ -1292,24 +1674,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 return result;
             }
 
-            if (caeIf != null)
-            {
-                JObject trueTarget = totalIf ?? FirstActionAfter(actions, caeIf) ?? logger ?? end;
-                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "cae", "falsePath"));
-
-                AddConnection(result, caeIf, trueTarget, "SI");
-                AddConnection(result, caeIf, falseTarget, "NO");
-            }
-
-            if (totalIf != null)
-            {
-                JObject trueTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "truePath"));
-                JObject falseTarget = FindActionForPath(actions, GetBranchPath(branchPlan, "total", "falsePath"));
-
-                AddConnection(result, totalIf, trueTarget, "SI");
-                AddConnection(result, totalIf, falseTarget, "NO");
-            }
-
             List<JObject> branchTerminals = FindBranchTerminalActions(actions, branchPlan);
             JObject mergeTarget = FirstActionAfterLast(actions, branchTerminals) ?? logger ?? end;
             if (mergeTarget != null)
@@ -1324,6 +1688,22 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddSequentialConnections(result, actions);
 
             return result;
+        }
+
+        private static void AddOutcomeBranchConnections(JArray result, JObject resultIf, JObject firstAction, JObject followUpAction, JObject end, string condition)
+        {
+            JObject target = firstAction ?? followUpAction ?? end;
+            AddConnection(result, resultIf, target, condition);
+
+            if (firstAction != null && followUpAction != null)
+            {
+                AddConnection(result, firstAction, followUpAction, "");
+                AddConnection(result, followUpAction, end, "");
+            }
+            else if (target != null && !object.ReferenceEquals(target, end))
+            {
+                AddConnection(result, target, end, "");
+            }
         }
 
         private static void AddSequentialConnectionsUntil(JArray result, JArray actions, JObject stopAtInclusive)
@@ -1449,7 +1829,9 @@ namespace Intranet.WorkflowStudio.WebForms
                     TaskRole = role,
                     ResultIf = resultIf,
                     ApprovedAction = FindLoggerForOutcome(actions, role, true),
-                    RejectedAction = FindLoggerForOutcome(actions, role, false)
+                    RejectedAction = FindLoggerForOutcome(actions, role, false),
+                    ApprovedFollowUpAction = FindNotifyForOutcome(actions, role, true),
+                    RejectedFollowUpAction = FindNotifyForOutcome(actions, role, false)
                 });
             }
 
@@ -1494,7 +1876,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 TaskRole = role,
                 ResultIf = resultIf,
                 ApprovedAction = FindLoggerForOutcome(actions, role, true),
-                RejectedAction = FindLoggerForOutcome(actions, role, false)
+                RejectedAction = FindLoggerForOutcome(actions, role, false),
+                ApprovedFollowUpAction = FindNotifyForOutcome(actions, role, true),
+                RejectedFollowUpAction = FindNotifyForOutcome(actions, role, false)
             };
         }
 
@@ -1536,6 +1920,28 @@ namespace Intranet.WorkflowStudio.WebForms
                 JObject a = token as JObject;
                 if (a == null || !IsAddNode(a)) continue;
                 if (!string.Equals(ActionNodeType(a), "util.logger", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string label = Normalize(ActionLabel(a)).Trim();
+                if (ContainsPhrase(label, prefixNormRole) || ContainsPhrase(label, prefixNormFriendly))
+                    return a;
+            }
+
+            return null;
+        }
+
+        private static JObject FindNotifyForOutcome(JArray actions, string role, bool approved)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return null;
+
+            string prefix = approved ? "notificar aprobacion de " : "notificar rechazo de ";
+            string prefixNormRole = Normalize(prefix + role).Trim();
+            string prefixNormFriendly = Normalize(prefix + RoleFriendlyName(role)).Trim();
+
+            foreach (JToken token in actions)
+            {
+                JObject a = token as JObject;
+                if (a == null || !IsAddNode(a)) continue;
+                if (!string.Equals(ActionNodeType(a), "util.notify", StringComparison.OrdinalIgnoreCase)) continue;
 
                 string label = Normalize(ActionLabel(a)).Trim();
                 if (ContainsPhrase(label, prefixNormRole) || ContainsPhrase(label, prefixNormFriendly))
@@ -2313,6 +2719,7 @@ namespace Intranet.WorkflowStudio.WebForms
             var b = new BranchAnalysis();
             string pendingBranch = "";
             string lastConditionKind = "";
+            string lastBranchKind = "";
 
             foreach (string clause in SplitClausesForBranches(normalizedText))
             {
@@ -2334,19 +2741,41 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 bool contrary = ContainsAny(c, "caso contrario", "de lo contrario", "contrario");
 
-                if (contrary && !string.IsNullOrWhiteSpace(r))
+                if (contrary)
                 {
+                    string contraryBranch = "";
+
                     if (string.Equals(lastConditionKind, "total", StringComparison.OrdinalIgnoreCase))
                     {
-                        AssignBranchRole(b, "totalFalse", r);
-                        pendingBranch = "";
-                        continue;
+                        // fix48b: "caso contrario" puede venir separado por coma de su destino:
+                        // "Caso contrario, enviarla a DIR_GENERAL" se parte en dos cláusulas.
+                        // Si todavía no tenemos rol, dejamos pendiente la rama opuesta para que
+                        // la cláusula siguiente con el rol complete el camino.
+                        if (string.Equals(lastBranchKind, "totalFalse", StringComparison.OrdinalIgnoreCase))
+                            contraryBranch = "totalTrue";
+                        else if (string.Equals(lastBranchKind, "totalTrue", StringComparison.OrdinalIgnoreCase))
+                            contraryBranch = "totalFalse";
+                        else
+                            contraryBranch = "totalFalse";
+                    }
+                    else if (string.Equals(lastConditionKind, "cae", StringComparison.OrdinalIgnoreCase))
+                    {
+                        contraryBranch = "caeFalse";
                     }
 
-                    if (string.Equals(lastConditionKind, "cae", StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrWhiteSpace(contraryBranch))
                     {
-                        AssignBranchRole(b, "caeFalse", r);
-                        pendingBranch = "";
+                        if (!string.IsNullOrWhiteSpace(r))
+                        {
+                            AssignBranchRole(b, contraryBranch, r);
+                            pendingBranch = "";
+                            lastBranchKind = contraryBranch;
+                        }
+                        else
+                        {
+                            pendingBranch = contraryBranch;
+                        }
+
                         continue;
                     }
                 }
@@ -2368,6 +2797,7 @@ namespace Intranet.WorkflowStudio.WebForms
                         pendingBranch = branchKind;
                     }
 
+                    lastBranchKind = branchKind;
                     if (branchKind.StartsWith("total", StringComparison.OrdinalIgnoreCase))
                         lastConditionKind = "total";
                     else if (branchKind.StartsWith("cae", StringComparison.OrdinalIgnoreCase))
@@ -2379,6 +2809,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrWhiteSpace(r) && !string.IsNullOrWhiteSpace(pendingBranch))
                 {
                     AssignBranchRole(b, pendingBranch, r);
+                    lastBranchKind = pendingBranch;
+                    if (pendingBranch.StartsWith("total", StringComparison.OrdinalIgnoreCase))
+                        lastConditionKind = "total";
+                    else if (pendingBranch.StartsWith("cae", StringComparison.OrdinalIgnoreCase))
+                        lastConditionKind = "cae";
                     pendingBranch = "";
                 }
             }
@@ -2540,6 +2975,56 @@ namespace Intranet.WorkflowStudio.WebForms
             return result;
         }
 
+        private static BranchLoggerRequest AnalyzeBranchLoggerRequest(string userText, string normalizedText, string amount)
+        {
+            var request = new BranchLoggerRequest();
+            string t = Normalize(string.IsNullOrWhiteSpace(userText) ? normalizedText : userText);
+            if (string.IsNullOrWhiteSpace(t) || string.IsNullOrWhiteSpace(amount)) return request;
+
+            bool pendingContrary = false;
+            foreach (string raw in SplitClausesForBranches(string.IsNullOrWhiteSpace(userText) ? t : userText))
+            {
+                string c = Normalize(raw);
+                if (string.IsNullOrWhiteSpace(c)) continue;
+
+                bool contrary = ContainsAny(c, "caso contrario", "de lo contrario", "contrario");
+                bool logger = ContainsAny(c, "registrar", "evento", "informativo", "advertencia", "log");
+
+                if (contrary && !logger)
+                {
+                    pendingContrary = true;
+                    continue;
+                }
+
+                if (!(contrary || pendingContrary) || !logger) continue;
+
+                string msg = ExtractBranchLoggerMessage(raw);
+                request.IsDetected = true;
+                request.BranchKind = "totalFalse";
+                request.Level = ContainsAny(c, "advertencia", "warn", "rechazada", "rechazado", "error") ? "Warn" : "Info";
+                request.Message = string.IsNullOrWhiteSpace(msg) ? "No requiere aprobación de Dirección." : msg;
+                request.Label = request.Level.Equals("Warn", StringComparison.OrdinalIgnoreCase)
+                    ? "Registrar advertencia de rama alternativa"
+                    : "Registrar evento sin aprobación de Dirección";
+                return request;
+            }
+
+            return request;
+        }
+
+        private static string ExtractBranchLoggerMessage(string clause)
+        {
+            if (string.IsNullOrWhiteSpace(clause)) return "";
+
+            Match m = Regex.Match(clause, @"indicando\s+que\s+(?<msg>.*?)(?:\s+y\s+finalizar|\s+finalizar|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (m.Success) return CleanOutcomeMessage(m.Groups["msg"].Value);
+
+            m = Regex.Match(clause, @"registrar(?:\s+un|\s+una)?(?:\s+evento|\s+informativo|\s+advertencia)?\s+(?<msg>.*?)(?:\s+y\s+finalizar|\s+finalizar|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (m.Success) return CleanOutcomeMessage(m.Groups["msg"].Value);
+
+            return "";
+        }
+
         private static JObject BuildBranchPlan(bool wantsCaeValidation, string amount, BranchAnalysis branches, NaturalCompositeConditionRequest naturalCompositeCondition)
         {
             bool hasNaturalCompositeBranches = naturalCompositeCondition != null
@@ -2583,7 +3068,9 @@ namespace Intranet.WorkflowStudio.WebForms
                     ["condition"] = "Total mayor a " + amount,
                     ["fieldKind"] = "total",
                     ["truePath"] = string.IsNullOrWhiteSpace(branches.TotalTrueRole) ? "pendiente de definir" : "human.task:" + branches.TotalTrueRole,
-                    ["falsePath"] = string.IsNullOrWhiteSpace(branches.TotalFalseRole) ? "pendiente de definir" : "human.task:" + branches.TotalFalseRole
+                    ["falsePath"] = !string.IsNullOrWhiteSpace(branches.TotalFalseRole)
+                        ? "human.task:" + branches.TotalFalseRole
+                        : (!string.IsNullOrWhiteSpace(branches.TotalFalseActionLabel) ? branches.TotalFalseActionLabel : "pendiente de definir")
                 });
             }
 
@@ -2700,11 +3187,15 @@ namespace Intranet.WorkflowStudio.WebForms
                 { "dirección general", "DIR_GENERAL" },
                 { "direccion general", "DIR_GENERAL" },
                 { "dir general", "DIR_GENERAL" },
+                { "dir_general", "DIR_GENERAL" },
+                { "dir-general", "DIR_GENERAL" },
                 { "gerencia", "DIR_GENERAL" },
                 { "gerente", "DIR_GENERAL" },
                 { "administración", "ADM_FIN" },
                 { "administracion", "ADM_FIN" },
                 { "adm fin", "ADM_FIN" },
+                { "adm_fin", "ADM_FIN" },
+                { "adm-fin", "ADM_FIN" },
                 { "administración finanzas", "ADM_FIN" },
                 { "administracion finanzas", "ADM_FIN" },
                 { "finanzas", "ADM_FIN" },
@@ -2939,6 +3430,10 @@ namespace Intranet.WorkflowStudio.WebForms
             public bool HasRejectedBranch { get; set; }
             public string ApprovedMessage { get; set; }
             public string RejectedMessage { get; set; }
+            public string ApprovedNotifyRole { get; set; }
+            public string RejectedNotifyRole { get; set; }
+            public bool ApprovedWantsLogger { get; set; }
+            public bool RejectedWantsLogger { get; set; }
 
             public HumanTaskOutcomeRequest()
             {
@@ -2948,6 +3443,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 HasRejectedBranch = false;
                 ApprovedMessage = "";
                 RejectedMessage = "";
+                ApprovedNotifyRole = "";
+                RejectedNotifyRole = "";
+                ApprovedWantsLogger = false;
+                RejectedWantsLogger = false;
             }
         }
 
@@ -2958,6 +3457,8 @@ namespace Intranet.WorkflowStudio.WebForms
             public JObject ResultIf { get; set; }
             public JObject ApprovedAction { get; set; }
             public JObject RejectedAction { get; set; }
+            public JObject ApprovedFollowUpAction { get; set; }
+            public JObject RejectedFollowUpAction { get; set; }
         }
 
         private class NaturalCompositeConditionRequest
@@ -3075,17 +3576,1105 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private class BranchLoggerRequest
+        {
+            public bool IsDetected { get; set; }
+            public string BranchKind { get; set; }
+            public string Label { get; set; }
+            public string Level { get; set; }
+            public string Message { get; set; }
+
+            public BranchLoggerRequest()
+            {
+                IsDetected = false;
+                BranchKind = "";
+                Label = "";
+                Level = "Info";
+                Message = "";
+            }
+        }
+
+
+        // fix52b: diagnóstico local del Phrase Engine sin dependencia directa a tipos nuevos.
+        // En algunos proyectos WebForms/App_Code, Visual Studio puede no resolver tipos nuevos al compilar
+        // si el provider los referencia fuerte desde el mismo ciclo. Para no romper la base validada,
+        // este diagnóstico queda autocontenido dentro del provider. En próximos fixes se puede volver
+        // a delegar al engine externo cuando la separación ya esté estabilizada.
+        // fix53: agrega diagnóstico semántico por cláusula. No reemplaza todavía al provider legacy.
+        private static PhraseEngineDiagnostic BuildPhraseEngineDiagnostic(string text)
+        {
+            var d = new PhraseEngineDiagnostic();
+            d.OriginalText = text ?? string.Empty;
+            d.NormalizedText = Normalize(text);
+
+            List<string> clauses = SplitPhraseDiagnosticClauses(text ?? string.Empty);
+            int idx = 1;
+            foreach (string raw in clauses)
+            {
+                string clause = (raw ?? string.Empty).Trim();
+                if (clause.Length == 0) continue;
+                var c = new PhraseClauseDiagnostic
+                {
+                    Index = idx++,
+                    Text = clause,
+                    NormalizedText = Normalize(clause)
+                };
+                AnalyzePhraseClauseDiagnostic(c);
+                d.Clauses.Add(c);
+            }
+
+            string n = d.NormalizedText;
+            AddPhraseConcept(d, n, "notificar avisar informar mandar aviso", "notify", "util.notify");
+            AddPhraseConcept(d, n, "tarea asignar revisar aprobar validar", "human_task", "human.task");
+            AddPhraseConcept(d, n, "registrar evento log advertencia informativo", "logger", "util.logger");
+            AddPhraseConcept(d, n, "si condicion validar cumple supera mayor menor falta no tiene", "condition", "control.if");
+            AddPhraseConcept(d, n, "consulta sql base datos select", "sql", "data.sql");
+            AddPhraseConcept(d, n, "http api endpoint servicio", "http", "http.request");
+            AddPhraseConcept(d, n, "archivo leer escribir", "file", "file.read,file.write");
+            AddPhraseConcept(d, n, "subflujo workflow proceso", "subflow", "util.subflow");
+
+            d.PrimaryRole = ResolveRole(n, null) ?? string.Empty;
+            d.PrimaryHumanOutcome = ResolveHumanOutcome(n);
+            d.FirstNumber = ExtractAmount(n) ?? string.Empty;
+            return d;
+        }
+
+        private static List<string> SplitPhraseDiagnosticClauses(string text)
+        {
+            var result = new List<string>();
+            string t = (text ?? string.Empty).Replace("\r", " ").Replace("\n", ". ");
+
+            // Conservamos explícitamente el marcador "caso contrario". En fix52 el split lo consumía
+            // y la cláusula siguiente quedaba sin contexto de rama contraria.
+            // IMPORTANTE: no separar "si no", porque frases como "si no supera" son una condición
+            // negativa única; separarlas genera "si no, supera" y se pierde el operador semántico.
+            t = Regex.Replace(t, @"(?i)\b(caso\s+contrario|de\s+lo\s+contrario)\b\s*,?", @". $1, ");
+            t = Regex.Replace(t, @"(?i)\b(después|despues|luego)\b", ". ");
+
+            foreach (string raw in Regex.Split(t, @"[\.;]+"))
+            {
+                string c = (raw ?? string.Empty).Trim();
+                c = Regex.Replace(c, @"\s+", " ").Trim();
+                if (c.Length == 0) continue;
+
+                // Si quedó una coma inicial por el split anterior, la limpiamos sin perder contenido.
+                c = c.TrimStart(',', ' ', '\t');
+                if (c.Length > 0) result.Add(c);
+            }
+
+            return result;
+        }
+
+        private static void AnalyzePhraseClauseDiagnostic(PhraseClauseDiagnostic c)
+        {
+            if (c == null) return;
+            string n = c.NormalizedText ?? string.Empty;
+
+            // fix55: en cláusulas compuestas como
+            // "Si Dirección la aprueba, notificar a COMPRAS..." hay dos roles:
+            // - Role: quién resuelve la tarea humana (DIR_GENERAL)
+            // - NotifyRole: a quién se notifica (COMPRAS)
+            // ResolveRole(n) devuelve el primer alias encontrado y podía confundir ambos.
+            string humanResultRole = ResolveHumanResultRoleForClause(n);
+            string notifyRole = ResolveNotifyRoleForClause(n);
+            c.Role = !string.IsNullOrWhiteSpace(humanResultRole) ? humanResultRole : (ResolveRole(n, null) ?? string.Empty);
+            c.Number = ExtractAmount(n) ?? string.Empty;
+            c.HumanOutcome = ResolveHumanOutcome(n);
+
+            if (ContainsAny(n, "caso contrario", "de lo contrario"))
+            {
+                c.BranchMarker = "else";
+                c.BranchSide = "opposite";
+                c.ClauseType = "else_branch";
+            }
+            else if (ContainsPhrase(n, "si ") || n.TrimStart().StartsWith("si ", StringComparison.OrdinalIgnoreCase))
+            {
+                c.BranchMarker = "if";
+            }
+
+            bool hasNotify = ContainsAny(n, "notificar", "avisar", "informar", "mandar aviso", "dar aviso");
+            bool hasTask = ContainsAny(n, "enviar", "enviarla", "enviarlo", "mandar", "asignar", "derivar", "pasar")
+                && ContainsAny(n, "aprobar", "revisar", "corregir", "validar", "tarea");
+            bool hasLogger = ContainsAny(n, "registrar", "evento", "log", "advertencia", "informativo");
+            bool hasEnd = ContainsAny(n, "finalizar", "terminar", "fin");
+
+            if (hasNotify)
+            {
+                c.AddConcept("notify");
+                c.AddNodeType("util.notify");
+                c.NotifyRole = !string.IsNullOrWhiteSpace(notifyRole) ? notifyRole : c.Role;
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "notification";
+            }
+
+            if (hasLogger)
+            {
+                c.AddConcept("logger");
+                c.AddNodeType("util.logger");
+                c.LoggerLevel = ContainsAny(n, "advertencia", "warn", "rechaza", "rechazada", "rechazado", "no apto") ? "Warn" : "Info";
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "logger";
+            }
+
+            if (hasTask && !hasNotify)
+            {
+                c.AddConcept("human_task");
+                c.AddNodeType("human.task");
+                c.TaskRole = c.Role;
+                if (string.IsNullOrWhiteSpace(c.ClauseType) || c.ClauseType == "else_branch")
+                    c.ClauseType = c.ClauseType == "else_branch" ? "else_human_task" : "human_task";
+            }
+
+            if (ContainsAny(n, "nota de credito", "nota credito", "factura", "documento", "cargar"))
+            {
+                c.AddConcept("document");
+                c.AddNodeType("doc.load");
+                if (string.IsNullOrWhiteSpace(c.ClauseType)) c.ClauseType = "document_load";
+            }
+
+            AnalyzePhraseClauseCondition(c, n);
+
+            if (!string.IsNullOrWhiteSpace(c.ConditionField))
+            {
+                c.AddConcept("condition");
+                c.AddNodeType("control.if");
+
+                // fix53b: si una cláusula contiene condición y destino humano (ej.:
+                // "Si no supera 200000, enviarla a COMPRAS"), su tipo principal debe ser
+                // condition_branch. El destino queda en TaskRole, pero la cláusula no debe
+                // diagnosticarse como simple human_task porque se pierde el sentido del IF.
+                if (string.Equals(c.BranchMarker, "if", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(c.ClauseType, "human_task", StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(c.ClauseType)
+                    || string.Equals(c.ClauseType, "else_branch", StringComparison.OrdinalIgnoreCase))
+                {
+                    c.ClauseType = string.Equals(c.ClauseType, "else_branch", StringComparison.OrdinalIgnoreCase)
+                        ? "else_condition"
+                        : "condition_branch";
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(c.HumanOutcome))
+            {
+                c.AddConcept("human_result");
+                c.AddNodeType("control.if");
+                if (string.IsNullOrWhiteSpace(c.ClauseType) || c.ClauseType == "logger")
+                    c.ClauseType = "human_result";
+            }
+
+            if (hasEnd)
+            {
+                c.AddConcept("end");
+                c.AddNodeType("util.end");
+            }
+
+            c.ActionHint = BuildPhraseClauseActionHint(c);
+        }
+
+        private static void AnalyzePhraseClauseCondition(PhraseClauseDiagnostic c, string n)
+        {
+            if (c == null) return;
+            if (n == null) n = string.Empty;
+
+            bool looksLikeAmountCondition = ContainsAny(n, "total", "importe", "monto")
+                || (!string.IsNullOrWhiteSpace(c.Number)
+                    && ContainsAny(n, "supera", "no supera", "no excede", "no pasa", "mayor", "menor", "menos de", "pesos", "$"));
+
+            if (looksLikeAmountCondition)
+            {
+                c.ConditionKind = "total";
+                c.ConditionField = "biz.notaCredito.total";
+                c.ConditionValue = c.Number;
+
+                if (ContainsAny(n, "no supera", "no excede", "no pasa", "menor o igual", "hasta"))
+                {
+                    c.IsNegative = true;
+                    c.ConditionOperator = "<=";
+                    c.BranchSide = "false_of_greater_than";
+                }
+                else if (ContainsAny(n, "supera", "mayor", "mas de", "más de", ">"))
+                {
+                    c.ConditionOperator = ">";
+                    c.BranchSide = "true";
+                }
+                else if (ContainsAny(n, "menor", "menos de", "<"))
+                {
+                    c.ConditionOperator = "<";
+                    c.BranchSide = "true";
+                }
+                return;
+            }
+
+            if (ContainsToken(n, "cae") || ContainsToken(n, "cai"))
+            {
+                c.ConditionKind = "cae";
+                c.ConditionField = "biz.notaCredito.cae";
+                if (ContainsAny(n, "falta", "no tiene", "vacio", "vacío", "sin cae", "sin dato", "no informado"))
+                {
+                    c.IsNegative = true;
+                    c.ConditionOperator = "empty";
+                }
+                else
+                {
+                    c.ConditionOperator = "not_empty";
+                }
+                return;
+            }
+
+            if (ContainsAny(n, "comprobante asociado", "asociado", "numero asociado", "número asociado"))
+            {
+                c.ConditionKind = "associated_document";
+                c.ConditionField = "biz.notaCredito.comprobanteAsociado.numero";
+                if (ContainsAny(n, "falta", "no tiene", "vacio", "vacío", "sin", "no informado"))
+                {
+                    c.IsNegative = true;
+                    c.ConditionOperator = "empty";
+                }
+                else
+                {
+                    c.ConditionOperator = "not_empty";
+                }
+                return;
+            }
+
+            if (ContainsAny(n, "item", "ítem", "items", "ítems"))
+            {
+                c.ConditionKind = "items";
+                c.ConditionField = "biz.notaCredito.itemsCount";
+                c.ConditionOperator = ContainsAny(n, "no tiene", "sin", "falta") ? "==" : ">";
+                c.ConditionValue = ContainsAny(n, "no tiene", "sin", "falta") ? "0" : "0";
+                c.IsNegative = ContainsAny(n, "no tiene", "sin", "falta");
+                return;
+            }
+        }
+
+        private static string BuildPhraseClauseActionHint(PhraseClauseDiagnostic c)
+        {
+            if (c == null) return string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(c.ConditionField))
+            {
+                string op = string.IsNullOrWhiteSpace(c.ConditionOperator) ? "?" : c.ConditionOperator;
+                string val = string.IsNullOrWhiteSpace(c.ConditionValue) ? "" : " " + c.ConditionValue;
+                return "condition: " + c.ConditionField + " " + op + val;
+            }
+
+            if (!string.IsNullOrWhiteSpace(c.HumanOutcome))
+            {
+                return "human_result: " + (string.IsNullOrWhiteSpace(c.Role) ? "" : c.Role + " ") + c.HumanOutcome;
+            }
+
+            if (!string.IsNullOrWhiteSpace(c.NotifyRole))
+                return "notify_role: " + c.NotifyRole;
+
+            if (!string.IsNullOrWhiteSpace(c.TaskRole))
+                return "human_task_role: " + c.TaskRole;
+
+            if (!string.IsNullOrWhiteSpace(c.LoggerLevel))
+                return "logger: " + c.LoggerLevel;
+
+            if (c.NodeTypes != null && c.NodeTypes.Count > 0)
+                return "node: " + c.NodeTypes[0];
+
+            return string.Empty;
+        }
+
+        private static void AddPhraseConcept(PhraseEngineDiagnostic d, string normalizedText, string keywords, string concept, string nodeTypesCsv)
+        {
+            if (d == null || string.IsNullOrWhiteSpace(normalizedText) || string.IsNullOrWhiteSpace(keywords)) return;
+            string[] ks = keywords.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            bool found = false;
+            foreach (string k in ks)
+            {
+                if (normalizedText.Contains(k)) { found = true; break; }
+            }
+            if (!found) return;
+            d.AddConcept(concept);
+            string[] nodeTypes = (nodeTypesCsv ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string nt in nodeTypes) d.AddNodeType(nt.Trim());
+        }
+
+        // fix54: validador diagnóstico de consistencia semántica.
+        // Compara lo que entendió el Phrase Engine por cláusula contra lo que el provider legacy generó
+        // en actions / branchPlan / proposedConnections. Por ahora NO bloquea el canvas: deja errores y
+        // advertencias en el JSON técnico para migrar lógica con seguridad en próximos fixes.
+        private static JObject BuildPhraseSemanticConsistency(PhraseEngineDiagnostic phraseEngine, JArray actions, JObject branchPlan, JArray proposedConnections)
+        {
+            var checks = new JArray();
+            var errors = new JArray();
+            var warnings = new JArray();
+
+            if (phraseEngine == null)
+            {
+                errors.Add("Phrase Engine no disponible para validar consistencia semántica.");
+                return BuildSemanticConsistencyObject(false, checks, warnings, errors);
+            }
+
+            foreach (PhraseClauseDiagnostic clause in phraseEngine.Clauses)
+            {
+                if (clause == null) continue;
+
+                if (string.Equals(clause.ClauseType, "condition_branch", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticConditionBranch(clause, branchPlan, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "else_human_task", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(clause.ClauseType, "human_task", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticHumanTask(clause, actions, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "notification", StringComparison.OrdinalIgnoreCase))
+                    CheckSemanticNotification(clause, actions, proposedConnections, checks, warnings, errors);
+
+                // fix55: cláusulas como "Si Dirección la rechaza, registrar..., notificar..."
+                // siguen siendo notification, pero además expresan resultado humano y logger por rama.
+                if (!string.IsNullOrWhiteSpace(clause.HumanOutcome))
+                    CheckSemanticHumanResult(clause, actions, proposedConnections, checks, warnings, errors);
+
+                if (string.Equals(clause.ClauseType, "else_branch", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(clause.LoggerLevel))
+                    CheckSemanticElseLoggerBranch(clause, actions, proposedConnections, checks, warnings, errors);
+            }
+
+            CheckGeneratedIfBranches(actions, proposedConnections, checks, warnings, errors);
+
+            bool ok = errors.Count == 0;
+            return BuildSemanticConsistencyObject(ok, checks, warnings, errors);
+        }
+
+        private static JObject BuildSemanticConsistencyObject(bool ok, JArray checks, JArray warnings, JArray errors)
+        {
+            return new JObject
+            {
+                ["ok"] = ok,
+                ["mode"] = "diagnostic_only",
+                ["checks"] = checks ?? new JArray(),
+                ["warnings"] = warnings ?? new JArray(),
+                ["errors"] = errors ?? new JArray()
+            };
+        }
+
+        private static bool SemanticConsistencyOk(JObject consistency)
+        {
+            if (consistency == null) return true;
+            JToken tok;
+            if (!consistency.TryGetValue("ok", out tok)) return true;
+            bool val;
+            if (bool.TryParse(Convert.ToString(tok), out val)) return val;
+            return true;
+        }
+
+        private static void CheckSemanticConditionBranch(PhraseClauseDiagnostic clause, JObject branchPlan, JArray checks, JArray warnings, JArray errors)
+        {
+            string role = clause.TaskRole;
+            string expectedSide = SemanticBranchSideToPlanSide(clause.BranchSide);
+            string expectedFieldKind = clause.ConditionKind;
+
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "condition_branch",
+                ["conditionKind"] = expectedFieldKind,
+                ["expectedSide"] = expectedSide,
+                ["expectedRole"] = role
+            };
+
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                warnings.Add("Cláusula " + clause.Index + ": condición con rama pero sin rol/tarea detectada.");
+                check["result"] = "warning_no_role";
+                checks.Add(check);
+                return;
+            }
+
+            JObject branch = FindBranchByFieldKind(branchPlan, expectedFieldKind);
+            if (branch == null)
+            {
+                errors.Add("Cláusula " + clause.Index + ": el Phrase Engine detectó condición " + expectedFieldKind + " hacia " + role + ", pero el branchPlan legacy no tiene esa condición.");
+                check["result"] = "missing_branch_plan";
+                checks.Add(check);
+                return;
+            }
+
+            string path = string.Equals(expectedSide, "true", StringComparison.OrdinalIgnoreCase)
+                ? Convert.ToString(branch["truePath"])
+                : Convert.ToString(branch["falsePath"]);
+            string actualRole = ExtractRoleFromPath(path);
+            check["actualRole"] = actualRole;
+
+            if (!string.Equals(actualRole, role, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("Cláusula " + clause.Index + ": esperaba rama " + expectedSide + " hacia " + role + ", pero el grafo legacy la generó hacia " + actualRole + ".");
+                check["result"] = "mismatch";
+            }
+            else
+            {
+                check["result"] = "ok";
+            }
+
+            checks.Add(check);
+        }
+
+        private static void CheckSemanticHumanTask(PhraseClauseDiagnostic clause, JArray actions, JArray checks, JArray warnings, JArray errors)
+        {
+            string role = clause.TaskRole;
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                warnings.Add("Cláusula " + clause.Index + ": se detectó tarea humana pero no se pudo resolver rol/usuario.");
+                checks.Add(new JObject { ["clauseIndex"] = clause.Index, ["check"] = "human_task", ["result"] = "warning_no_role" });
+                return;
+            }
+
+            bool exists = ActionExistsForNodeTypeAndRole(actions, "human.task", role);
+            checks.Add(new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "human_task",
+                ["expectedRole"] = role,
+                ["result"] = exists ? "ok" : "missing_action"
+            });
+
+            if (!exists)
+                errors.Add("Cláusula " + clause.Index + ": esperaba human.task para " + role + ", pero no existe en actions.");
+        }
+
+        private static void CheckSemanticNotification(PhraseClauseDiagnostic clause, JArray actions, JArray proposedConnections, JArray checks, JArray warnings, JArray errors)
+        {
+            string role = clause.NotifyRole;
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                warnings.Add("Cláusula " + clause.Index + ": se detectó notificación pero no se pudo resolver destino.");
+                checks.Add(new JObject { ["clauseIndex"] = clause.Index, ["check"] = "notification", ["result"] = "warning_no_destination" });
+                return;
+            }
+
+            bool exists = ActionExistsForNodeTypeAndRole(actions, "util.notify", role);
+            var check = new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "notification",
+                ["expectedRole"] = role,
+                ["result"] = exists ? "ok" : "missing_action"
+            };
+            checks.Add(check);
+
+            if (!exists)
+            {
+                errors.Add("Cláusula " + clause.Index + ": esperaba util.notify para " + role + ", pero el grafo legacy no generó notificación.");
+                return;
+            }
+
+            // fix55: si la notificación vive dentro de un resultado humano
+            // ("Si Dirección aprueba, notificar a Compras"), no alcanza con que exista
+            // algún util.notify a Compras; debe estar en la rama APTO/NO APTO correcta.
+            if (!string.IsNullOrWhiteSpace(clause.HumanOutcome) && !string.IsNullOrWhiteSpace(clause.Role))
+            {
+                string expectedCondition = string.Equals(clause.HumanOutcome, "no_apto", StringComparison.OrdinalIgnoreCase) ? "NO" : "SI";
+                string resultIfLabel = FindHumanResultIfLabel(actions, clause.Role);
+
+                // fix56b:
+                // Antes se tomaba el primer util.notify del rol (por ejemplo la notificación de APTO)
+                // y se verificaba contra la rama NO. Eso podía marcar falso error aunque en esa rama
+                // existiera otra notificación al mismo rol después de un logger.
+                // Ahora se busca un util.notify del rol esperado alcanzable desde la rama correcta.
+                string notifyLabel = FindReachableNotifyLabelFromConditionalBranch(actions, proposedConnections, resultIfLabel, expectedCondition, role);
+                bool reachable = !string.IsNullOrWhiteSpace(notifyLabel);
+
+                checks.Add(new JObject
+                {
+                    ["clauseIndex"] = clause.Index,
+                    ["check"] = "notification_branch",
+                    ["humanRole"] = clause.Role,
+                    ["outcome"] = clause.HumanOutcome,
+                    ["expectedCondition"] = expectedCondition,
+                    ["expectedNotifyRole"] = role,
+                    ["resultIf"] = resultIfLabel,
+                    ["notifyLabel"] = notifyLabel,
+                    ["result"] = reachable ? "ok" : "mismatch"
+                });
+
+                if (!reachable)
+                    errors.Add("Cláusula " + clause.Index + ": esperaba notificación a " + role + " en la rama " + expectedCondition + " del resultado de " + clause.Role + ", pero no está conectada en esa rama.");
+            }
+        }
+
+        private static void CheckSemanticHumanResult(PhraseClauseDiagnostic clause, JArray actions, JArray proposedConnections, JArray checks, JArray warnings, JArray errors)
+        {
+            string role = clause.Role;
+            string outcome = clause.HumanOutcome;
+            if (string.IsNullOrWhiteSpace(role) || string.IsNullOrWhiteSpace(outcome))
+            {
+                warnings.Add("Cláusula " + clause.Index + ": resultado humano incompleto para validar.");
+                checks.Add(new JObject { ["clauseIndex"] = clause.Index, ["check"] = "human_result", ["result"] = "warning_incomplete" });
+                return;
+            }
+
+            bool taskExists = ActionExistsForNodeTypeAndRole(actions, "human.task", role);
+            bool resultIfExists = HumanResultIfExists(actions, role);
+            bool loggerExists = LoggerForRoleAndOutcomeExists(actions, role, outcome);
+
+            string result = taskExists && resultIfExists && loggerExists ? "ok" : "mismatch";
+            checks.Add(new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "human_result",
+                ["role"] = role,
+                ["outcome"] = outcome,
+                ["taskExists"] = taskExists,
+                ["resultIfExists"] = resultIfExists,
+                ["loggerExists"] = loggerExists,
+                ["result"] = result
+            });
+
+            if (!taskExists)
+                errors.Add("Cláusula " + clause.Index + ": resultado de tarea para " + role + ", pero no existe human.task para ese rol.");
+            if (!resultIfExists)
+                errors.Add("Cláusula " + clause.Index + ": resultado de tarea para " + role + ", pero no existe IF wf.tarea.resultado asociado.");
+            if (!loggerExists)
+                errors.Add("Cláusula " + clause.Index + ": resultado " + outcome + " para " + role + ", pero no existe logger compatible.");
+        }
+
+        private static void CheckSemanticElseLoggerBranch(PhraseClauseDiagnostic clause, JArray actions, JArray proposedConnections, JArray checks, JArray warnings, JArray errors)
+        {
+            if (clause == null) return;
+            string expectedLevel = string.IsNullOrWhiteSpace(clause.LoggerLevel) ? "Info" : clause.LoggerLevel;
+            string mainIfLabel = FindFirstBusinessIfLabel(actions);
+            bool reachable = PathContainsLoggerFromBranch(actions, proposedConnections, mainIfLabel, "NO", expectedLevel);
+
+            checks.Add(new JObject
+            {
+                ["clauseIndex"] = clause.Index,
+                ["check"] = "else_logger_branch",
+                ["expectedCondition"] = "NO",
+                ["expectedLoggerLevel"] = expectedLevel,
+                ["mainIf"] = mainIfLabel,
+                ["result"] = reachable ? "ok" : "mismatch"
+            });
+
+            if (!reachable)
+                errors.Add("Cláusula " + clause.Index + ": esperaba logger " + expectedLevel + " en la rama NO del IF principal por 'caso contrario', pero el grafo legacy no lo generó en esa rama.");
+        }
+
+        private static void CheckGeneratedIfBranches(JArray actions, JArray proposedConnections, JArray checks, JArray warnings, JArray errors)
+        {
+            if (actions == null || proposedConnections == null) return;
+
+            foreach (JObject action in actions)
+            {
+                if (!string.Equals(Convert.ToString(action["nodeType"]), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                string label = Convert.ToString(action["label"]);
+                int trueCount = 0;
+                int falseCount = 0;
+                string trueTo = string.Empty;
+                string falseTo = string.Empty;
+
+                foreach (JObject conn in proposedConnections)
+                {
+                    if (!string.Equals(Convert.ToString(conn["from"]), label, StringComparison.OrdinalIgnoreCase)) continue;
+                    // fix54b: Normalize() devuelve el texto con espacios centinela (" si ").
+                    // Para comparar condiciones de proposedConnections hay que hacer Trim(),
+                    // si no el diagnóstico cree erróneamente que no existen ramas SI/NO.
+                    string cond = Normalize(Convert.ToString(conn["condition"])).Trim();
+                    if (cond == "si" || cond == "true")
+                    {
+                        trueCount++;
+                        trueTo = Convert.ToString(conn["to"]);
+                    }
+                    else if (cond == "no" || cond == "false")
+                    {
+                        falseCount++;
+                        falseTo = Convert.ToString(conn["to"]);
+                    }
+                }
+
+                var check = new JObject
+                {
+                    ["check"] = "control_if_branches",
+                    ["label"] = label,
+                    ["trueCount"] = trueCount,
+                    ["falseCount"] = falseCount,
+                    ["trueTo"] = trueTo,
+                    ["falseTo"] = falseTo
+                };
+
+                if (trueCount == 1 && falseCount == 1 && !string.Equals(trueTo, falseTo, StringComparison.OrdinalIgnoreCase))
+                {
+                    check["result"] = "ok";
+                }
+                else
+                {
+                    check["result"] = "mismatch";
+                    if (trueCount == 0) errors.Add("IF sin rama SI: " + label);
+                    if (falseCount == 0) errors.Add("IF sin rama NO: " + label);
+                    if (trueCount > 1) errors.Add("IF con más de una rama SI: " + label);
+                    if (falseCount > 1) errors.Add("IF con más de una rama NO: " + label);
+                    if (trueCount == 1 && falseCount == 1 && string.Equals(trueTo, falseTo, StringComparison.OrdinalIgnoreCase))
+                        errors.Add("IF con SI y NO al mismo destino: " + label);
+                }
+
+                checks.Add(check);
+            }
+        }
+
+        private static string SemanticBranchSideToPlanSide(string branchSide)
+        {
+            string s = branchSide ?? string.Empty;
+            if (s.IndexOf("false", StringComparison.OrdinalIgnoreCase) >= 0) return "false";
+            if (s.IndexOf("true", StringComparison.OrdinalIgnoreCase) >= 0) return "true";
+            return "true";
+        }
+
+        private static JObject FindBranchByFieldKind(JObject branchPlan, string fieldKind)
+        {
+            if (branchPlan == null || string.IsNullOrWhiteSpace(fieldKind)) return null;
+            JArray branches = branchPlan["branches"] as JArray;
+            if (branches == null) return null;
+            foreach (JObject b in branches)
+            {
+                if (string.Equals(Convert.ToString(b["fieldKind"]), fieldKind, StringComparison.OrdinalIgnoreCase))
+                    return b;
+            }
+            return null;
+        }
+
+        private static string ExtractRoleFromPath(string path)
+        {
+            string p = path ?? string.Empty;
+            int idx = p.IndexOf(':');
+            if (idx >= 0 && idx + 1 < p.Length) return p.Substring(idx + 1).Trim();
+            return p.Trim();
+        }
+
+        private static bool ActionExistsForNodeTypeAndRole(JArray actions, string nodeType, string role)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(nodeType) || string.IsNullOrWhiteSpace(role)) return false;
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), nodeType, StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (string.Equals(Convert.ToString(p["rol"]), role, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(Convert.ToString(p["rolDestino"]), role, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(Convert.ToString(p["destino"]), role, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private static bool HumanResultIfExists(JArray actions, string role)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return false;
+            string labelPart = Normalize(role);
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["field"]), "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+                string label = Normalize(Convert.ToString(a["label"]));
+                if (label.Contains(labelPart)) return true;
+            }
+            return false;
+        }
+
+        private static bool LoggerForRoleAndOutcomeExists(JArray actions, string role, string outcome)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return false;
+            string roleNorm = Normalize(role);
+            string expectedLevel = string.Equals(outcome, "no_apto", StringComparison.OrdinalIgnoreCase) ? "Warn" : "Info";
+
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), "util.logger", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["level"]), expectedLevel, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string label = Normalize(Convert.ToString(a["label"]));
+                string message = Normalize(Convert.ToString(p["message"]));
+                if (label.Contains(roleNorm) || message.Contains("direccion") || message.Contains("administracion") || message.Contains(roleNorm))
+                    return true;
+            }
+            return false;
+        }
+
+        private static string ResolveHumanResultRoleForClause(string normalizedText)
+        {
+            string n = normalizedText ?? string.Empty;
+            Match m = Regex.Match(n, @"\bsi\s+(?<actor>.*?)(?:\s+la|\s+lo|\s+el|\s+se)?\s+(?:aprueba|apruebe|aprobada|aprobado|rechaza|rechace|rechazada|rechazado)\b", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                string actor = Normalize(m.Groups["actor"].Value).Trim();
+                string role = ResolveRole(actor, null);
+                if (!string.IsNullOrWhiteSpace(role)) return role;
+            }
+            return string.Empty;
+        }
+
+        private static string ResolveNotifyRoleForClause(string normalizedText)
+        {
+            string n = normalizedText ?? string.Empty;
+            Match m = Regex.Match(n, @"\b(?:notificar|avisar|informar|mandar\s+aviso|dar\s+aviso)\s+a\s+(?<destino>.*?)(?:\s+indicando|\s+y\s+finalizar|\s+para|\s+que|\s*$)", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                string destino = Normalize(m.Groups["destino"].Value).Trim();
+                string role = ResolveRole(destino, null);
+                if (!string.IsNullOrWhiteSpace(role)) return role;
+            }
+
+            int idx = n.IndexOf("notificar", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) idx = n.IndexOf("avisar", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) idx = n.IndexOf("informar", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                string tail = n.Substring(idx);
+                string role = ResolveRole(tail, null);
+                if (!string.IsNullOrWhiteSpace(role)) return role;
+            }
+
+            return string.Empty;
+        }
+
+        private static string FindHumanResultIfLabel(JArray actions, string role)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(role)) return string.Empty;
+            string roleNorm = Normalize(role).Trim();
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["field"]), "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+                string label = Normalize(Convert.ToString(a["label"])).Trim();
+                if (label.Contains(roleNorm)) return Convert.ToString(a["label"]);
+            }
+            return string.Empty;
+        }
+
+        private static string FindFirstBusinessIfLabel(JArray actions)
+        {
+            if (actions == null) return string.Empty;
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p != null && string.Equals(Convert.ToString(p["field"]), "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+                return Convert.ToString(a["label"]);
+            }
+            return string.Empty;
+        }
+
+        private static string FindActionLabelForNodeTypeAndRole(JArray actions, string nodeType, string role)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(nodeType) || string.IsNullOrWhiteSpace(role)) return string.Empty;
+            foreach (JObject a in actions)
+            {
+                if (!string.Equals(Convert.ToString(a["nodeType"]), nodeType, StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = a["params"] as JObject;
+                if (p == null) continue;
+                if (string.Equals(Convert.ToString(p["rol"]), role, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Convert.ToString(p["rolDestino"]), role, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Convert.ToString(p["destino"]), role, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Convert.ToString(a["label"]);
+                }
+            }
+            return string.Empty;
+        }
+
+        private static string FindReachableNotifyLabelFromConditionalBranch(JArray actions, JArray proposedConnections, string fromLabel, string condition, string role)
+        {
+            if (actions == null || proposedConnections == null || string.IsNullOrWhiteSpace(fromLabel) || string.IsNullOrWhiteSpace(role)) return string.Empty;
+
+            string condExpected = Normalize(condition).Trim();
+            var starts = new List<string>();
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), fromLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                string cond = Normalize(Convert.ToString(c["condition"])).Trim();
+                if (cond == condExpected || (condExpected == "si" && cond == "true") || (condExpected == "no" && cond == "false"))
+                    starts.Add(Convert.ToString(c["to"]));
+            }
+
+            foreach (string start in starts)
+            {
+                string found = FindReachableNotifyLabel(actions, proposedConnections, start, role, 0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(found)) return found;
+            }
+
+            return string.Empty;
+        }
+
+        private static string FindReachableNotifyLabel(JArray actions, JArray proposedConnections, string current, string role, int depth, HashSet<string> visited)
+        {
+            if (string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(role)) return string.Empty;
+            if (depth > 30) return string.Empty;
+            if (visited.Contains(current)) return string.Empty;
+            visited.Add(current);
+
+            JObject action = FindActionByLabel(actions, current);
+            if (action != null
+                && string.Equals(Convert.ToString(action["nodeType"]), "util.notify", StringComparison.OrdinalIgnoreCase)
+                && ActionMatchesRole(action, role))
+            {
+                return Convert.ToString(action["label"]);
+            }
+
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), current, StringComparison.OrdinalIgnoreCase)) continue;
+                string found = FindReachableNotifyLabel(actions, proposedConnections, Convert.ToString(c["to"]), role, depth + 1, visited);
+                if (!string.IsNullOrWhiteSpace(found)) return found;
+            }
+
+            return string.Empty;
+        }
+
+        private static bool ActionMatchesRole(JObject action, string role)
+        {
+            if (action == null || string.IsNullOrWhiteSpace(role)) return false;
+            JObject p = action["params"] as JObject;
+            if (p == null) return false;
+
+            return string.Equals(Convert.ToString(p["rol"]), role, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Convert.ToString(p["rolDestino"]), role, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Convert.ToString(p["destino"]), role, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsReachableFromConditionalBranch(JArray proposedConnections, string fromLabel, string condition, string targetLabel)
+        {
+            if (proposedConnections == null || string.IsNullOrWhiteSpace(fromLabel) || string.IsNullOrWhiteSpace(targetLabel)) return false;
+            string condExpected = Normalize(condition).Trim();
+            var starts = new List<string>();
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), fromLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                string cond = Normalize(Convert.ToString(c["condition"])).Trim();
+                if (cond == condExpected || (condExpected == "si" && cond == "true") || (condExpected == "no" && cond == "false"))
+                    starts.Add(Convert.ToString(c["to"]));
+            }
+            foreach (string start in starts)
+            {
+                if (IsReachableIgnoringConditions(proposedConnections, start, targetLabel, 0, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IsReachableIgnoringConditions(JArray proposedConnections, string current, string target, int depth, HashSet<string> visited)
+        {
+            if (string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(target)) return false;
+            if (depth > 30) return false;
+            if (string.Equals(current, target, StringComparison.OrdinalIgnoreCase)) return true;
+            if (visited.Contains(current)) return false;
+            visited.Add(current);
+
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), current, StringComparison.OrdinalIgnoreCase)) continue;
+                string next = Convert.ToString(c["to"]);
+                if (IsReachableIgnoringConditions(proposedConnections, next, target, depth + 1, visited)) return true;
+            }
+            return false;
+        }
+
+        private static bool PathContainsLoggerFromBranch(JArray actions, JArray proposedConnections, string fromLabel, string condition, string expectedLevel)
+        {
+            if (actions == null || proposedConnections == null || string.IsNullOrWhiteSpace(fromLabel)) return false;
+            string condExpected = Normalize(condition).Trim();
+            var starts = new List<string>();
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), fromLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                string cond = Normalize(Convert.ToString(c["condition"])).Trim();
+                if (cond == condExpected || (condExpected == "no" && cond == "false") || (condExpected == "si" && cond == "true"))
+                    starts.Add(Convert.ToString(c["to"]));
+            }
+            foreach (string start in starts)
+            {
+                if (ReachablePathContainsLogger(actions, proposedConnections, start, expectedLevel, 0, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool ReachablePathContainsLogger(JArray actions, JArray proposedConnections, string current, string expectedLevel, int depth, HashSet<string> visited)
+        {
+            if (string.IsNullOrWhiteSpace(current) || depth > 30) return false;
+            if (visited.Contains(current)) return false;
+            visited.Add(current);
+
+            JObject action = FindActionByLabel(actions, current);
+            if (action != null)
+            {
+                string nodeType = Convert.ToString(action["nodeType"]);
+                if (string.Equals(nodeType, "util.logger", StringComparison.OrdinalIgnoreCase))
+                {
+                    JObject p = action["params"] as JObject;
+                    string level = p == null ? string.Empty : Convert.ToString(p["level"]);
+                    if (string.IsNullOrWhiteSpace(expectedLevel) || string.Equals(level, expectedLevel, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+
+                // Para validar un "caso contrario, registrar..." no aceptamos que la rama pase antes
+                // por una tarea humana u otro IF: esa semántica implica acción directa de la rama NO.
+                if (string.Equals(nodeType, "human.task", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(nodeType, "control.if", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            foreach (JObject c in proposedConnections)
+            {
+                if (!string.Equals(Convert.ToString(c["from"]), current, StringComparison.OrdinalIgnoreCase)) continue;
+                if (ReachablePathContainsLogger(actions, proposedConnections, Convert.ToString(c["to"]), expectedLevel, depth + 1, visited)) return true;
+            }
+            return false;
+        }
+
+        private static JObject FindActionByLabel(JArray actions, string label)
+        {
+            if (actions == null || string.IsNullOrWhiteSpace(label)) return null;
+            foreach (JObject a in actions)
+            {
+                if (string.Equals(Convert.ToString(a["label"]), label, StringComparison.OrdinalIgnoreCase)) return a;
+            }
+            return null;
+        }
+
+        private static string ResolveHumanOutcome(string normalizedText)
+        {
+            string n = normalizedText ?? string.Empty;
+            if (n.Contains("no apto") || n.Contains("rechaza") || n.Contains("rechazada") || n.Contains("rechazado")) return "no_apto";
+            if (n.Contains("apto") || n.Contains("aprueba") || n.Contains("aprobada") || n.Contains("aprobado")) return "apto";
+            return string.Empty;
+        }
+
+        private class PhraseEngineDiagnostic
+        {
+            public string OriginalText { get; set; }
+            public string NormalizedText { get; set; }
+            public List<PhraseClauseDiagnostic> Clauses { get; private set; }
+            public List<string> Concepts { get; private set; }
+            public List<string> NodeTypes { get; private set; }
+            public string PrimaryRole { get; set; }
+            public string PrimaryHumanOutcome { get; set; }
+            public string FirstNumber { get; set; }
+
+            public PhraseEngineDiagnostic()
+            {
+                OriginalText = string.Empty;
+                NormalizedText = string.Empty;
+                Clauses = new List<PhraseClauseDiagnostic>();
+                Concepts = new List<string>();
+                NodeTypes = new List<string>();
+                PrimaryRole = string.Empty;
+                PrimaryHumanOutcome = string.Empty;
+                FirstNumber = string.Empty;
+            }
+
+            public void AddConcept(string concept)
+            {
+                if (string.IsNullOrWhiteSpace(concept)) return;
+                foreach (string c in Concepts)
+                {
+                    if (string.Equals(c, concept, StringComparison.OrdinalIgnoreCase)) return;
+                }
+                Concepts.Add(concept);
+            }
+
+            public void AddNodeType(string nodeType)
+            {
+                if (string.IsNullOrWhiteSpace(nodeType)) return;
+                foreach (string n in NodeTypes)
+                {
+                    if (string.Equals(n, nodeType, StringComparison.OrdinalIgnoreCase)) return;
+                }
+                NodeTypes.Add(nodeType);
+            }
+
+            public List<PhraseClauseDiagnostic> DebugClauses()
+            {
+                return Clauses;
+            }
+        }
+
+        private class PhraseClauseDiagnostic
+        {
+            public int Index { get; set; }
+            public string Text { get; set; }
+            public string NormalizedText { get; set; }
+
+            // fix53: diagnóstico semántico por cláusula.
+            // Estos datos son solo diagnóstico; no modifican todavía la construcción legacy del grafo.
+            public string ClauseType { get; set; }
+            public string BranchMarker { get; set; }
+            public string BranchSide { get; set; }
+            public string Role { get; set; }
+            public string TaskRole { get; set; }
+            public string NotifyRole { get; set; }
+            public string HumanOutcome { get; set; }
+            public string LoggerLevel { get; set; }
+            public string Number { get; set; }
+            public string ConditionKind { get; set; }
+            public string ConditionField { get; set; }
+            public string ConditionOperator { get; set; }
+            public string ConditionValue { get; set; }
+            public bool IsNegative { get; set; }
+            public string ActionHint { get; set; }
+            public List<string> Concepts { get; private set; }
+            public List<string> NodeTypes { get; private set; }
+
+            public PhraseClauseDiagnostic()
+            {
+                Text = string.Empty;
+                NormalizedText = string.Empty;
+                ClauseType = string.Empty;
+                BranchMarker = string.Empty;
+                BranchSide = string.Empty;
+                Role = string.Empty;
+                TaskRole = string.Empty;
+                NotifyRole = string.Empty;
+                HumanOutcome = string.Empty;
+                LoggerLevel = string.Empty;
+                Number = string.Empty;
+                ConditionKind = string.Empty;
+                ConditionField = string.Empty;
+                ConditionOperator = string.Empty;
+                ConditionValue = string.Empty;
+                IsNegative = false;
+                ActionHint = string.Empty;
+                Concepts = new List<string>();
+                NodeTypes = new List<string>();
+            }
+
+            public void AddConcept(string concept)
+            {
+                if (string.IsNullOrWhiteSpace(concept)) return;
+                foreach (string c in Concepts)
+                {
+                    if (string.Equals(c, concept, StringComparison.OrdinalIgnoreCase)) return;
+                }
+                Concepts.Add(concept);
+            }
+
+            public void AddNodeType(string nodeType)
+            {
+                if (string.IsNullOrWhiteSpace(nodeType)) return;
+                foreach (string n in NodeTypes)
+                {
+                    if (string.Equals(n, nodeType, StringComparison.OrdinalIgnoreCase)) return;
+                }
+                NodeTypes.Add(nodeType);
+            }
+        }
+
         private class BranchAnalysis
         {
             public string CaeFalseRole { get; set; }
             public string TotalTrueRole { get; set; }
             public string TotalFalseRole { get; set; }
+            public string TotalFalseActionLabel { get; set; }
 
             public BranchAnalysis()
             {
                 CaeFalseRole = "";
                 TotalTrueRole = "";
                 TotalFalseRole = "";
+                TotalFalseActionLabel = "";
             }
 
             public bool HasBranchInfo
@@ -3094,7 +4683,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 {
                     return !string.IsNullOrWhiteSpace(CaeFalseRole)
                         || !string.IsNullOrWhiteSpace(TotalTrueRole)
-                        || !string.IsNullOrWhiteSpace(TotalFalseRole);
+                        || !string.IsNullOrWhiteSpace(TotalFalseRole)
+                        || !string.IsNullOrWhiteSpace(TotalFalseActionLabel);
                 }
             }
         }

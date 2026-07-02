@@ -564,6 +564,11 @@
     <Compile Include="App_Code\Ai\WfAiAssistantModels.cs" />
     <Compile Include="App_Code\Ai\WfAiCatalogProvider.cs" />
     <Compile Include="App_Code\Ai\WfAiMlnetProvider.cs" />
+    <Content Include="App_Code\Ai\WfAiNodeCapabilityMap.cs" />
+    <Content Include="App_Code\Ai\WfAiPhraseClauseSplitter.cs" />
+    <Content Include="App_Code\Ai\WfAiPhraseLexicon.cs" />
+    <Content Include="App_Code\Ai\WfAiPhraseNormalizer.cs" />
+    <Content Include="App_Code\Ai\WfAiPhraseEngine.cs" />
     <Compile Include="App_Code\Ai\WfAiPlanValidator.cs" />
     <Compile Include="App_Code\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>

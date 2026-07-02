@@ -1,0 +1,6 @@
+Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.
+Cargar una nota de crédito. Si el total supera los 200000 pesos, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, notificar a COMPRAS indicando que la nota de crédito fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección, notificar a COMPRAS y finalizar. Caso contrario, registrar un evento informativo indicando que no requiere aprobación de Dirección y finalizar.
+
+
+
+Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Si Dirección la aprueba, registrar un evento informativo indicando que fue aprobada por Dirección y finalizar. Si Dirección la rechaza, registrar una advertencia indicando que fue rechazada por Dirección y finalizar.
