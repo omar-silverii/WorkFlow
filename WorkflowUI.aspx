@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
-   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix39b" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix71f" />
 
   <style>
      body { background: #f6f7fb; }
@@ -103,6 +103,7 @@
                     class="wf-ai-textarea"
                     placeholder="Ejemplo: Quiero cargar una nota de crédito y si supera 300000 mandarla a Dirección."></textarea>
           <div class="wf-ai-actions">
+            <button type="button" class="btn" id="wfAiVerify">Verificar frase</button>
             <button type="button" class="btn" id="wfAiRun">Interpretar</button>
             <button type="button" class="btn" id="wfAiClear">Limpiar</button>
           </div>
@@ -183,7 +184,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix39b"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix71f"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>

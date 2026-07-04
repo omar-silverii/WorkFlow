@@ -1,0 +1,205 @@
+PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA v2
+
+Voy a pasarte:
+
+Este Prompt.
+El ContextPack actualizado.
+El ZIP completo nuevo del proyecto Workflow Studio WebForms, generado después de aplicar todo hasta fix68c.
+Si corresponde, algún ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+Reglas obligatorias
+No inventar nada.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Cambios mínimos y precisos.
+Siempre trabajar sobre código real del ZIP.
+No mandar “archivo completo” si no verificaste el archivo real actual.
+No asumir que el código quedó exactamente como en el chat.
+Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+Incluir LEEME en cada ZIP correctivo.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+Proponer siempre la mejor versión de entrada.
+No volver atrás sobre temas ya cerrados.
+Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+No tocar WorkflowUI/canvas/aristas/zoom/minimapa salvo bug real explícito.
+No tocar WF_Instancia_Mapa salvo bug real explícito.
+No tocar FACTURA_AR, NC_AR, extractores documentales ni motor de ejecución salvo bug real.
+No tocar SMTP/email.send ahora, salvo que Omar lo pida.
+No tocar HSubFlow.cs ni runtime de subflow salvo bug real.
+Revisar siempre si lo implementado tiene sentido operativo completo: quién lo usa, dónde se ve, dónde queda registrado, si genera valor real o si está inconcluso.
+Base de trabajo
+
+Tomar como base el ZIP nuevo que Omar va a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta:
+
+fix57
+fix58
+fix58b
+fix58d
+fix59
+fix60
+fix61
+fix62
+fix62b
+fix63
+fix64
+fix64b
+fix65
+fix65b
+fix66
+fix67
+fix67b
+fix68
+fix68b
+fix68c
+
+No usar fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+Estado que debe estar incorporado
+Banco de regresión IA
+
+Debe existir y funcionar:
+
+WF_AiRegression.aspx
+App_Data/WF_AI/ai_regression_cases.json
+
+Resultado esperado:
+
+OK=14 / FALLA=0 / SKIP=0
+
+Casos esperados:
+
+A_NO_SUPERA_CASO_CONTRARIO
+B_NOTIFY_POR_RAMA
+C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE
+D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO
+E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS
+F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS
+G_HTTP_REQUEST_LOGGER
+H_SQL_SELECT_LOGGER
+I_LOGGER_SIMPLE
+J_FILE_WRITE_LOGGER
+K_FILE_READ_LOGGER
+L_STATE_VARS_LOGGER
+M_QUEUE_PUBLISH_LOGGER
+N_QUEUE_CONSUME_LOGGER
+Camino A ejecución real
+
+Debe quedar validado:
+
+Logger simple
+HTTP + Logger
+SQL + Logger
+file.write + Logger
+state.vars + Logger
+queue.publish + Logger
+queue.consume + Logger
+
+Línea validada:
+
+Constructor IA
+→ Canvas
+→ Guardar definición
+→ Ejecutar motor
+→ Logs
+→ Mapa
+Queue consume debug
+
+Debe estar incorporado:
+
+debug visible en inspector
+debug default false
+logs debug solo con debug=true
+logs limpios con debug=false
+línea BUILD eliminada
+
+Con debug=false, no debe aparecer:
+
+[Queue.ConsumeSql/BUILD]
+[Queue.ConsumeSql/debug]
+Archivos clave a revisar
+
+Revisar especialmente:
+
+App_Code/Ai/WfAiMlnetProvider.cs
+App_Code/Ai/WfAiPlanValidator.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+App_Code/Ai/WfAiNodeCapabilityMap.cs
+App_Code/Ai/WfAiPhraseNormalizer.cs
+App_Code/Ai/WfAiPhraseClauseSplitter.cs
+App_Code/Ai/WfAiPhraseLexicon.cs
+App_Code/Handlers/HQueuePublishSql.cs
+Scripts/workflow.catalog.js
+Scripts/workflow.templates.js
+Scripts/Inspectors/inspector.queue.publish.js
+WF_AiRegression.aspx
+WF_AiRegression.aspx.cs
+App_Data/WF_AI/ai_regression_cases.json
+.csproj
+Qué hacer al inicio
+
+No avanzar directo con otro fix.
+
+Primero:
+
+Revisar ZIP real.
+Confirmar archivos.
+Compilar.
+Ejecutar WF_AiRegression.aspx → Probar todos.
+Confirmar OK=14 / FALLA=0 / SKIP=0.
+Ejecutar smoke de queue.consume con debug=false.
+Confirmar logs limpios.
+Recién después proponer siguiente avance.
+Próximo avance recomendado
+
+Si todo sigue OK, avanzar con:
+
+fix69_ux_banco_regresion_ia
+
+Objetivo:
+
+Mejorar WF_AiRegression.aspx como herramienta profesional de QA.
+
+Sugerencias:
+
+Filtro Todos / OK / FALLA / SKIP
+Botón copiar frase
+Botón copiar JSON técnico
+Botón abrir Constructor IA con la frase
+Colapsar JSON técnico
+Resumen por tipo de nodo
+Indicador “semántico fuerte”
+Mejor lectura visual de casos largos
+
+No tocar motor, canvas ni handlers.
+
+Criterio final
+
+La base actual está fuerte. No romperla.
+
+Todo avance nuevo debe mantener:
+
+Banco OK=14 / FALLA=0 / SKIP=0
+Compilación OK
+Sin regresiones en Constructor IA
+Sin ensuciar logs runtime
+Sin tocar áreas cerradas salvo bug real
+
+Si algo falla, no asumir. Pedir JSON técnico, captura, logs o archivo real.

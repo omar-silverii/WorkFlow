@@ -965,3 +965,478 @@
     margin-top: 6px;
     margin-bottom: 6px;
 }
+
+
+/* fix70: diagnóstico visual de Verificar frase */
+.wf-ai-verify-card {
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #ffffff;
+}
+
+    .wf-ai-verify-card.ok {
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+    }
+
+    .wf-ai-verify-card.warn {
+        border-color: #fde68a;
+        background: #fffbeb;
+    }
+
+    .wf-ai-verify-card.error {
+        border-color: #fecaca;
+        background: #fff1f2;
+    }
+
+.wf-ai-verify-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.wf-ai-verify-kicker {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #64748b;
+    margin-bottom: 2px;
+}
+
+.wf-ai-verify-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.wf-ai-verify-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+    .wf-ai-verify-badge.ok {
+        background: #dcfce7;
+        color: #047857;
+        border: 1px solid #86efac;
+    }
+
+    .wf-ai-verify-badge.warn {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+
+    .wf-ai-verify-badge.error {
+        background: #fee2e2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }
+
+.wf-ai-verify-phrase {
+    margin-top: 8px;
+    color: #334155;
+    font-size: 11.5px;
+    line-height: 1.45;
+}
+
+.wf-ai-node-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.wf-ai-node-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+.wf-ai-verify-actions {
+    flex-wrap: wrap;
+}
+
+
+/* fix70b: advertencias técnicas separadas de la vista funcional */
+.wf-ai-tech-warnings {
+    margin: 10px 0;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #f8fafc;
+    color: #475569;
+}
+
+    .wf-ai-tech-warnings > summary {
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        color: #64748b;
+    }
+
+.wf-ai-tech-warning-list {
+    margin-top: 8px;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+
+/* fix71: fallback amigable de desambiguación */
+.wf-ai-fallback {
+    border: 1px solid #bfdbfe;
+    background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+    border-radius: 14px;
+    padding: 10px;
+    margin: 8px 0;
+    color: #1e3a8a;
+}
+
+.wf-ai-fallback-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.wf-ai-fallback-kicker {
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #2563eb;
+}
+
+.wf-ai-fallback-title {
+    font-size: 13px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.wf-ai-fallback-badge {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 800;
+    color: #1d4ed8;
+    background: #dbeafe;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 4px 8px;
+}
+
+.wf-ai-fallback-text,
+.wf-ai-fallback-q-detail,
+.wf-ai-fallback-tools span {
+    font-size: 11px;
+    color: #475569;
+    line-height: 1.35;
+}
+
+.wf-ai-fallback-rewrite,
+.wf-ai-fallback-question {
+    margin-top: 8px;
+    border: 1px solid #dbeafe;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+.wf-ai-fallback-label,
+.wf-ai-fallback-q-title {
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #334155;
+    margin-bottom: 4px;
+}
+
+.wf-ai-fallback-rewrite-text {
+    font-size: 11.5px;
+    color: #0f172a;
+    line-height: 1.35;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 7px;
+    margin-bottom: 7px;
+}
+
+.wf-ai-fallback-options,
+.wf-ai-fallback-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+    align-items: center;
+}
+
+.wf-ai-fallback-btn {
+    font-size: 10.5px;
+    padding: 5px 8px;
+    line-height: 1.2;
+}
+
+    .wf-ai-fallback-btn.primary {
+        border-color: #2563eb;
+        color: #1d4ed8;
+        background: #eff6ff;
+        font-weight: 800;
+    }
+
+.wf-ai-panel.wf-ai-wide .wf-ai-fallback-title {
+    font-size: 14px;
+}
+
+.wf-ai-panel.wf-ai-wide .wf-ai-fallback-text,
+.wf-ai-panel.wf-ai-wide .wf-ai-fallback-q-detail,
+.wf-ai-panel.wf-ai-wide .wf-ai-fallback-rewrite-text {
+    font-size: 12px;
+}
+
+/* fix71b: decisiones del fallback resueltas */
+.wf-ai-fallback-resolved {
+    margin-top: 8px;
+    border: 1px solid #bbf7d0;
+    background: #f0fdf4;
+    border-radius: 12px;
+    padding: 8px;
+    color: #166534;
+}
+
+    .wf-ai-fallback-resolved ul {
+        margin: 4px 0 0 16px;
+        padding: 0;
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
+.wf-ai-fallback-pending {
+    margin-top: 8px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    border-radius: 12px;
+    padding: 8px;
+    color: #9a3412;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.wf-ai-fallback-question.resolved {
+    opacity: .35;
+    transform: scale(.98);
+    transition: opacity .12s ease, transform .12s ease;
+}
+
+
+/* fix71c: fallback más claro cuando la frase consolidada ya fue usada */
+.wf-ai-fallback-rewrite.done {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+}
+
+.wf-ai-fallback-done-note {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #166534;
+    font-weight: 700;
+}
+
+.wf-ai-verify-actions .btn[disabled] {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+/* fix71d: el fallback no termina en callejón sin salida */
+.wf-ai-fallback-pending.actionable {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.wf-ai-fallback-next-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.wf-ai-fallback-pending.actionable .wf-ai-fallback-label {
+    color: #1d4ed8;
+}
+
+.wf-ai-verify-card.warn .wf-ai-verify-badge.warn,
+.wf-ai-verify-badge.warn {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+
+/* fix71e: revisión y confirmación explícita del plan guiado antes de aplicar */
+.wf-ai-guided-review {
+    margin: 10px 0;
+    border: 1px solid #bfdbfe;
+    background: #f8fbff;
+    border-radius: 14px;
+    padding: 10px;
+    color: #1e3a8a;
+}
+
+    .wf-ai-guided-review.confirmed {
+        border-color: #86efac;
+        background: #f0fdf4;
+        color: #166534;
+    }
+
+.wf-ai-guided-review-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.wf-ai-guided-review-kicker {
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #2563eb;
+}
+
+.wf-ai-guided-review-title {
+    font-size: 13px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+.wf-ai-guided-review-badge {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 800;
+    color: #1d4ed8;
+    background: #dbeafe;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 4px 8px;
+}
+
+.wf-ai-guided-review.confirmed .wf-ai-guided-review-badge {
+    color: #166534;
+    background: #dcfce7;
+    border-color: #86efac;
+}
+
+.wf-ai-guided-review-text,
+.wf-ai-guided-muted,
+.wf-ai-guided-confirmed-note {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #475569;
+}
+
+.wf-ai-guided-flow,
+.wf-ai-guided-branch {
+    margin-top: 8px;
+    border: 1px solid #dbeafe;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+.wf-ai-guided-review.confirmed .wf-ai-guided-flow,
+.wf-ai-guided-review.confirmed .wf-ai-guided-branch {
+    border-color: #bbf7d0;
+}
+
+.wf-ai-guided-flow-title {
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #334155;
+    margin-bottom: 4px;
+}
+
+.wf-ai-guided-flow ol,
+.wf-ai-guided-branch ol {
+    margin: 4px 0 0 18px;
+    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: #0f172a;
+}
+
+.wf-ai-guided-branches {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.wf-ai-panel.wf-ai-wide .wf-ai-guided-branches {
+    grid-template-columns: 1fr 1fr;
+}
+
+.wf-ai-guided-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.wf-ai-guided-confirm {
+    border-color: #16a34a;
+    color: #166534;
+    background: #f0fdf4;
+    font-weight: 800;
+}
+
+.wf-ai-guided-confirmed-note {
+    margin-top: 10px;
+    border: 1px solid #bbf7d0;
+    background: #dcfce7;
+    border-radius: 10px;
+    padding: 7px;
+    color: #166534;
+    font-weight: 700;
+}
+
+/* fix71f: resolución accionable dentro del fallback */
+.wf-ai-fallback-pending.fixable {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+}
+
+.wf-ai-fallback-fix-title {
+    font-size: 12px;
+    font-weight: 900;
+    color: #1e3a8a;
+    margin: 4px 0 4px 0;
+}
+
+.wf-ai-fallback-fix-list {
+    margin: 7px 0 8px 18px;
+    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: #0f172a;
+}
+
+    .wf-ai-fallback-fix-list li {
+        margin-bottom: 3px;
+    }

@@ -3,8 +3,25 @@
 // fix39c: corrige render recursivo de ramas anidadas sobre fix39b.
 // fix39b: Constructor IA en 3 columnas, rama activa visual y datos clickeables sin tocar motor.
 // fix41: limpieza defensiva de texto residual del Constructor IA antes de armar/interpretar frase.
+// fix69b: importa frase enviada desde WF_AiRegression.aspx (?aiPhrase=...) al textarea del Constructor IA.
+// fix70: agrega verificación dinámica/transitoria de frase sin escribir el banco de regresión ni tocar canvas.
+// fix71: fallback amigable de desambiguación para frases incompletas o ambiguas.
+// fix71b: al elegir una respuesta, la tarjeta queda resuelta y no se repite; si aún hay error, se propone frase consolidada.
+// fix71c: el fallback no repite frase consolidada ya usada, no permite interpretar con errores y ofrece resolución concreta para rama NO/datos faltantes.
+// fix71d: cuando la frase libre queda trabada, el fallback termina en una acción válida: convertir a plan guiado estructurado o abrir paso a paso.
+// fix71e: el plan guiado requiere confirmación explícita y muestra un resumen funcional antes de aplicar al canvas.
+// fix71f: el fallback no termina en un botón genérico; muestra resolución accionable en el mismo lugar del error.
 (function () {
     var lastPlan = null;
+    var importedRegressionPhrase = false;
+    var aiClarificationOptions = [];
+    var aiRewriteOptions = [];
+    var aiFallbackResolved = {};
+    var aiFallbackResolvedItems = [];
+    var aiFallbackBaseKey = "";
+    var aiFallbackAcceptedRewriteKey = "";
+    var aiGuidedPlanConfirmed = false;
+    var lastAssistantResult = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -3102,6 +3119,61 @@
         }
     }
 
+
+    // fix69b: cuando el Banco de regresión abre WorkflowUI.aspx?aiPhrase=...
+    // copiamos la frase en el textarea del Constructor IA. No interpreta ni toca canvas.
+    function getQueryValue(name) {
+        try {
+            if (window.URLSearchParams) {
+                var sp = new URLSearchParams(window.location.search || '');
+                return sp.get(name) || '';
+            }
+        } catch (e) { }
+
+        try {
+            var re = new RegExp('[?&]' + name.replace(/[\[\]]/g, '\\$&') + '=([^&]*)');
+            var m = re.exec(window.location.search || '');
+            return m ? decodeURIComponent(String(m[1] || '').replace(/\+/g, ' ')) : '';
+        } catch (e2) { }
+
+        return '';
+    }
+
+    function importRegressionPhraseIntoConstructor() {
+        if (importedRegressionPhrase) return;
+
+        var prompt = $('wfAiPrompt');
+        if (!prompt) return;
+
+        var phrase = getQueryValue('aiPhrase');
+        if (!phrase) {
+            try { phrase = window.sessionStorage.getItem('WF_AI_REGRESSION_PHRASE') || ''; } catch (e) { phrase = ''; }
+        }
+
+        phrase = String(phrase || '').trim();
+        if (!phrase) return;
+
+        importedRegressionPhrase = true;
+        try { window.sessionStorage.removeItem('WF_AI_REGRESSION_PHRASE'); } catch (e2) { }
+
+        phrase = cleanGuidePhraseText(phrase);
+        prompt.value = phrase;
+
+        var result = $('wfAiResult');
+        if (result) result.innerHTML = '';
+
+        lastPlan = null;
+        aiUxState.userOpenedForContext = true;
+        showAssistant();
+        setStatus('Frase importada desde el Banco de regresión IA. Presioná Interpretar para generar la propuesta.', 'ok');
+
+        try {
+            prompt.focus();
+            var len = prompt.value.length;
+            if (prompt.setSelectionRange) prompt.setSelectionRange(len, len);
+        } catch (e3) { }
+    }
+
     function syncAssistantWithInspector() {
         var panel = $('wfAiPanel');
         if (!panel) return;
@@ -3188,6 +3260,896 @@
         return h;
     }
 
+    // ------------------------------------------------------------
+    // fix70: verificación visual de frase sin aplicar al canvas
+    // ------------------------------------------------------------
+    function uniqueArray(items) {
+        var seen = {};
+        var out = [];
+        (items || []).forEach(function (item) {
+            var key = String(item || '').trim();
+            if (!key || seen[key]) return;
+            seen[key] = true;
+            out.push(key);
+        });
+        return out;
+    }
+
+    function planNodeTypes(plan) {
+        var types = [];
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (a && a.action === 'ADD_NODE' && a.nodeType) types.push(a.nodeType);
+        });
+        return uniqueArray(types);
+    }
+
+    function phraseVerificationText(plan) {
+        var items = [];
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || a.action !== 'ADD_NODE') return;
+            var line = '';
+            if (a.nodeType) line += a.nodeType;
+            if (a.label) line += (line ? ' · ' : '') + a.label;
+            if (line) items.push(line);
+        });
+        return items;
+    }
+
+    // ------------------------------------------------------------
+    // fix70b: separar advertencias funcionales de advertencias técnicas
+    // ------------------------------------------------------------
+    function isTechnicalAiWarning(text) {
+        var x = String(text || '').toLowerCase();
+        if (!x) return false;
+
+        // Son mensajes útiles para desarrollo/soporte, pero no para el usuario funcional.
+        // Se mantienen completos dentro del JSON técnico.
+        if (x.indexOf('proveedor mlnet') >= 0) return true;
+        if (x.indexOf('phrase engine') >= 0) return true;
+        if (x.indexOf('provider legacy') >= 0) return true;
+        if (x.indexOf('modelo entrenado externo') >= 0) return true;
+        if (x.indexOf('interpretación local') >= 0 || x.indexOf('interpretacion local') >= 0) return true;
+        return false;
+    }
+
+    function splitFunctionalWarnings(items) {
+        var out = { functional: [], technical: [] };
+        (items || []).forEach(function (item) {
+            var text = (typeof item === 'string') ? item : (item && (item.question || item.key || item.message)) || JSON.stringify(item);
+            if (isTechnicalAiWarning(text)) out.technical.push(item);
+            else out.functional.push(item);
+        });
+        return out;
+    }
+
+    function collectPhraseWarnings(res, validation, plan) {
+        var warnings = [];
+        if (validation && validation.warnings) warnings = warnings.concat(validation.warnings);
+        if (res && res.catalogWarnings) warnings = warnings.concat(res.catalogWarnings);
+        if (plan && plan.warnings) warnings = warnings.concat(plan.warnings);
+        return splitFunctionalWarnings(warnings);
+    }
+
+
+    // ------------------------------------------------------------
+    // fix71: fallback amigable de desambiguación
+    // ------------------------------------------------------------
+    function normalizePhraseForSearch(text) {
+        return String(text || '')
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function stripFallbackClarifications(text) {
+        return String(text || '')
+            .replace(/\s*Aclaración:\s*/ig, '\nAclaración: ')
+            .split(/\nAclaración:\s*/i)[0]
+            .trim();
+    }
+
+    function fallbackBaseKeyFor(text) {
+        return normalizePhraseForSearch(stripFallbackClarifications(text));
+    }
+
+    function fallbackRewriteKey(text) {
+        return normalizePhraseForSearch(stripFallbackClarifications(text || ''))
+            .replace(/[^a-z0-9_]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function sameFallbackPhrase(a, b) {
+        return fallbackRewriteKey(a) === fallbackRewriteKey(b);
+    }
+
+    function syncFallbackSession(userText) {
+        var key = fallbackBaseKeyFor(userText || '');
+        if (key !== aiFallbackBaseKey) {
+            aiFallbackBaseKey = key;
+            aiFallbackResolved = {};
+            aiFallbackResolvedItems = [];
+            aiFallbackAcceptedRewriteKey = '';
+        }
+    }
+
+    function markFallbackResolved(questionKey, title, label, clarification) {
+        questionKey = String(questionKey || '').trim();
+        if (!questionKey) return;
+        aiFallbackResolved[questionKey] = true;
+        var item = {
+            key: questionKey,
+            title: String(title || '').trim(),
+            label: String(label || '').trim(),
+            clarification: String(clarification || '').trim()
+        };
+        var replaced = false;
+        for (var i = 0; i < aiFallbackResolvedItems.length; i++) {
+            if (aiFallbackResolvedItems[i].key === questionKey) {
+                aiFallbackResolvedItems[i] = item;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) aiFallbackResolvedItems.push(item);
+    }
+
+    function fallbackQuestionAlreadyAnswered(q, userText) {
+        if (!q || !q.key) return false;
+        if (aiFallbackResolved[q.key]) return true;
+        var x = normalizePhraseForSearch(userText || '');
+        if (q.key === 'notify-mode' && textHasAny(x, ['crear notificaciones internas util.notify', 'crear tareas humanas', 'registrar logs del workflow'])) return true;
+        if (q.key === 'warning-mode' && textHasAny(x, ['advertencia debe ser una notificacion', 'advertencia debe ser un logger warn', 'advertencia debe crear una tarea'])) return true;
+        if (q.key === 'branch-no' && textHasAny(x, ['si la condicion no se cumple', 'si la condición no se cumple'])) return true;
+        if (q.key === 'data-message' && textHasAny(x, ['mensaje de la notificacion incluir', 'mensajes incluir'])) return true;
+        if (q.key === 'it-scope' && textHasAny(x, ['notificar a it en ambas ramas', 'notificar a it solo cuando'])) return true;
+        if (q.key.indexOf('missing-') === 0 && textHasAny(x, ['completar el dato faltante'])) return true;
+        return false;
+    }
+
+    function removeFallbackQuestionImmediately(btn) {
+        var el = btn;
+        while (el && el !== document && !(el.className && String(el.className).indexOf('wf-ai-fallback-question') >= 0)) {
+            el = el.parentNode;
+        }
+        if (el && el.parentNode) {
+            el.className += ' resolved';
+            if (el.parentNode.removeChild) el.parentNode.removeChild(el);
+        }
+    }
+
+    function renderFallbackResolvedSummary() {
+        if (!aiFallbackResolvedItems.length) return '';
+        var html = '';
+        html += '<div class="wf-ai-fallback-resolved">';
+        html += '  <div class="wf-ai-fallback-label">Decisiones tomadas</div>';
+        html += '  <ul>';
+        aiFallbackResolvedItems.forEach(function (x) {
+            var label = x.label || x.clarification || 'Opción seleccionada';
+            html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + ':</strong> ' + htmlEncode(label) + '</li>';
+        });
+        html += '  </ul>';
+        html += '</div>';
+        return html;
+    }
+
+    function textHasAny(text, words) {
+        var x = normalizePhraseForSearch(text);
+        for (var i = 0; i < (words || []).length; i++) {
+            if (x.indexOf(normalizePhraseForSearch(words[i])) >= 0) return true;
+        }
+        return false;
+    }
+
+    function planHasNodeType(plan, nodeType) {
+        nodeType = String(nodeType || '').trim();
+        var found = false;
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (a && a.action === 'ADD_NODE' && String(a.nodeType || '') === nodeType) found = true;
+        });
+        return found;
+    }
+
+    function branchLooksIncomplete(plan) {
+        var branches = (plan && plan.branchPlan && plan.branchPlan.branches) || [];
+        for (var i = 0; i < branches.length; i++) {
+            var b = branches[i] || {};
+            var t = normalizePhraseForSearch((b.truePath || '') + ' ' + (b.falsePath || ''));
+            if (t.indexOf('pendiente') >= 0 || t.indexOf('definir') >= 0) return true;
+        }
+        return false;
+    }
+
+    function validationMentionsBranches(validation) {
+        var txt = '';
+        ((validation && validation.errors) || []).forEach(function (e) { txt += ' ' + String(e || ''); });
+        return textHasAny(txt, ['rama', 'ramas', 'salida si', 'salida no', 'true', 'false']);
+    }
+
+    function detectedRolesInText(userText) {
+        var roles = [];
+        var x = normalizePhraseForSearch(userText);
+        (guideCatalog.roles || []).forEach(function (r) {
+            var key = roleKey(r);
+            var name = String(r && (r.Nombre || r.nombre || '') || '').trim();
+            if (!key) return;
+            if (x.indexOf(normalizePhraseForSearch(key)) >= 0 || (name && x.indexOf(normalizePhraseForSearch(name)) >= 0)) roles.push(key);
+        });
+        ['DIR_GENERAL', 'COMPRAS', 'ADM_FIN', 'OPERACIONES', 'IT'].forEach(function (r) {
+            if (x.indexOf(normalizePhraseForSearch(r)) >= 0) roles.push(r);
+        });
+        return uniqueArray(roles);
+    }
+
+    function friendlyRoleList(userText) {
+        var roles = detectedRolesInText(userText);
+        return roles.length ? roles.join(', ') : 'los roles mencionados';
+    }
+
+    function fallbackNeedsHelp(res, userText) {
+        var plan = (res && res.plan) || {};
+        var validation = (res && res.validation) || {};
+        var missing = plan.missingData || [];
+        if (!res || !res.ok) return true;
+        if (missing.length) return true;
+        if ((validation.errors || []).length) return true;
+        if (branchLooksIncomplete(plan)) return true;
+        if (textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']) && !planHasNodeType(plan, 'util.notify')) return true;
+        if (textHasAny(userText, ['advertencia', 'warning']) && !planHasNodeType(plan, 'util.logger') && !planHasNodeType(plan, 'util.notify')) return true;
+        return false;
+    }
+
+    function buildSuggestedRewrite(userText) {
+        var hasNc = textHasAny(userText, ['nc', 'nota de credito', 'nota de crédito']);
+        var hasCae = textHasAny(userText, ['cae']);
+        var hasProveedor = textHasAny(userText, ['proveedor']);
+        var hasIt = textHasAny(userText, ['it']);
+        var hasCompras = textHasAny(userText, ['compras']);
+        var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
+        var hasNotify = textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
+
+        if (hasNc && hasCae && hasNotify && (hasDir || hasCompras || hasIt)) {
+            var txt = 'Cargar una NC. Si tiene CAE, notificar a DIR_GENERAL con el número de CAE.';
+            txt += ' Si no tiene CAE, notificar a COMPRAS con nivel advertencia indicando que falta CAE.';
+            if (hasProveedor || hasIt) txt += ' Notificar a IT con el proveedor obtenido de la NC.';
+            txt += ' Finalizar el flujo.';
+            return txt;
+        }
+        return '';
+    }
+
+    function canBuildGuidedResolution(userText) {
+        // fix71d: patrón seguro para no dejar al usuario en un callejón sin salida.
+        // No intenta cubrir todo el español libre. Solo habilita conversión guiada cuando
+        // la frase ya contiene piezas suficientes para un flujo documental con CAE + notificaciones.
+        return textHasAny(userText, ['nc', 'nota de credito', 'nota de crédito'])
+            && textHasAny(userText, ['cae'])
+            && textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar'])
+            && (textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']) || textHasAny(userText, ['compras']) || textHasAny(userText, ['it']));
+    }
+
+    function fallbackHasOnlyActionableResolution(res, userText) {
+        if (!fallbackNeedsHelp(res, userText)) return false;
+        var questions = buildFallbackQuestions(res, userText);
+        return questions.length === 0;
+    }
+
+    function shouldLetFallbackOwnErrors(res, userText) {
+        return fallbackHasOnlyActionableResolution(res, userText);
+    }
+
+    function fallbackResolutionTitle(res, userText) {
+        if (canBuildGuidedResolution(userText)) {
+            return 'La frase libre quedó trabada, pero puedo convertirla a un plan guiado válido.';
+        }
+        return 'La frase libre quedó trabada. Resolvela con el modo paso a paso.';
+    }
+
+    function fallbackResolutionText(res, userText) {
+        if (canBuildGuidedResolution(userText)) {
+            return 'El intérprete libre no cerró bien todas las ramas. Te muestro los puntos que voy a completar y genero una propuesta estructurada para que la confirmes antes de aplicar.';
+        }
+        return 'No es un error del usuario: la frase tiene demasiadas decisiones para el intérprete libre. El camino seguro es armarla paso a paso con decisiones visibles.';
+    }
+
+    function guidedResolutionFixItems(userText) {
+        var items = [];
+        var hasIt = textHasAny(userText, ['it']);
+        var hasCompras = textHasAny(userText, ['compras']);
+        var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
+        var hasProveedor = textHasAny(userText, ['proveedor']);
+
+        items.push('Validar CAE con una condición SI / NO completa.');
+        if (hasDir) items.push('Rama SI: notificar a DIR_GENERAL con el número de CAE.');
+        if (hasCompras) items.push('Rama NO: notificar a COMPRAS con nivel advertencia y finalizar esa rama.');
+        if (hasIt) {
+            items.push('Agregar notificación a IT en la rama NO' + (hasProveedor ? ' incluyendo el proveedor obtenido de la NC.' : '.'));
+        }
+        items.push('Cerrar todas las ramas con Fin para que no quede ninguna salida pendiente.');
+        return items;
+    }
+
+    function renderGuidedResolutionAction(res, userText) {
+        var html = '';
+        var items = guidedResolutionFixItems(userText);
+        html += '  <div class="wf-ai-fallback-pending actionable fixable">';
+        html += '    <div class="wf-ai-fallback-label">Resolver acá</div>';
+        html += '    <div class="wf-ai-fallback-fix-title">Ya detecté dónde quedó trabado el intérprete libre</div>';
+        html += '    <div class="wf-ai-fallback-q-detail">No te dejo mirando el error. Voy a convertir esas decisiones en pasos explícitos y después te muestro el plan para confirmarlo.</div>';
+        html += '    <ul class="wf-ai-fallback-fix-list">';
+        items.forEach(function (x) { html += '<li>' + htmlEncode(x) + '</li>'; });
+        html += '    </ul>';
+        html += '    <div class="wf-ai-fallback-next-actions">';
+        html += '      <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-guided-resolution="1">Resolver y revisar plan</button>';
+        html += '      <button type="button" class="btn wf-ai-fallback-btn" data-wf-ai-open-guide="1">Editarlo paso a paso</button>';
+        html += '    </div>';
+        html += '  </div>';
+        return html;
+    }
+
+    function buildGuidedResolutionStepsFromPhrase(userText) {
+        if (!canBuildGuidedResolution(userText)) return false;
+
+        var hasIt = textHasAny(userText, ['it']);
+        var docId = guideSeq++;
+        var condId = guideSeq++;
+        var steps = [];
+
+        steps.push({
+            id: docId,
+            type: 'doc_load',
+            docTipo: firstDoc(['NOTA_CREDITO_ELECTRONICA_AR', 'NC_AR']) || 'NOTA_CREDITO_ELECTRONICA_AR',
+            path: 'input.filePath'
+        });
+
+        steps.push({
+            id: condId,
+            type: 'condition',
+            condition: 'cae',
+            fieldPath: 'biz.notaCredito.cae',
+            fieldLabel: 'CAE',
+            fieldType: 'texto',
+            operator: 'not_empty',
+            value: ''
+        });
+
+        steps.push({
+            id: guideSeq++,
+            type: 'notify',
+            branch: 'if_cond_true',
+            branchSourceId: condId,
+            destType: 'rol',
+            role: 'DIR_GENERAL',
+            user: '',
+            title: 'NC con CAE informado',
+            message: 'La nota de crédito tiene CAE informado: {{biz.notaCredito.cae}}.'
+        });
+
+        steps.push({
+            id: guideSeq++,
+            type: 'notify',
+            branch: 'if_cond_false',
+            branchSourceId: condId,
+            destType: 'rol',
+            role: 'COMPRAS',
+            user: '',
+            title: 'NC sin CAE',
+            level: 'warn',
+            message: 'La nota de crédito no tiene CAE informado. Revisar la documentación.'
+        });
+
+        if (hasIt) {
+            steps.push({
+                id: guideSeq++,
+                type: 'notify',
+                branch: 'if_cond_false',
+                branchSourceId: condId,
+                destType: 'rol',
+                role: 'IT',
+                user: '',
+                title: 'Proveedor de NC sin CAE',
+                message: 'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC no tiene CAE informado.'
+            });
+        }
+
+        steps.push({ id: guideSeq++, type: 'end' });
+
+        guideSteps = steps;
+        editingStepIndex = -1;
+        guideActiveTarget = { branch: 'then', sourceId: null, label: 'Flujo principal' };
+        renderGuideSteps();
+        renderAvailableFields();
+        renderActiveTargetBox();
+        updateGuideEditMode();
+        updatePromptFromSteps(false);
+        return true;
+    }
+
+    function resolveWithGuidedPlan() {
+        var txt = $('wfAiPrompt');
+        var userText = txt ? (txt.value || '') : '';
+        var base = buildSuggestedRewrite(userText) || stripFallbackClarifications(userText);
+        if (txt && base) txt.value = cleanGuidePhraseText(base).trim();
+
+        if (buildGuidedResolutionStepsFromPhrase(userText || base || '')) {
+            setWideMode(true);
+            aiGuidedPlanConfirmed = false;
+            var structuredResult = buildStructuredGuideResult(getCurrentAiPhrase());
+            if (structuredResult) {
+                structuredResult.guidedResolution = true;
+                structuredResult.requiresFinalConfirmation = true;
+            }
+            renderResult(structuredResult);
+            setStatus('Resolución generada. Revisá el plan y confirmalo antes de aplicar al canvas.', 'ok');
+            return;
+        }
+
+        openStepByStepGuide();
+    }
+
+    function addFallbackOption(question, label, clarification, css) {
+        question.options.push({ label: label, clarification: clarification, css: css || '' });
+    }
+
+    function buildFallbackQuestions(res, userText) {
+        var plan = (res && res.plan) || {};
+        var validation = (res && res.validation) || {};
+        var missing = plan.missingData || [];
+        var questions = [];
+        var hasNotifyWords = textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
+        var hasWarningWord = textHasAny(userText, ['advertencia', 'warning']);
+        var hasCae = textHasAny(userText, ['cae']);
+        var hasProveedor = textHasAny(userText, ['proveedor']);
+        var hasIt = textHasAny(userText, ['it']);
+        var roles = friendlyRoleList(userText);
+
+        if (hasNotifyWords && !planHasNodeType(plan, 'util.notify')) {
+            var qNotify = {
+                key: 'notify-mode',
+                title: 'Cuando decís notificar / avisar / informar',
+                detail: 'Para evitar adivinar, necesito confirmar si esto es una notificación interna o una tarea humana.',
+                options: []
+            };
+            addFallbackOption(qNotify, 'Usar notificación interna', 'cuando diga notificar, avisar o informar a ' + roles + ', crear notificaciones internas util.notify, no tareas humanas.', 'primary');
+            addFallbackOption(qNotify, 'Crear tarea humana', 'cuando diga enviar a ' + roles + ', crear tareas humanas para esos roles.', '');
+            addFallbackOption(qNotify, 'Solo registrar log', 'cuando diga informar o advertir, registrar logs del workflow y no crear tarea humana.', '');
+            questions.push(qNotify);
+        }
+
+        if (hasWarningWord) {
+            var qWarn = {
+                key: 'warning-mode',
+                title: 'La palabra advertencia puede significar dos cosas',
+                detail: 'Puede ser un aviso visible para un rol o un log técnico Warn. Elegí el comportamiento esperado.',
+                options: []
+            };
+            addFallbackOption(qWarn, 'Advertencia como notificación', 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
+            addFallbackOption(qWarn, 'Advertencia como log Warn', 'la advertencia debe ser un logger Warn del workflow.', '');
+            addFallbackOption(qWarn, 'Advertencia como tarea', 'la advertencia debe crear una tarea humana de revisión.', '');
+            questions.push(qWarn);
+        }
+
+        if (branchLooksIncomplete(plan) || validationMentionsBranches(validation)) {
+            var qBranch = {
+                key: 'branch-no',
+                title: 'Falta completar una rama SI / NO',
+                detail: 'Una condición nunca debería quedar con una rama pendiente. Decime qué hacer cuando no se cumple.',
+                options: []
+            };
+            addFallbackOption(qBranch, 'NO: notificar a COMPRAS', 'si la condición no se cumple, notificar a COMPRAS y luego finalizar.', 'primary');
+            addFallbackOption(qBranch, 'NO: registrar advertencia', 'si la condición no se cumple, registrar una advertencia Warn y luego finalizar.', '');
+            addFallbackOption(qBranch, 'NO: terminar flujo', 'si la condición no se cumple, finalizar el flujo sin más acciones.', '');
+            questions.push(qBranch);
+        }
+
+        if (hasCae || hasProveedor) {
+            var qData = {
+                key: 'data-message',
+                title: 'Datos dentro del mensaje',
+                detail: 'Detecté datos del documento. Conviene aclarar si deben ir dentro de las notificaciones.',
+                options: []
+            };
+            if (hasCae) addFallbackOption(qData, 'Incluir número de CAE', 'en el mensaje de la notificación incluir el número de CAE extraído de la NC.', '');
+            if (hasProveedor) addFallbackOption(qData, 'Incluir proveedor', 'en el mensaje de la notificación incluir el proveedor obtenido de la NC.', '');
+            if (hasCae && hasProveedor) addFallbackOption(qData, 'Incluir CAE y proveedor', 'en los mensajes incluir el número de CAE y el proveedor obtenido de la NC.', 'primary');
+            if (qData.options.length) questions.push(qData);
+        }
+
+        if (hasIt && hasCae) {
+            var qScope = {
+                key: 'it-scope',
+                title: '¿La notificación a IT va siempre o solo en una rama?',
+                detail: 'Cuando una frase mezcla varias acciones, conviene ubicar cada acción en la rama correcta.',
+                options: []
+            };
+            addFallbackOption(qScope, 'IT siempre', 'notificar a IT en ambas ramas, tenga o no tenga CAE.', 'primary');
+            addFallbackOption(qScope, 'IT solo si falta CAE', 'notificar a IT solo cuando la NC no tenga CAE.', '');
+            addFallbackOption(qScope, 'IT solo si tiene CAE', 'notificar a IT solo cuando la NC tenga CAE.', '');
+            questions.push(qScope);
+        }
+
+        if (missing.length) {
+            var missingText = normalizePhraseForSearch(missing.map(function (m) {
+                return String((m && (m.question || m.key || m.message)) || m || '');
+            }).join(' '));
+
+            if (missingText.indexOf('no se cumple') >= 0 || missingText.indexOf('rama') >= 0 || missingText.indexOf('condicion compuesta') >= 0) {
+                var qMissingBranch = {
+                    key: 'missing-branch-no-action',
+                    title: 'Falta cerrar la rama NO',
+                    detail: 'El plan sigue pidiendo qué hacer cuando la condición NO se cumple. Elegí una salida concreta.',
+                    options: []
+                };
+                addFallbackOption(qMissingBranch, 'NO: notificar a COMPRAS y finalizar', 'si la condición no se cumple, notificar a COMPRAS con nivel advertencia indicando que falta CAE y luego finalizar.', 'primary');
+                addFallbackOption(qMissingBranch, 'NO: registrar log Warn y finalizar', 'si la condición no se cumple, registrar un logger Warn indicando que falta CAE y luego finalizar; no crear tarea humana en esa rama.', '');
+                addFallbackOption(qMissingBranch, 'NO: crear tarea para COMPRAS', 'si la condición no se cumple, crear una tarea humana para COMPRAS y luego finalizar cuando se complete.', '');
+                questions.push(qMissingBranch);
+            } else {
+                var qMissing = {
+                    key: 'missing-data',
+                    title: 'Dato faltante detectado',
+                    detail: 'El validador pidió completar información antes de aplicar al canvas.',
+                    options: []
+                };
+                missing.slice(0, 2).forEach(function (m) {
+                    var q = String((m && (m.question || m.key || m.message)) || m || '');
+                    addFallbackOption(qMissing, q, 'completar el dato faltante: ' + q, '');
+                });
+                questions.push(qMissing);
+            }
+        }
+
+        return questions.filter(function (q) { return !fallbackQuestionAlreadyAnswered(q, userText); }).slice(0, 5);
+    }
+
+    function renderFallbackHelp(res, userText) {
+        syncFallbackSession(userText);
+        if (!fallbackNeedsHelp(res, userText)) return '';
+        var questions = buildFallbackQuestions(res, userText);
+        var rewrite = buildSuggestedRewrite(userText);
+        aiClarificationOptions = [];
+        aiRewriteOptions = [];
+
+        var html = '';
+        html += '<div class="wf-ai-fallback">';
+        html += '  <div class="wf-ai-fallback-head">';
+        html += '    <div><div class="wf-ai-fallback-kicker">Fallback asistido</div><div class="wf-ai-fallback-title">No voy a aplicar nada hasta que quede claro</div></div>';
+        html += '    <span class="wf-ai-fallback-badge">Necesita confirmación</span>';
+        html += '  </div>';
+        html += '  <div class="wf-ai-fallback-text">La frase parece tener una o más ambigüedades. Cada respuesta elegida queda tomada y no vuelve a mostrarse. Después verificamos de nuevo.</div>';
+        html += renderFallbackResolvedSummary();
+
+        if (rewrite) {
+            var rewriteKey = fallbackRewriteKey(rewrite);
+            var alreadyUsingRewrite = sameFallbackPhrase(userText, rewrite) || aiFallbackAcceptedRewriteKey === rewriteKey;
+            html += '  <div class="wf-ai-fallback-rewrite' + (alreadyUsingRewrite ? ' done' : '') + '">';
+            html += '    <div class="wf-ai-fallback-label">' + (aiFallbackResolvedItems.length ? 'Frase clara consolidada' : 'Frase más clara sugerida') + '</div>';
+            html += '    <div class="wf-ai-fallback-rewrite-text">' + htmlEncode(rewrite) + '</div>';
+            if (!alreadyUsingRewrite) {
+                var rewriteIdx = aiRewriteOptions.push(rewrite) - 1;
+                html += '    <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-rewrite-index="' + rewriteIdx + '">Usar esta frase y verificar</button>';
+            } else {
+                html += '    <div class="wf-ai-fallback-done-note">Esta frase clara ya está cargada. Si todavía hay errores, conviene armarlo paso a paso en vez de volver a verificar lo mismo.</div>';
+            }
+            html += '  </div>';
+        }
+
+        if (questions.length) {
+            questions.forEach(function (q) {
+                html += '  <div class="wf-ai-fallback-question" data-wf-ai-question-key="' + htmlEncode(q.key || '') + '">';
+                html += '    <div class="wf-ai-fallback-q-title">' + htmlEncode(q.title) + '</div>';
+                html += '    <div class="wf-ai-fallback-q-detail">' + htmlEncode(q.detail) + '</div>';
+                html += '    <div class="wf-ai-fallback-options">';
+                (q.options || []).forEach(function (opt) {
+                    var idx = aiClarificationOptions.push({
+                        clarification: opt.clarification || opt.label || '',
+                        questionKey: q.key || '',
+                        questionTitle: q.title || '',
+                        label: opt.label || 'Usar opción'
+                    }) - 1;
+                    html += '<button type="button" class="btn wf-ai-fallback-btn ' + htmlEncode(opt.css || '') + '" data-wf-ai-clarify-index="' + idx + '">' + htmlEncode(opt.label || 'Usar opción') + '</button>';
+                });
+                html += '    </div>';
+                html += '  </div>';
+            });
+        } else {
+            if (canBuildGuidedResolution(userText)) {
+                html += renderGuidedResolutionAction(res, userText);
+            } else {
+                html += '  <div class="wf-ai-fallback-pending actionable">';
+                html += '    <div class="wf-ai-fallback-label">Siguiente salida válida</div>';
+                html += '    <div>' + htmlEncode(fallbackResolutionText(res, userText)) + '</div>';
+                html += '    <div class="wf-ai-fallback-next-actions">';
+                html += '      <button type="button" class="btn wf-ai-fallback-btn" data-wf-ai-open-guide="1">Armarlo paso a paso</button>';
+                html += '    </div>';
+                html += '  </div>';
+            }
+        }
+
+        html += '  <div class="wf-ai-fallback-tools">';
+        html += '    <span>' + htmlEncode(fallbackResolutionTitle(res, userText)) + '</span>';
+        html += '  </div>';
+        html += '</div>';
+        return html;
+    }
+
+    function applyClarificationToPrompt(option) {
+        var txt = $('wfAiPrompt');
+        if (!txt) return;
+
+        var info = (typeof option === 'object' && option)
+            ? option
+            : { clarification: String(option || ''), questionKey: '', questionTitle: '', label: '' };
+        var clarification = String(info.clarification || '').trim();
+        if (!clarification) return;
+
+        markFallbackResolved(info.questionKey || '', info.questionTitle || '', info.label || '', clarification);
+
+        // No acumulamos aclaraciones viejas indefinidamente en el texto visible.
+        // Se conserva la frase original + las decisiones activas de esta sesión.
+        var base = stripFallbackClarifications(cleanGuidePhraseText(txt.value || '')).trim();
+        var adds = [];
+        aiFallbackResolvedItems.forEach(function (x) {
+            var c = String(x && x.clarification || '').trim();
+            if (c) adds.push('Aclaración: ' + c);
+        });
+        txt.value = [base].concat(adds).filter(Boolean).join(' ');
+        txt.focus();
+        setStatus('Decisión tomada. Verificando nuevamente...', 'busy');
+        setTimeout(verificarFrase, 80);
+    }
+
+    function replacePromptAndVerify(newPhrase) {
+        var txt = $('wfAiPrompt');
+        if (!txt) return;
+        aiFallbackResolved = {};
+        aiFallbackResolvedItems = [];
+        aiFallbackBaseKey = '';
+        aiFallbackAcceptedRewriteKey = fallbackRewriteKey(newPhrase || '');
+        txt.value = cleanGuidePhraseText(newPhrase || '').trim();
+        txt.focus();
+        setStatus('Frase clara cargada. Verificando...', 'busy');
+        setTimeout(verificarFrase, 80);
+    }
+
+    function openStepByStepGuide() {
+        var txt = $('wfAiPrompt');
+        if (txt) {
+            var clean = buildSuggestedRewrite(txt.value || '') || stripFallbackClarifications(txt.value || '');
+            txt.value = cleanGuidePhraseText(clean || '').trim();
+        }
+        var body = $('wfAiGuideBody');
+        var toggle = $('wfAiGuideToggle');
+        if (body && body.style.display === 'none' && toggle) toggle.click();
+        setWideMode(true);
+        setStatus('Modo paso a paso abierto. La frase quedó limpia para usarla como guía, sin aclaraciones acumuladas.', 'ok');
+    }
+
+    function bindFallbackActions(container) {
+        container = container || $('wfAiResult');
+        if (!container) return;
+
+        Array.prototype.forEach.call(container.querySelectorAll('[data-wf-ai-clarify-index]'), function (btn) {
+            btn.addEventListener('click', function () {
+                var idx = parseInt(btn.getAttribute('data-wf-ai-clarify-index') || '-1', 10);
+                if (idx >= 0 && idx < aiClarificationOptions.length) {
+                    removeFallbackQuestionImmediately(btn);
+                    applyClarificationToPrompt(aiClarificationOptions[idx]);
+                }
+            });
+        });
+
+        Array.prototype.forEach.call(container.querySelectorAll('[data-wf-ai-rewrite-index]'), function (btn) {
+            btn.addEventListener('click', function () {
+                var idx = parseInt(btn.getAttribute('data-wf-ai-rewrite-index') || '-1', 10);
+                if (idx >= 0 && idx < aiRewriteOptions.length) replacePromptAndVerify(aiRewriteOptions[idx]);
+            });
+        });
+
+        Array.prototype.forEach.call(container.querySelectorAll('[data-wf-ai-open-guide]'), function (btn) {
+            btn.addEventListener('click', openStepByStepGuide);
+        });
+
+        Array.prototype.forEach.call(container.querySelectorAll('[data-wf-ai-guided-resolution]'), function (btn) {
+            btn.addEventListener('click', resolveWithGuidedPlan);
+        });
+    }
+
+    function verificationStatus(res, userText) {
+        if (!res || !res.ok) return { css: 'error', label: 'FALLA', title: 'No se pudo interpretar la frase' };
+        var validation = res.validation || {};
+        var plan = res.plan || {};
+        var missing = plan.missingData || [];
+        var errors = validation.errors || [];
+        var warningGroups = collectPhraseWarnings(res, validation, plan);
+
+        if (shouldLetFallbackOwnErrors(res, userText)) return { css: 'warn', label: 'GUIADO', title: 'La frase necesita resolución guiada, no otro reintento libre' };
+        if (errors.length || missing.length) return { css: 'error', label: 'REVISAR', title: 'La frase tiene errores o datos faltantes' };
+        if (warningGroups.functional.length) return { css: 'warn', label: 'OK CON AVISOS', title: 'La frase se entiende, pero conviene revisar advertencias funcionales' };
+        return { css: 'ok', label: 'OK', title: 'La frase se entiende y no tiene advertencias funcionales' };
+    }
+
+    function copyToClipboard(text, okMessage) {
+        text = String(text == null ? '' : text);
+        if (!text) {
+            setStatus('No hay texto para copiar.', 'warn');
+            return;
+        }
+        function fallback() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', 'readonly');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); setStatus(okMessage || 'Copiado.', 'ok'); }
+            catch (e) { setStatus('No se pudo copiar automáticamente.', 'warn'); }
+            document.body.removeChild(ta);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                setStatus(okMessage || 'Copiado.', 'ok');
+            }).catch(fallback);
+        } else {
+            fallback();
+        }
+    }
+
+    function renderPhraseVerification(res, userText) {
+        var out = $('wfAiResult');
+        if (!out) return;
+        lastPlan = null;
+
+        var status = verificationStatus(res, userText);
+        var plan = (res && res.plan) || {};
+        var validation = (res && res.validation) || {};
+        var missing = plan.missingData || [];
+        var warningGroups = collectPhraseWarnings(res, validation, plan);
+        var functionalWarnings = warningGroups.functional || [];
+        var technicalWarnings = warningGroups.technical || [];
+
+        var technical = res || { ok: false, error: 'Sin respuesta de verificación.' };
+        var technicalJson = JSON.stringify(technical, null, 2);
+        var nodeTypes = planNodeTypes(plan);
+        var understood = phraseVerificationText(plan);
+
+        var html = '';
+        html += '<div class="wf-ai-verify-card ' + htmlEncode(status.css) + '">';
+        html += '  <div class="wf-ai-verify-head">';
+        html += '    <div><div class="wf-ai-verify-kicker">Verificación de frase</div><div class="wf-ai-verify-title">' + htmlEncode(status.title) + '</div></div>';
+        html += '    <span class="wf-ai-verify-badge ' + htmlEncode(status.css) + '">' + htmlEncode(status.label) + '</span>';
+        html += '  </div>';
+        html += '  <div class="wf-ai-verify-phrase">' + htmlEncode(userText || '') + '</div>';
+        html += '</div>';
+        html += renderFallbackHelp(res, userText);
+
+        if (!res || !res.ok) {
+            html += '<div class="wf-ai-error">' + htmlEncode((res && (res.messageToUser || res.error)) || 'No se pudo verificar la frase.') + '</div>';
+        } else {
+            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Se entendió</div>';
+            if (understood.length) {
+                html += '<ul>';
+                understood.forEach(function (x) { html += '<li>' + htmlEncode(x) + '</li>'; });
+                html += '</ul>';
+            } else {
+                html += '<div class="wf-ai-meta">No se detectaron nodos para crear.</div>';
+            }
+            html += '</div>';
+
+            if (nodeTypes.length) {
+                html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Nodos que se crearían</div><div class="wf-ai-node-chip-list">';
+                nodeTypes.forEach(function (x) { html += '<span class="wf-ai-node-chip">' + htmlEncode(x) + '</span>'; });
+                html += '</div></div>';
+            }
+
+            if (plan.branchPlan && plan.branchPlan.branches && plan.branchPlan.branches.length) {
+                html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Ramas detectadas</div><ul>';
+                plan.branchPlan.branches.forEach(function (b) {
+                    html += '<li><strong>' + htmlEncode(b.condition || '') + '</strong><br />SI: ' + htmlEncode(b.truePath || '') + '<br />NO: ' + htmlEncode(b.falsePath || '') + '</li>';
+                });
+                html += '</ul></div>';
+            }
+        }
+
+        var fallbackOwnsErrors = shouldLetFallbackOwnErrors(res, userText);
+        if (!fallbackOwnsErrors) {
+            html += renderList('Datos faltantes', missing, 'wf-ai-warning-list');
+            html += renderList('Errores', validation.errors || [], 'wf-ai-error-list');
+            html += renderList('Advertencias funcionales', functionalWarnings, 'wf-ai-warning-list');
+        } else if (functionalWarnings.length) {
+            html += renderList('Advertencias funcionales', functionalWarnings, 'wf-ai-warning-list');
+        }
+        if (technicalWarnings.length) {
+            html += '<details class="wf-ai-tech-warnings"><summary>Advertencias técnicas ocultas (' + technicalWarnings.length + ')</summary>';
+            html += renderList('Solo diagnóstico técnico', technicalWarnings, 'wf-ai-tech-warning-list');
+            html += '</details>';
+        }
+
+        var hasValidationErrors = ((validation.errors || []).length > 0) || (missing.length > 0);
+        var stillNeedsFallback = fallbackNeedsHelp(res, userText);
+        var canInterpretSafely = !!(res && res.ok && !hasValidationErrors && !stillNeedsFallback);
+
+        html += '<div class="wf-ai-actions wf-ai-verify-actions">';
+        html += '<button type="button" class="btn" id="wfAiVerifyCopyPhrase">Copiar frase</button>';
+        html += '<button type="button" class="btn" id="wfAiVerifyCopyJson">Copiar JSON técnico</button>';
+        if (canInterpretSafely) {
+            html += '<button type="button" class="btn" id="wfAiVerifyInterpret">Interpretar para aplicar</button>';
+        } else if (res && res.ok) {
+            html += '<button type="button" class="btn" disabled="disabled" title="Primero resolvé datos faltantes, errores o ambigüedades.">Interpretar para aplicar</button>';
+        }
+        html += '</div>';
+        html += '<details class="wf-ai-json"><summary>Ver JSON técnico de verificación</summary><pre id="wfAiVerifyJsonPre">' + htmlEncode(technicalJson) + '</pre></details>';
+
+        out.innerHTML = html;
+        bindFallbackActions(out);
+
+        var copyPhrase = $('wfAiVerifyCopyPhrase');
+        if (copyPhrase) copyPhrase.addEventListener('click', function () { copyToClipboard(userText || '', 'Frase copiada.'); });
+
+        var copyJson = $('wfAiVerifyCopyJson');
+        if (copyJson) copyJson.addEventListener('click', function () { copyToClipboard(technicalJson, 'JSON técnico copiado.'); });
+
+        var interpretBtn = $('wfAiVerifyInterpret');
+        if (interpretBtn) interpretBtn.addEventListener('click', function () { interpretar(); });
+    }
+
+    function getCurrentAiPhrase() {
+        var txt = $('wfAiPrompt');
+        var userText = cleanGuidePhraseText(txt ? (txt.value || '').trim() : '');
+        if (txt && txt.value !== userText) txt.value = userText;
+        return userText;
+    }
+
+    function callAiAssistant(userText, done, fail, always) {
+        fetch('Api/WF_AiAssistant.ashx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({
+                userText: userText,
+                workflowJson: currentWorkflowJson()
+            })
+        })
+            .then(function (r) { return r.json(); })
+            .then(done)
+            .catch(function (err) {
+                if (fail) fail(err);
+            })
+            .finally(function () {
+                if (always) always();
+            });
+    }
+
+    function verificarFrase() {
+        aiGuidedPlanConfirmed = false;
+        var userText = getCurrentAiPhrase();
+        if (!userText) {
+            setStatus('Escribí primero una frase para verificar.', 'warn');
+            return;
+        }
+
+        var structuredResult = buildStructuredGuideResult(userText);
+        if (structuredResult) {
+            renderPhraseVerification(structuredResult, userText);
+            setStatus('Verificación generada. No se aplicó nada al canvas.', 'ok');
+            return;
+        }
+
+        setStatus('Verificando frase con ML.NET local...', 'busy');
+        var btn = $('wfAiVerify');
+        if (btn) btn.disabled = true;
+
+        callAiAssistant(userText, function (res) {
+            renderPhraseVerification(res, userText);
+            if (res && res.ok) setStatus('Verificación generada. No se aplicó nada al canvas.', 'ok');
+            else setStatus('La frase no pasó la verificación.', 'error');
+        }, function (err) {
+            renderPhraseVerification({ ok: false, error: err.message || String(err) }, userText);
+            setStatus('Error verificando la frase.', 'error');
+        }, function () {
+            if (btn) btn.disabled = false;
+        });
+    }
+
     function canApplyPlan(plan, validation, missing) {
         if (!plan || !plan.actions || !plan.actions.length) return false;
         if (missing && missing.length) return false;
@@ -3215,9 +4177,98 @@
         }
     }
 
+
+    // ------------------------------------------------------------
+    // fix71e: confirmación explícita antes de aplicar un plan guiado
+    // ------------------------------------------------------------
+    function notifyDestinationText(step) {
+        step = step || {};
+        if (step.destType === 'usuario' || step.user) return step.user || 'usuario';
+        return step.role || 'rol';
+    }
+
+    function guidedStepHumanText(step) {
+        step = step || {};
+        if (step.type === 'doc_load') return 'Cargar documento: ' + docPhrase(step.docTipo || '');
+        if (step.type === 'condition') return 'Validar condición: ' + conditionInfo(step).text;
+        if (step.type === 'notify') {
+            var level = normalizeKey(step.level || step.nivel || 'info') === 'WARN' ? 'advertencia' : 'informativa';
+            return 'Notificar a ' + notifyDestinationText(step) + ' (' + level + '): ' + (step.title || 'Aviso interno');
+        }
+        if (step.type === 'human_task') return 'Crear tarea humana para ' + taskDestinationForPlan(step) + ': ' + (step.purpose || 'revisión');
+        if (step.type === 'logger') return 'Registrar log ' + (step.level || 'Info') + ': ' + (step.message || '');
+        if (step.type === 'end') return 'Finalizar flujo';
+        return createStepTitle(step);
+    }
+
+    function guidedResolutionReviewHtml(confirmed) {
+        var cond = null;
+        var trueSteps = [];
+        var falseSteps = [];
+        var mainSteps = [];
+        guideSteps.forEach(function (st) {
+            if (!st) return;
+            if (st.type === 'condition' && !cond) cond = st;
+            if (st.branch === 'if_cond_true') trueSteps.push(st);
+            else if (st.branch === 'if_cond_false') falseSteps.push(st);
+            else if (!isBranchChildStep(st) && st.type !== 'end') mainSteps.push(st);
+        });
+
+        var html = '';
+        html += '<div class="wf-ai-guided-review ' + (confirmed ? 'confirmed' : '') + '">';
+        html += '  <div class="wf-ai-guided-review-head">';
+        html += '    <div><div class="wf-ai-guided-review-kicker">Plan guiado generado</div><div class="wf-ai-guided-review-title">Revisá esta lectura funcional antes de aplicar</div></div>';
+        html += '    <span class="wf-ai-guided-review-badge">' + (confirmed ? 'Confirmado' : 'Pendiente de confirmar') + '</span>';
+        html += '  </div>';
+        html += '  <div class="wf-ai-guided-review-text">Este plan ya no depende de seguir adivinando con la frase libre. Está armado con pasos explícitos. Si esto coincide con lo esperado, confirmalo y recién después aplicalo al canvas.</div>';
+
+        if (mainSteps.length) {
+            html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Antes de la condición</div><ol>';
+            mainSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+            html += '</ol></div>';
+        }
+
+        if (cond) {
+            html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Condición</div><div>' + htmlEncode(guidedStepHumanText(cond)) + '</div></div>';
+        }
+
+        html += '  <div class="wf-ai-guided-branches">';
+        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">Rama SI / cumple</div>';
+        if (trueSteps.length) {
+            html += '<ol>';
+            trueSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+            html += '<li>Finalizar flujo</li></ol>';
+        } else {
+            html += '<div class="wf-ai-guided-muted">Sin pasos específicos; finaliza.</div>';
+        }
+        html += '    </div>';
+        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">Rama NO / no cumple</div>';
+        if (falseSteps.length) {
+            html += '<ol>';
+            falseSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+            html += '<li>Finalizar flujo</li></ol>';
+        } else {
+            html += '<div class="wf-ai-guided-muted">Sin pasos específicos; finaliza.</div>';
+        }
+        html += '    </div>';
+        html += '  </div>';
+
+        if (!confirmed) {
+            html += '  <div class="wf-ai-guided-review-actions">';
+            html += '    <button type="button" class="btn wf-ai-guided-confirm" id="wfAiConfirmGuidedPlan">Confirmar plan guiado</button>';
+            html += '    <button type="button" class="btn" data-wf-ai-open-guide="1">Editar paso a paso</button>';
+            html += '  </div>';
+        } else {
+            html += '  <div class="wf-ai-guided-confirmed-note">Plan confirmado. Ahora podés aplicarlo al canvas.</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
     function renderResult(res) {
         var out = $('wfAiResult');
         if (!out) return;
+        lastAssistantResult = res || null;
 
         if (!res || !res.ok) {
             lastPlan = null;
@@ -3239,11 +4290,9 @@
         var validation = res.validation || {};
         var actions = plan.actions || [];
         var missing = plan.missingData || [];
-        var warnings = [];
-
-        if (validation.warnings && validation.warnings.length) warnings = warnings.concat(validation.warnings);
-        if (res.catalogWarnings && res.catalogWarnings.length) warnings = warnings.concat(res.catalogWarnings);
-        if (plan.warnings && plan.warnings.length) warnings = warnings.concat(plan.warnings);
+        var warningGroups = collectPhraseWarnings(res, validation, plan);
+        var warnings = warningGroups.functional || [];
+        var technicalWarnings = warningGroups.technical || [];
 
         var html = '';
         html += '<div class="wf-ai-message">' + htmlEncode(res.messageToUser || plan.messageToUser || '') + '</div>';
@@ -3280,27 +4329,55 @@
             html += '</ol></div>';
         }
 
+        var requiresGuidedConfirmation = !!res.requiresFinalConfirmation;
+        if (requiresGuidedConfirmation) {
+            html += guidedResolutionReviewHtml(aiGuidedPlanConfirmed);
+        }
+
+        html += renderFallbackHelp(res, getCurrentAiPhrase());
+
         if (actions.length) {
             var canApply = canApplyPlan(plan, validation, missing);
+            if (requiresGuidedConfirmation && !aiGuidedPlanConfirmed) canApply = false;
             var disabled = canApply ? '' : ' disabled';
             var hint = canApply
                 ? 'Aplicará nodos y aristas en el canvas. Revisar antes de guardar.'
-                : 'Para aplicar al canvas, la propuesta no debe tener datos faltantes ni errores de validación.';
+                : (requiresGuidedConfirmation && !aiGuidedPlanConfirmed)
+                    ? 'Confirmá primero el plan guiado. No aplico automáticamente una conversión desde fallback.'
+                    : 'Para aplicar al canvas, la propuesta no debe tener datos faltantes ni errores de validación.';
             html += '<div class="wf-ai-actions" style="margin-top:8px">';
             html += '<button type="button" class="btn" id="wfAiApply"' + disabled + '>Aplicar al canvas</button>';
             html += '</div>';
             html += '<div class="wf-ai-meta">' + htmlEncode(hint) + '</div>';
         }
 
-        html += renderList('Datos faltantes', missing, '');
-        html += renderList('Errores de validación', validation.errors || [], 'wf-ai-error-list');
-        html += renderList('Advertencias', warnings, 'wf-ai-warning-list');
+        var resultFallbackOwnsErrors = shouldLetFallbackOwnErrors(res, getCurrentAiPhrase());
+        if (!resultFallbackOwnsErrors) {
+            html += renderList('Datos faltantes', missing, '');
+            html += renderList('Errores de validación', validation.errors || [], 'wf-ai-error-list');
+            html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
+        } else if (warnings.length) {
+            html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
+        }
+        if (technicalWarnings.length) {
+            html += '<details class="wf-ai-tech-warnings"><summary>Advertencias técnicas ocultas (' + technicalWarnings.length + ')</summary>';
+            html += renderList('Solo diagnóstico técnico', technicalWarnings, 'wf-ai-tech-warning-list');
+            html += '</details>';
+        }
         html += '<details class="wf-ai-json"><summary>Ver JSON técnico</summary><pre>' + htmlEncode(JSON.stringify(plan, null, 2)) + '</pre></details>';
 
         out.innerHTML = html;
+        bindFallbackActions(out);
 
         var applyBtn = $('wfAiApply');
         if (applyBtn) applyBtn.addEventListener('click', applyLastPlan);
+
+        var confirmGuidedBtn = $('wfAiConfirmGuidedPlan');
+        if (confirmGuidedBtn) confirmGuidedBtn.addEventListener('click', function () {
+            aiGuidedPlanConfirmed = true;
+            setStatus('Plan guiado confirmado. Ahora podés aplicarlo al canvas.', 'ok');
+            renderResult(lastAssistantResult);
+        });
     }
 
     // ------------------------------------------------------------
@@ -3443,10 +4520,12 @@
             var destinoTipo = step.destType === 'usuario' ? 'usuario' : 'rol';
             var usuarioDestino = destinoTipo === 'usuario' ? (step.user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD') : '';
             var rolDestino = destinoTipo === 'rol' ? (step.role || firstRole(['COMPRAS'])) : '';
-            return makePlanAction('util.notify', labelFor('Notificar'), {
+            var destinoLabel = usuarioDestino || rolDestino || 'destino';
+            var notifyLabel = destinoLabel ? ('Notificar a ' + destinoLabel) : 'Notificar';
+            return makePlanAction('util.notify', labelFor(notifyLabel), {
                 tipo: 'sistema',
                 canal: 'sistema',
-                nivel: 'info',
+                nivel: step.level || step.nivel || 'info',
                 destinoTipo: destinoTipo,
                 usuarioDestino: usuarioDestino,
                 rolDestino: rolDestino,
@@ -3907,7 +4986,7 @@
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix36',
+            model: 'Constructor IA estructurado fix71e',
             messageToUser: plan.messageToUser,
             plan: plan,
             validation: buildFunctionalValidation(),
@@ -3917,9 +4996,8 @@
 
 
     function interpretar() {
-        var txt = $('wfAiPrompt');
-        var userText = cleanGuidePhraseText(txt ? (txt.value || '').trim() : '');
-        if (txt && txt.value !== userText) txt.value = userText;
+        aiGuidedPlanConfirmed = false;
+        var userText = getCurrentAiPhrase();
         if (!userText) {
             setStatus('Escribí primero qué querés construir.', 'warn');
             return;
@@ -3936,27 +5014,16 @@
         var btn = $('wfAiRun');
         if (btn) btn.disabled = true;
 
-        fetch('Api/WF_AiAssistant.ashx', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=utf-8' },
-            body: JSON.stringify({
-                userText: userText,
-                workflowJson: currentWorkflowJson()
-            })
-        })
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                renderResult(res);
-                if (res.ok) setStatus('Propuesta recibida. Revisá y aplicá al canvas cuando esté correcta.', 'ok');
-                else setStatus('No se pudo obtener una propuesta válida.', 'error');
-            })
-            .catch(function (err) {
-                renderResult({ ok: false, error: err.message || String(err) });
-                setStatus('Error llamando al Asistente IA.', 'error');
-            })
-            .finally(function () {
-                if (btn) btn.disabled = false;
-            });
+        callAiAssistant(userText, function (res) {
+            renderResult(res);
+            if (res.ok) setStatus('Propuesta recibida. Revisá y aplicá al canvas cuando esté correcta.', 'ok');
+            else setStatus('No se pudo obtener una propuesta válida.', 'error');
+        }, function (err) {
+            renderResult({ ok: false, error: err.message || String(err) });
+            setStatus('Error llamando al Asistente IA.', 'error');
+        }, function () {
+            if (btn) btn.disabled = false;
+        });
     }
 
     function init() {
@@ -3964,9 +5031,13 @@
         ensureWideModeUi();
         ensureGuideUi();
         startAssistantInspectorWatcher();
+        setTimeout(importRegressionPhraseIntoConstructor, 0);
 
         var btn = $('wfAiRun');
         if (btn) btn.addEventListener('click', interpretar);
+
+        var verify = $('wfAiVerify');
+        if (verify) verify.addEventListener('click', verificarFrase);
 
         var clear = $('wfAiClear');
         if (clear) clear.addEventListener('click', function () {

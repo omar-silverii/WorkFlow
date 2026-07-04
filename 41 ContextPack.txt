@@ -1,0 +1,584 @@
+CONTEXTPACK — Workflow Studio / Constructor IA v2 / Phrase Engine
+Cierre de versión posterior a fix68c
+1. Regla de arranque para próxima sesión
+
+Omar va a cerrar versión, subir el proyecto a GitHub y en la próxima sesión pasará un ZIP completo nuevo de Workflow Studio WebForms.
+
+La próxima sesión debe arrancar así:
+
+Leer completo este ContextPack.
+Esperar el ZIP completo actualizado.
+No proponer cambios de código antes de revisar el ZIP real.
+Revisar los archivos reales del ZIP.
+Compilar.
+Ejecutar banco de regresión IA.
+Confirmar que el estado base sigue en:
+WF_AiRegression.aspx
+OK=14 / FALLA=0 / SKIP=0
+
+No usar fixes sueltos viejos si el ZIP completo ya los contiene.
+
+2. Reglas obligatorias de trabajo
+
+Mantener las reglas habituales de Omar:
+
+No inventar nada.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Trabajar siempre sobre código real del ZIP.
+No mandar archivo completo si no se verificó el archivo real actual.
+Entregar correcciones como ZIP con estructura real de carpetas.
+Incluir LEEME en cada ZIP correctivo.
+Cambios mínimos y precisos.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+No volver atrás sobre temas ya cerrados salvo bug real.
+
+No tocar salvo bug real explícito:
+
+WorkflowUI / canvas / aristas / zoom / minimapa
+Motor de ejecución
+WF_Instancias
+WF_Instancia_Mapa
+NC_AR
+FACTURA_AR
+extractores documentales
+SMTP / email.send
+HSubFlow.cs / runtime subflow
+3. Estado funcional validado antes del cierre
+
+Quedó validada la línea:
+
+Constructor IA
+→ Phrase Engine / generación
+→ Canvas
+→ Guardar definición
+→ Ejecutar motor
+→ Logs
+→ Mapa de instancia
+
+Para nodos operativos importantes.
+
+4. Fixes aplicados y validados en esta etapa
+Línea mapa / ejecución
+fix57_mapa_orden_ejecucion: OK
+
+El mapa de instancia muestra el camino ejecutado en orden real de logs. No tocar mapa salvo bug real.
+
+Línea banco de regresión IA
+fix58_banco_regresion_ia: OK
+fix58b_compile: OK
+fix58d_modo_seguro: OK
+
+Se creó WF_AiRegression.aspx, banco de regresión IA, lectura desde:
+
+App_Data/WF_AI/ai_regression_cases.json
+
+El banco no aplica al canvas ni ejecuta motor. Valida generación del plan, nodos, conexiones y auditoría semántica según cada caso.
+
+Línea semántica A-F
+fix59_semantica_if_compuesto_any: OK
+fix60_semantica_negacion_cae_comprobante: OK
+fix61_semantica_if_compuesto_all: OK
+fix62_semantica_multiples_tareas_humanas: OK
+fix62b_semantica_multiples_tareas_no_romper_notify: OK
+
+Los primeros 6 casos del banco quedaron con auditoría semántica fuerte.
+
+Línea SQL / HTTP / Logger
+fix63_regresion_sql_http_logger: OK
+fix65_semantica_http_sql_logger: OK
+fix65b_http_url_semantic_split: OK
+
+Se agregaron y fortalecieron semánticamente:
+
+http.request
+data.sql
+util.logger
+Línea File / State / Queue
+fix64_regresion_file_state_queue: OK
+fix64b_queue_catalog_validator: OK
+fix66_semantica_file_state_queue: OK
+
+Se agregaron y fortalecieron semánticamente:
+
+file.write
+file.read
+state.vars
+queue.publish
+queue.consume
+Línea queue debug operativo
+fix67_queue_debug_logs_opcionales: OK
+fix67b_queue_debug_compile: OK
+fix68_queue_debug_visible_inspector: OK
+fix68b_queue_debug_build_oculto: reemplazado
+fix68c_queue_build_log_eliminado: OK
+
+Objetivo cerrado:
+
+queue.consume tiene debug visible en inspector.
+debug default = false.
+Los logs debug solo salen si debug=true.
+La línea técnica [Queue.ConsumeSql/BUILD] fue eliminada.
+Los logs operativos quedan limpios.
+5. Banco de regresión IA actual
+
+Estado final validado:
+
+WF_AiRegression.aspx
+OK=14 / FALLA=0 / SKIP=0
+Casos actuales
+A_NO_SUPERA_CASO_CONTRARIO
+B_NOTIFY_POR_RAMA
+C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE
+D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO
+E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS
+F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS
+G_HTTP_REQUEST_LOGGER
+H_SQL_SELECT_LOGGER
+I_LOGGER_SIMPLE
+J_FILE_WRITE_LOGGER
+K_FILE_READ_LOGGER
+L_STATE_VARS_LOGGER
+M_QUEUE_PUBLISH_LOGGER
+N_QUEUE_CONSUME_LOGGER
+6. Cobertura semántica validada
+A — No supera / caso contrario
+
+Valida frase con:
+
+Si no supera 200000 → COMPRAS
+Caso contrario → DIR_GENERAL
+DIR_GENERAL APTO → Logger Info
+DIR_GENERAL NO APTO → Logger Warn
+
+Esperado validado:
+
+control.if total > 200000
+TRUE/SI → DIR_GENERAL
+FALSE/NO → COMPRAS
+phraseSemanticConsistencyOk = true
+warnings vacío
+errors vacío
+B — Notificaciones por rama
+
+Valida:
+
+Si total > 200000 → DIR_GENERAL
+Si Dirección aprueba → notify COMPRAS
+Si Dirección rechaza → logger Warn + notify COMPRAS
+Caso contrario → logger Info
+
+Quedó corregido que el auditor no exija logger cuando la frase pide notify.
+
+C — IF compuesto ANY positivo
+
+Valida:
+
+CAE no vacío OR comprobante asociado no vacío
+rulesMode = any
+SI → ADM_FIN
+NO → COMPRAS
+
+Semántica completa OK.
+
+D — IF compuesto ANY negativo
+
+Valida:
+
+Si no tiene CAE o falta comprobante asociado
+rulesMode = any
+CAE empty
+comprobante empty
+SI → COMPRAS
+NO → ADM_FIN
+
+Semántica completa OK.
+
+E — IF compuesto ALL
+
+Valida:
+
+Tiene CAE
+total > 200000
+itemsCount > 0
+rulesMode = all
+SI → DIR_GENERAL
+NO → COMPRAS
+DIR_GENERAL APTO → Logger Info
+DIR_GENERAL NO APTO → Logger Warn
+
+Semántica completa OK.
+
+F — Múltiples tareas humanas
+
+Valida:
+
+IF faltantes CAE/comprobante
+SI → COMPRAS
+NO → ADM_FIN
+
+COMPRAS APTO → Logger Info
+COMPRAS NO APTO → Logger Warn
+ADM_FIN APTO → Logger Info
+ADM_FIN NO APTO → Logger Warn
+
+Auditor reforzado: valida que el logger correcto esté conectado en la rama correcta del IF de resultado humano.
+
+G — HTTP + Logger
+
+Valida:
+
+http.request
+method = GET
+url = /Api/Ping.ashx
+Logger Info = HTTP OK
+
+Se corrigió split de URL para no fallar con .ashx.
+
+H — SQL + Logger
+
+Valida:
+
+data.sql
+connectionStringName = DefaultConnection
+query = SELECT TOP 10 Numero, Asegurado FROM PolizasDemo;
+Logger Info = Consulta SQL OK
+I — Logger simple
+
+Valida:
+
+util.logger
+level = Info
+message = Prueba de logger
+J — file.write
+
+Valida:
+
+file.write
+path = C:\temp\wf_ai_regression.txt
+content = Prueba file write
+encoding = utf-8
+overwrite = true
+K — file.read
+
+Valida:
+
+file.read
+path = C:\temp\wf_ai_regression.txt
+salida = archivo
+encoding = utf-8
+asJson = false
+L — state.vars
+
+Valida:
+
+state.vars
+set vars.regresion = OK
+M — queue.publish
+
+Valida:
+
+queue.publish
+broker = sql
+queue = banco-regresion
+payload = Prueba queue
+connectionStringName = DefaultConnection
+N — queue.consume
+
+Valida:
+
+queue.consume
+broker = sql
+queue = banco-regresion
+take = 1
+prefetch = 1
+connectionStringName = DefaultConnection
+outputPrefix = queue.consume
+debug = false
+7. Camino A — Ejecución real validada
+
+Se probó ejecución real para nodos operativos.
+
+Logger simple
+
+Validado con instancia real.
+
+Logs esperados y vistos:
+
+[Start]
+[Logger] [Info] Prueba real de logger desde Constructor IA
+[End]
+
+Mapa:
+
+Inicio
+→ Registrar evento
+→ Fin
+HTTP + Logger
+
+Validado con:
+
+GET /Api/Ping.ashx
+
+Logs vistos:
+
+[HTTP] client=intranet GET http://localhost:55557/Api/Ping.ashx => 200
+[Logger] [Info] HTTP OK
+[End]
+SQL + Logger
+
+Validado con consulta segura:
+
+SELECT 1 AS Valor, 'OK' AS Estado;
+
+Logs vistos:
+
+[data.sql] usando connectionStringName='DefaultConnection'
+[data.sql] SELECT ejecutado. Filas vistos:
+
+```text
+[data.sql] usando connectionStringName='DefaultConnection'
+[data.sql] SELECT ejecutado. Filas devueltas: 1
+[Logger] [Info] Consulta SQL OK
+[End]
+file.write + Logger
+
+Validado:
+
+C:\temp\wf_prueba_real.txt
+
+Logs vistos:
+
+[file.write] archivo escrito correctamente: C:\temp\wf_prueba_real.txt
+[Logger] [Info] Archivo escrito OK
+[End]
+state.vars + Logger
+
+Validado:
+
+vars.pruebaReal = OK
+
+Logs vistos:
+
+[state.vars] SET 1 variable(s): vars.pruebaReal
+[Logger] [Info] Variable guardada OK
+[End]
+queue.publish + Logger
+
+Validado:
+
+queue = prueba-real
+payload = Mensaje real desde Workflow Studio
+
+Logs vistos:
+
+[Queue.PublishSql] Encolado Id=30055 queue='prueba-real'.
+[Logger] [Info] Cola publicada OK
+[End]
+queue.consume + Logger
+
+Validado con mensaje real:
+
+[Queue.ConsumeSql] Mensaje Id=30055 -> payload en Estado['payload'].
+[Queue.ConsumeSql] Consumidos 1 mensaje(s) de 'prueba-real'.
+[Logger] [Info] Cola consumida OK
+[End]
+
+Luego validado también sin mensajes:
+
+[Queue.ConsumeSql] No hay mensajes pendientes en 'prueba-real'.
+[Logger] [Info] Cola consumida OK
+[End]
+
+Con debug=false, ya no aparecen logs debug ni BUILD.
+
+8. Estado final de queue.consume
+Parámetro visible
+
+queue.consume debe mostrar en Inspector:
+
+Broker
+Queue
+Take
+Prefetch
+ConnectionString
+Output prefix
+Debug
+
+Debug debe ser checkbox visible como:
+
+Mostrar logs debug
+JSON esperado
+{
+  "broker": "sql",
+  "queue": "prueba-real",
+  "take": 1,
+  "prefetch": 1,
+  "connectionStringName": "DefaultConnection",
+  "outputPrefix": "queue.consume",
+  "debug": false
+}
+Producción
+
+Sin debug o con:
+
+"debug": false
+
+solo logs operativos:
+
+[Queue.ConsumeSql] No hay mensajes pendientes en 'prueba-real'.
+[Logger] [Info] Cola consumida OK
+[End]
+Diagnóstico temporal
+
+Con:
+
+"debug": true
+
+pueden aparecer logs internos útiles:
+
+[Queue.ConsumeSql/debug] payloadJson=...
+[Queue.ConsumeSql/debug] ResolverPath...
+[Queue.ConsumeSql/debug] Estado...
+
+La línea técnica:
+
+[Queue.ConsumeSql/BUILD] 2026-02-01 A
+
+fue eliminada definitivamente.
+
+9. Archivos clave a revisar al arrancar próxima sesión
+
+Revisar en el ZIP real:
+
+App_Code/Ai/WfAiMlnetProvider.cs
+App_Code/Ai/WfAiPlanValidator.cs
+App_Code/Ai/WfAiCatalogProvider.cs
+App_Code/Ai/WfAiNodeCapabilityMap.cs
+App_Code/Ai/WfAiPhraseNormalizer.cs
+App_Code/Ai/WfAiPhraseClauseSplitter.cs
+App_Code/Ai/WfAiPhraseLexicon.cs
+App_Code/Handlers/HQueuePublishSql.cs
+Scripts/workflow.catalog.js
+Scripts/workflow.templates.js
+Scripts/Inspectors/inspector.queue.publish.js
+WF_AiRegression.aspx
+WF_AiRegression.aspx.cs
+App_Data/WF_AI/ai_regression_cases.json
+.csproj
+
+Especial atención:
+
+HQueuePublishSql.cs
+
+porque contiene clases de publish y consume.
+
+10. Validaciones iniciales para próxima sesión
+
+Al recibir ZIP nuevo:
+
+1. Compilar
+
+Primero compilar solución.
+
+2. Banco IA
+
+Ir a:
+
+WF_AiRegression.aspx
+
+Ejecutar:
+
+Probar todos
+
+Esperado:
+
+OK=14 / FALLA=0 / SKIP=0
+3. Smoke runtime queue.consume
+
+Ejecutar definición Queue consume con debug=false.
+
+Esperado:
+
+[Start]
+[Queue.ConsumeSql] No hay mensajes pendientes en 'prueba-real'.
+[Logger] [Info] Cola consumida OK
+[End]
+
+No debe aparecer:
+
+[Queue.ConsumeSql/BUILD]
+[Queue.ConsumeSql/debug]
+11. Próximos caminos recomendados
+Camino recomendado inmediato: fix69 UX Banco IA
+
+No agregar más nodos todavía. Mejorar la pantalla WF_AiRegression.aspx.
+
+Objetivo:
+
+Que el banco sea usable como herramienta profesional de QA interno.
+
+Ideas:
+
+Filtro: Todos / OK / FALLA / SKIP
+Filtro por tipo de nodo
+Botón copiar frase
+Botón copiar JSON técnico
+Botón abrir Constructor IA con la frase
+Colapsar/expandir detalles
+Colapsar JSON técnico por defecto
+Resumen por tipo de nodo
+Marca visual “semántico fuerte” vs “estructural”
+
+Esto no toca motor ni canvas.
+
+Camino alternativo: ampliar nodos del Phrase Engine
+
+Agregar nuevos casos uno por uno, primero estructurales, luego semánticos.
+
+Candidatos:
+
+util.notify directo
+control.delay
+control.retry
+control.switch
+control.parallel
+control.join
+file.read + data.sql combinado
+http.request POST
+state.vars remove
+
+No meter todos juntos.
+
+Camino alternativo: ejecución real combinada
+
+Probar workflows integrados más largos:
+
+HTTP → SQL → Logger
+file.write → file.read → Logger
+queue.publish → queue.consume en flujo separado
+state.vars → control.if → logger
+12. Criterio profesional acordado
+
+La dirección sigue siendo:
+
+Frase humana
+→ normalización
+→ cláusulas
+→ semántica por cláusula
+→ consistencia semántica
+→ generación controlada
+→ validador funcional
+→ canvas
+→ motor
+→ logs/mapa
+
+No seguir inflando WfAiMlnetProvider.cs sin control.
+
+Cada avance debe quedar cubierto por:
+
+Banco de regresión
+Auditoría semántica
+Prueba real si aplica
