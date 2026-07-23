@@ -1566,3 +1566,275 @@
         padding: 5px 7px;
     }
 }
+
+
+/* =====================================================================
+   fix73 — propuesta visual del Constructor IA sobre el canvas
+   ===================================================================== */
+.wf-ai-visual-hint {
+    margin: 7px 0 9px;
+    padding: 7px 9px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #1e40af;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.wf-ai-main-action,
+.wf-ai-create-workflow {
+    border-color: #2563eb !important;
+    background: #2563eb !important;
+    color: #fff !important;
+    font-weight: 700;
+}
+
+    .wf-ai-create-workflow:hover,
+    .wf-ai-main-action:hover {
+        background: #1d4ed8 !important;
+    }
+
+.canvas.wf-ai-draft-mode > .canvas-world > .node,
+.canvas.wf-ai-draft-mode > .canvas-world > .edges {
+    opacity: .15;
+    filter: grayscale(.45);
+    pointer-events: none;
+}
+
+.wf-ai-visual-draft {
+    position: absolute;
+    inset: 0 auto auto 0;
+    z-index: 30;
+    pointer-events: none;
+}
+
+.wf-ai-visual-draft-edges {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+    .wf-ai-visual-draft-edges marker polygon {
+        fill: #64748b;
+    }
+
+    .wf-ai-visual-draft-edges marker#wfAiDraftArrowIssue polygon {
+        fill: #dc2626;
+    }
+
+.wf-ai-draft-edge {
+    fill: none;
+    stroke: #64748b;
+    stroke-width: 2.4;
+    opacity: .9;
+}
+
+    .wf-ai-draft-edge.issue {
+        stroke: #dc2626;
+        stroke-width: 3;
+        stroke-dasharray: 8 6;
+    }
+
+.wf-ai-draft-edge-label {
+    fill: #334155;
+    font-size: 12px;
+    font-weight: 800;
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-width: 5px;
+    stroke-linejoin: round;
+}
+
+    .wf-ai-draft-edge-label.issue {
+        fill: #b91c1c;
+    }
+
+.wf-ai-draft-node {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 12px 14px;
+    border: 2px solid #cbd5e1;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 9px 24px rgba(15, 23, 42, .12);
+    color: #0f172a;
+    text-align: left;
+    pointer-events: none;
+    cursor: default;
+}
+
+    .wf-ai-draft-node.issue {
+        border-color: #ef4444;
+        border-style: dashed;
+        background: #fff7f7;
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .09), 0 12px 25px rgba(127, 29, 29, .12);
+        pointer-events: auto;
+        cursor: pointer;
+    }
+
+        .wf-ai-draft-node.issue:hover,
+        .wf-ai-draft-node.issue.selected {
+            border-style: solid;
+            border-color: #b91c1c;
+            transform: translateY(-2px);
+            box-shadow: 0 0 0 5px rgba(239, 68, 68, .14), 0 15px 28px rgba(127, 29, 29, .16);
+        }
+
+.wf-ai-draft-node-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wf-ai-draft-node-icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.wf-ai-draft-node.issue .wf-ai-draft-node-icon {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.wf-ai-draft-node-title {
+    font-size: 13px;
+    line-height: 1.25;
+    font-weight: 800;
+}
+
+.wf-ai-draft-node-body {
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.wf-ai-draft-node.issue .wf-ai-draft-node-body {
+    color: #7f1d1d;
+}
+
+.wf-ai-draft-node-pending {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.canvas-wrap {
+    position: relative;
+}
+
+.wf-ai-visual-draft-banner {
+    position: absolute;
+    top: 56px;
+    left: 12px;
+    z-index: 60;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    margin: 0;
+    padding: 9px 12px;
+    border-radius: 12px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, .16);
+    pointer-events: none;
+    font-size: 11px;
+}
+
+    .wf-ai-visual-draft-banner strong {
+        font-size: 12px;
+    }
+
+    .wf-ai-visual-draft-banner.pending {
+        border: 1px solid #fecaca;
+        background: rgba(255, 247, 247, .96);
+        color: #991b1b;
+    }
+
+    .wf-ai-visual-draft-banner.complete {
+        border: 1px solid #bbf7d0;
+        background: rgba(240, 253, 244, .96);
+        color: #166534;
+    }
+
+.wf-ai-fallback-visual {
+    padding: 10px;
+}
+
+.wf-ai-fallback-progress {
+    margin: 8px 0 5px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.wf-ai-fallback-question-focus {
+    animation: wfAiQuestionFocus 1.1s ease-out;
+}
+
+@keyframes wfAiQuestionFocus {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, .32);
+    }
+
+    45% {
+        box-shadow: 0 0 0 6px rgba(220, 38, 38, .12);
+    }
+
+    100% {
+        box-shadow: none;
+    }
+}
+
+.wf-ai-guided-visual-ready .wf-ai-guided-review-text {
+    margin-bottom: 10px;
+}
+
+.wf-ai-guided-summary {
+    margin: 8px 0 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+    .wf-ai-guided-summary > summary {
+        padding: 8px 10px;
+        cursor: pointer;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .wf-ai-guided-summary[open] > summary {
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .wf-ai-guided-summary .wf-ai-guided-flow,
+    .wf-ai-guided-summary .wf-ai-guided-branches {
+        margin: 8px;
+    }
+
+@media (max-width: 980px) {
+    .wf-ai-draft-node {
+        max-width: 190px;
+    }
+}

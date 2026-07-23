@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
-   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix72" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix73" />
 
   <style>
      body { background: #f6f7fb; }
@@ -98,13 +98,14 @@
 
         <div class="wf-ai-panel" id="wfAiPanel">
           <div class="wf-ai-kicker">Asistente IA</div>
-          <div class="wf-ai-title">Constructor guiado de workflows</div>
+          <div class="wf-ai-title">Describí el flujo y resolvelo sobre el canvas</div>
           <textarea id="wfAiPrompt"
                     class="wf-ai-textarea"
-                    placeholder="Ejemplo: Quiero cargar una nota de crédito y si supera 300000 mandarla a Dirección."></textarea>
+                    placeholder="Ejemplo: Cargar una nota de crédito y si tiene CAE avisar a Dirección; si no, advertir a Compras."></textarea>
+          <div class="wf-ai-visual-hint">Las dudas aparecerán en rojo sobre el canvas. Hacé clic allí para resolverlas.</div>
           <div class="wf-ai-actions">
-            <button type="button" class="btn" id="wfAiVerify">Verificar frase</button>
-            <button type="button" class="btn" id="wfAiRun">Interpretar</button>
+            <button type="button" class="btn wf-ai-main-action" id="wfAiVerify">Dibujar propuesta</button>
+            <button type="button" class="btn" id="wfAiRun">Armar paso a paso</button>
             <button type="button" class="btn" id="wfAiClear">Limpiar</button>
           </div>
           <div id="wfAiStatus" class="wf-ai-status"></div>
@@ -184,7 +185,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix72"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix73"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>

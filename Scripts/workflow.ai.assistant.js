@@ -12,6 +12,7 @@
 // fix71e: el plan guiado requiere confirmación explícita y muestra un resumen funcional antes de aplicar al canvas.
 // fix71f: el fallback no termina en un botón genérico; muestra resolución accionable en el mismo lugar del error.
 // fix72: cierra la secuencia Verificar → Resolver → Revisar → Confirmar → Aplicar, evita mezclar planes parciales y ata la confirmación al plan exacto.
+// fix73: presenta la interpretación como borrador visual sobre el canvas, concentra una duda por vez y convierte la propuesta en workflow con una sola confirmación.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -24,6 +25,9 @@
     var aiGuidedPlanConfirmed = false;
     var aiGuidedConfirmedPlanKey = "";
     var lastAssistantResult = null;
+    var aiVisualDraftSelectedIssueKey = '';
+    var aiVisualDraftLastQuestions = [];
+    var aiVisualDraftActive = false;
 
     function $(id) { return document.getElementById(id); }
 
@@ -3272,6 +3276,7 @@
     // Resultado del Asistente IA y aplicación al canvas
     // ------------------------------------------------------------
     function hideAssistantAfterApply(message) {
+        clearVisualDraft();
         var panel = $('wfAiPanel');
         if (!panel) return;
 
@@ -3407,6 +3412,7 @@
             aiFallbackResolved = {};
             aiFallbackResolvedItems = [];
             aiFallbackAcceptedRewriteKey = '';
+            aiVisualDraftSelectedIssueKey = '';
         }
     }
 
@@ -3749,7 +3755,7 @@
         if (txt && base) txt.value = cleanGuidePhraseText(base).trim();
 
         if (buildGuidedResolutionStepsFromPhrase(userText || base || '')) {
-            setWideMode(true);
+            setWideMode(false);
             resetGuidedPlanConfirmation();
             var structuredResult = buildStructuredGuideResult(getCurrentAiPhrase());
             if (structuredResult) {
@@ -3879,6 +3885,384 @@
         return questions.filter(function (q) { return !fallbackQuestionAlreadyAnswered(q, userText); }).slice(0, 5);
     }
 
+    // ------------------------------------------------------------
+    // fix73: propuesta visual no persistente sobre el canvas
+    // ------------------------------------------------------------
+    function visualDraftZoom() {
+        var label = $('wfZoomLabel');
+        var m = label && /([0-9]+)\s*%/.exec(label.textContent || '');
+        var z = m ? (parseInt(m[1], 10) / 100) : 1;
+        if (!isFinite(z) || z <= 0) z = 1;
+        return Math.max(0.5, Math.min(1.8, z));
+    }
+
+    function clearVisualDraft() {
+        var host = $('wfAiVisualDraft');
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+        var banner = $('wfAiVisualDraftBanner');
+        if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+        var canvas = $('canvas');
+        if (canvas) canvas.classList.remove('wf-ai-draft-mode');
+        aiVisualDraftActive = false;
+    }
+
+    function ensureVisualDraftIssueSelection(questions) {
+        questions = questions || [];
+        aiVisualDraftLastQuestions = questions.slice(0);
+        if (!questions.length) {
+            aiVisualDraftSelectedIssueKey = '';
+            return '';
+        }
+        var exists = questions.some(function (q) { return q && q.key === aiVisualDraftSelectedIssueKey; });
+        if (!exists) aiVisualDraftSelectedIssueKey = String((questions[0] && questions[0].key) || '');
+        return aiVisualDraftSelectedIssueKey;
+    }
+
+    function visualDraftQuestionByKey(questions, key) {
+        questions = questions || [];
+        for (var i = 0; i < questions.length; i++) {
+            if (questions[i] && questions[i].key === key) return questions[i];
+        }
+        return questions[0] || null;
+    }
+
+    function visualDraftHumanType(type) {
+        var map = {
+            'util.start': 'Inicio',
+            'util.end': 'Fin',
+            'doc.load': 'Documento',
+            'control.if': 'Condición',
+            'util.notify': 'Notificación',
+            'human.task': 'Tarea humana',
+            'util.logger': 'Registro',
+            'control.delay': 'Espera',
+            'control.retry': 'Reintento'
+        };
+        return map[String(type || '')] || String(type || 'Paso');
+    }
+
+    function visualDraftActionNodes(plan) {
+        var actions = ((plan && plan.actions) || []).filter(function (a) {
+            return a && String(a.action || '').toUpperCase() === 'ADD_NODE' && a.nodeType;
+        });
+        var nodes = [];
+        actions.forEach(function (a, idx) {
+            nodes.push({
+                id: 'wf-ai-draft-action-' + idx,
+                action: a,
+                nodeType: String(a.nodeType || ''),
+                label: String(a.label || visualDraftHumanType(a.nodeType)),
+                issueKeys: [],
+                layer: idx,
+                lane: 0
+            });
+        });
+        return nodes;
+    }
+
+    function visualDraftFindNode(nodes, label, type) {
+        var wantedLabel = normalizePhraseForSearch(label || '');
+        var wantedType = String(type || '');
+        var fallback = null;
+        for (var i = 0; i < nodes.length; i++) {
+            var n = nodes[i];
+            if (!n || n.isIssue) continue;
+            if (wantedType && n.nodeType !== wantedType) continue;
+            if (!fallback) fallback = n;
+            if (normalizePhraseForSearch(n.label) === wantedLabel) return n;
+        }
+        if (!wantedType) {
+            for (var j = 0; j < nodes.length; j++) {
+                if (!nodes[j].isIssue && normalizePhraseForSearch(nodes[j].label) === wantedLabel) return nodes[j];
+            }
+        }
+        return fallback;
+    }
+
+    function visualDraftRelevantNode(nodes, question) {
+        var key = String((question && question.key) || '');
+        var i;
+        if (key === 'branch-no' || key === 'missing-branch-no-action' || key === 'it-scope') {
+            for (i = 0; i < nodes.length; i++) if (nodes[i].nodeType === 'control.if') return nodes[i];
+        }
+        if (key === 'data-message' || key === 'notify-mode') {
+            for (i = 0; i < nodes.length; i++) if (nodes[i].nodeType === 'util.notify') return nodes[i];
+        }
+        if (key === 'warning-mode') {
+            for (i = 0; i < nodes.length; i++) {
+                if (nodes[i].nodeType === 'util.notify' || nodes[i].nodeType === 'util.logger') return nodes[i];
+            }
+        }
+        for (i = nodes.length - 1; i >= 0; i--) {
+            if (!nodes[i].isIssue && nodes[i].nodeType !== 'util.end') return nodes[i];
+        }
+        return nodes[0] || null;
+    }
+
+    function buildVisualDraftModel(plan, questions) {
+        questions = questions || [];
+        var nodes = visualDraftActionNodes(plan);
+        var edges = [];
+        var connections = (plan && plan.proposedConnections) || [];
+
+        connections.forEach(function (c) {
+            if (!c) return;
+            var from = visualDraftFindNode(nodes, c.from, c.fromNodeType);
+            var to = visualDraftFindNode(nodes, c.to, c.toNodeType);
+            if (!from || !to || from === to) return;
+            edges.push({ from: from, to: to, condition: String(c.condition || 'always'), issue: false });
+        });
+
+        if (!edges.length && nodes.length > 1) {
+            for (var si = 0; si < nodes.length - 1; si++) {
+                edges.push({ from: nodes[si], to: nodes[si + 1], condition: 'always', issue: false });
+            }
+        }
+
+        var incoming = {};
+        edges.forEach(function (e) { incoming[e.to.id] = (incoming[e.to.id] || 0) + 1; });
+        nodes.forEach(function (n, idx) { n.layer = idx; n.lane = 0; });
+        if (nodes.length) nodes[0].layer = 0;
+
+        for (var pass = 0; pass < nodes.length + 4; pass++) {
+            edges.forEach(function (e) {
+                var nextLayer = (e.from.layer || 0) + 1;
+                if ((e.to.layer || 0) < nextLayer) e.to.layer = nextLayer;
+                var cond = normalizePhraseForSearch(e.condition || '');
+                if (incoming[e.to.id] > 1 || e.to.nodeType === 'util.end') e.to.lane = 0;
+                else if (cond === 'true' || cond === 'si') e.to.lane = (e.from.lane || 0) - 1;
+                else if (cond === 'false' || cond === 'no') e.to.lane = (e.from.lane || 0) + 1;
+                else e.to.lane = e.from.lane || 0;
+            });
+        }
+
+        var issueColumn = 0;
+        var occupied = {};
+        nodes.forEach(function (n) { occupied[String(n.layer) + '|' + String(n.lane)] = true; });
+        questions.forEach(function (q) {
+            if (!q || !q.key) return;
+            var target = visualDraftRelevantNode(nodes, q);
+            var issueLayer = target ? (target.layer + 1) : (nodes.length ? nodes[nodes.length - 1].layer + 1 : 0);
+            var issueLane = target ? target.lane + 1 + issueColumn : issueColumn;
+            var condition = '?';
+
+            if (q.key === 'branch-no' || q.key === 'missing-branch-no-action') {
+                condition = 'NO';
+                issueLane = target ? target.lane + 1 : issueColumn;
+            } else if (q.key === 'it-scope') {
+                condition = '¿SI / NO?';
+                issueLane = target ? target.lane + 2 : issueColumn;
+            }
+
+            while (occupied[String(issueLayer) + '|' + String(issueLane)]) issueLane++;
+            occupied[String(issueLayer) + '|' + String(issueLane)] = true;
+
+            var issueNode = {
+                id: 'wf-ai-draft-issue-' + q.key,
+                nodeType: 'wf.ai.issue',
+                label: q.title || 'Falta definir',
+                detail: q.detail || 'Hacé clic para resolver esta decisión.',
+                issueKeys: [q.key],
+                isIssue: true,
+                layer: issueLayer,
+                lane: issueLane
+            };
+
+            issueColumn++;
+            nodes.push(issueNode);
+            if (target) edges.push({ from: target, to: issueNode, condition: condition, issue: true, issueKey: q.key });
+        });
+
+        if (!nodes.length && questions.length) {
+            questions.forEach(function (q, idx) {
+                nodes.push({
+                    id: 'wf-ai-draft-issue-' + q.key,
+                    nodeType: 'wf.ai.issue',
+                    label: q.title || 'Falta definir',
+                    detail: q.detail || '',
+                    issueKeys: [q.key],
+                    isIssue: true,
+                    layer: idx,
+                    lane: 0
+                });
+            });
+        }
+
+        var minLane = 0;
+        nodes.forEach(function (n) { if (n.lane < minLane) minLane = n.lane; });
+        var laneOffset = Math.abs(minLane);
+        nodes.forEach(function (n) {
+            n.x = 70 + (n.layer * 235);
+            n.y = 105 + ((n.lane + laneOffset) * 165);
+            n.w = n.isIssue ? 210 : 190;
+            n.h = n.isIssue ? 92 : 78;
+        });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function visualDraftEdgePath(from, to) {
+        var x1 = from.x + from.w;
+        var y1 = from.y + from.h / 2;
+        var x2 = to.x;
+        var y2 = to.y + to.h / 2;
+        var bend = Math.max(55, Math.abs(x2 - x1) * 0.45);
+        return 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + bend) + ' ' + y1 + ', ' + (x2 - bend) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+    }
+
+    function focusVisualDraftIssue(questionKey) {
+        questionKey = String(questionKey || '');
+        if (!questionKey) return;
+        aiVisualDraftSelectedIssueKey = questionKey;
+        if (lastAssistantResult) renderPhraseVerification(lastAssistantResult, getCurrentAiPhrase());
+        setTimeout(function () {
+            var card = document.querySelector('[data-wf-ai-question-key="' + questionKey.replace(/"/g, '') + '"]');
+            if (card) {
+                card.classList.add('wf-ai-fallback-question-focus');
+                if (card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            setStatus('Resolvé esta duda con las opciones del Inspector. El borrador se redibujará automáticamente.', 'warn');
+        }, 0);
+    }
+
+    function renderVisualDraft(res, userText, options) {
+        options = options || {};
+        clearVisualDraft();
+        var plan = (res && res.plan) || {};
+        var questions = options.questions || [];
+        var model = buildVisualDraftModel(plan, questions);
+        if (!model.nodes.length) return;
+
+        ensureVisualDraftIssueSelection(questions);
+        var canvas = $('canvas');
+        var world = $('canvasWorld');
+        if (!canvas || !world) return;
+
+        canvas.classList.add('wf-ai-draft-mode');
+        var maxX = 900, maxY = 500;
+        model.nodes.forEach(function (n) {
+            maxX = Math.max(maxX, n.x + n.w + 100);
+            maxY = Math.max(maxY, n.y + n.h + 100);
+        });
+        var fitX = Math.max(0.42, (canvas.clientWidth - 36) / maxX);
+        var fitY = Math.max(0.42, (canvas.clientHeight - 54) / maxY);
+        var zoom = Math.min(visualDraftZoom(), fitX, fitY);
+        canvas.scrollLeft = 0;
+        canvas.scrollTop = 0;
+
+        var host = document.createElement('div');
+        host.id = 'wfAiVisualDraft';
+        host.className = 'wf-ai-visual-draft';
+        host.style.width = maxX + 'px';
+        host.style.height = maxY + 'px';
+        host.style.transform = 'scale(' + zoom + ')';
+        host.style.transformOrigin = '0 0';
+
+        var svgNs = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(svgNs, 'svg');
+        svg.setAttribute('class', 'wf-ai-visual-draft-edges');
+        svg.setAttribute('width', maxX);
+        svg.setAttribute('height', maxY);
+        svg.setAttribute('viewBox', '0 0 ' + maxX + ' ' + maxY);
+
+        var defs = document.createElementNS(svgNs, 'defs');
+        var marker = document.createElementNS(svgNs, 'marker');
+        marker.setAttribute('id', 'wfAiDraftArrow');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '7');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3.5');
+        marker.setAttribute('orient', 'auto');
+        var poly = document.createElementNS(svgNs, 'polygon');
+        poly.setAttribute('points', '0 0, 10 3.5, 0 7');
+        marker.appendChild(poly);
+        defs.appendChild(marker);
+
+        var markerIssue = document.createElementNS(svgNs, 'marker');
+        markerIssue.setAttribute('id', 'wfAiDraftArrowIssue');
+        markerIssue.setAttribute('markerWidth', '10');
+        markerIssue.setAttribute('markerHeight', '7');
+        markerIssue.setAttribute('refX', '9');
+        markerIssue.setAttribute('refY', '3.5');
+        markerIssue.setAttribute('orient', 'auto');
+        var polyIssue = document.createElementNS(svgNs, 'polygon');
+        polyIssue.setAttribute('points', '0 0, 10 3.5, 0 7');
+        markerIssue.appendChild(polyIssue);
+        defs.appendChild(markerIssue);
+        svg.appendChild(defs);
+
+        model.edges.forEach(function (e) {
+            var path = document.createElementNS(svgNs, 'path');
+            path.setAttribute('d', visualDraftEdgePath(e.from, e.to));
+            path.setAttribute('class', 'wf-ai-draft-edge' + (e.issue ? ' issue' : ''));
+            path.setAttribute('marker-end', e.issue ? 'url(#wfAiDraftArrowIssue)' : 'url(#wfAiDraftArrow)');
+            svg.appendChild(path);
+            if (e.condition && normalizePhraseForSearch(e.condition) !== 'always') {
+                var text = document.createElementNS(svgNs, 'text');
+                text.setAttribute('class', 'wf-ai-draft-edge-label' + (e.issue ? ' issue' : ''));
+                text.setAttribute('x', ((e.from.x + e.from.w + e.to.x) / 2));
+                text.setAttribute('y', ((e.from.y + e.from.h / 2 + e.to.y + e.to.h / 2) / 2) - 8);
+                text.textContent = e.condition;
+                svg.appendChild(text);
+            }
+        });
+        host.appendChild(svg);
+
+        model.nodes.forEach(function (n) {
+            var issueKey = n.issueKeys && n.issueKeys.length ? n.issueKeys[0] : '';
+            var el = document.createElement('button');
+            el.type = 'button';
+            el.className = 'wf-ai-draft-node' + (n.isIssue || issueKey ? ' issue' : '') + (issueKey && issueKey === aiVisualDraftSelectedIssueKey ? ' selected' : '');
+            el.style.left = n.x + 'px';
+            el.style.top = n.y + 'px';
+            el.style.width = n.w + 'px';
+            el.style.minHeight = n.h + 'px';
+            if (issueKey) el.setAttribute('data-wf-ai-visual-issue', issueKey);
+
+            var head = document.createElement('span');
+            head.className = 'wf-ai-draft-node-head';
+            var icon = document.createElement('span');
+            icon.className = 'wf-ai-draft-node-icon';
+            icon.textContent = issueKey ? '!' : '✓';
+            var title = document.createElement('span');
+            title.className = 'wf-ai-draft-node-title';
+            title.textContent = n.label;
+            head.appendChild(icon);
+            head.appendChild(title);
+            el.appendChild(head);
+
+            var body = document.createElement('span');
+            body.className = 'wf-ai-draft-node-body';
+            body.textContent = issueKey ? (n.detail || 'Hacé clic para resolver') : visualDraftHumanType(n.nodeType);
+            el.appendChild(body);
+
+            if (issueKey) {
+                var pending = document.createElement('span');
+                pending.className = 'wf-ai-draft-node-pending';
+                pending.textContent = 'Falta definir';
+                el.appendChild(pending);
+                el.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    focusVisualDraftIssue(issueKey);
+                });
+            } else {
+                el.tabIndex = -1;
+            }
+            host.appendChild(el);
+        });
+
+        world.appendChild(host);
+
+        var banner = document.createElement('div');
+        banner.id = 'wfAiVisualDraftBanner';
+        banner.className = 'wf-ai-visual-draft-banner ' + (questions.length ? 'pending' : 'complete');
+        banner.innerHTML = questions.length
+            ? '<strong>Borrador IA</strong><span>' + questions.length + ' duda' + (questions.length === 1 ? '' : 's') + ' pendiente' + (questions.length === 1 ? '' : 's') + '. Hacé clic en rojo.</span>'
+            : '<strong>Propuesta visual completa</strong><span>Todavía no está guardada ni puede ejecutarse.</span>';
+        (canvas.parentNode || canvas).appendChild(banner);
+        aiVisualDraftActive = true;
+    }
+
     function renderFallbackHelp(res, userText) {
         syncFallbackSession(userText);
         if (!fallbackNeedsHelp(res, userText)) return '';
@@ -3886,48 +4270,50 @@
         var rewrite = buildSuggestedRewrite(userText);
         aiClarificationOptions = [];
         aiRewriteOptions = [];
+        var selectedKey = ensureVisualDraftIssueSelection(questions);
+        var selectedQuestion = visualDraftQuestionByKey(questions, selectedKey);
 
         var html = '';
-        html += '<div class="wf-ai-fallback">';
+        html += '<div class="wf-ai-fallback wf-ai-fallback-visual">';
         html += '  <div class="wf-ai-fallback-head">';
-        html += '    <div><div class="wf-ai-fallback-kicker">Paso 2 de 5 · Resolver dudas</div><div class="wf-ai-fallback-title">No voy a aplicar nada hasta que las decisiones queden claras</div></div>';
-        html += '    <span class="wf-ai-fallback-badge">Aplicación bloqueada</span>';
+        html += '    <div><div class="wf-ai-fallback-kicker">Resolver sobre el canvas</div><div class="wf-ai-fallback-title">Elegí el punto rojo que querés completar</div></div>';
+        html += '    <span class="wf-ai-fallback-badge">No se guarda todavía</span>';
         html += '  </div>';
-        html += '  <div class="wf-ai-fallback-text">Respondé únicamente las decisiones pendientes. Cada respuesta queda registrada y la tarjeta desaparece.</div>';
+        html += '  <div class="wf-ai-fallback-text">El canvas muestra el borrador. Al resolver esta duda se redibujará automáticamente y avanzará a la siguiente.</div>';
         html += renderFallbackResolvedSummary();
 
-        if (questions.length) {
-            questions.forEach(function (q) {
-                html += '  <div class="wf-ai-fallback-question" data-wf-ai-question-key="' + htmlEncode(q.key || '') + '">';
-                html += '    <div class="wf-ai-fallback-q-title">' + htmlEncode(q.title) + '</div>';
-                html += '    <div class="wf-ai-fallback-q-detail">' + htmlEncode(q.detail) + '</div>';
-                html += '    <div class="wf-ai-fallback-options">';
-                (q.options || []).forEach(function (opt) {
-                    var idx = aiClarificationOptions.push({
-                        clarification: opt.clarification || opt.label || '',
-                        questionKey: q.key || '',
-                        questionTitle: q.title || '',
-                        label: opt.label || 'Usar opción'
-                    }) - 1;
-                    html += '<button type="button" class="btn wf-ai-fallback-btn ' + htmlEncode(opt.css || '') + '" data-wf-ai-clarify-index="' + idx + '">' + htmlEncode(opt.label || 'Usar opción') + '</button>';
-                });
-                html += '    </div>';
-                html += '  </div>';
+        if (selectedQuestion) {
+            var currentIndex = 0;
+            questions.forEach(function (q, idx) { if (q && q.key === selectedQuestion.key) currentIndex = idx; });
+            html += '  <div class="wf-ai-fallback-progress">Duda ' + (currentIndex + 1) + ' de ' + questions.length + '</div>';
+            html += '  <div class="wf-ai-fallback-question" data-wf-ai-question-key="' + htmlEncode(selectedQuestion.key || '') + '">';
+            html += '    <div class="wf-ai-fallback-q-title">' + htmlEncode(selectedQuestion.title) + '</div>';
+            html += '    <div class="wf-ai-fallback-q-detail">' + htmlEncode(selectedQuestion.detail) + '</div>';
+            html += '    <div class="wf-ai-fallback-options">';
+            (selectedQuestion.options || []).forEach(function (opt) {
+                var idx = aiClarificationOptions.push({
+                    clarification: opt.clarification || opt.label || '',
+                    questionKey: selectedQuestion.key || '',
+                    questionTitle: selectedQuestion.title || '',
+                    label: opt.label || 'Usar opción'
+                }) - 1;
+                html += '<button type="button" class="btn wf-ai-fallback-btn ' + htmlEncode(opt.css || '') + '" data-wf-ai-clarify-index="' + idx + '">' + htmlEncode(opt.label || 'Usar opción') + '</button>';
             });
+            html += '    </div>';
+            html += '  </div>';
         } else if (canBuildGuidedResolution(userText)) {
             html += renderGuidedResolutionAction(res, userText);
             if (rewrite) {
-                html += '  <div class="wf-ai-fallback-consolidated">';
-                html += '    <div class="wf-ai-fallback-label">Frase clara consolidada</div>';
+                html += '  <details class="wf-ai-fallback-consolidated"><summary>Ver frase consolidada</summary>';
                 html += '    <div>' + htmlEncode(rewrite) + '</div>';
-                html += '  </div>';
+                html += '  </details>';
             }
         } else if (rewrite && !sameFallbackPhrase(userText, rewrite) && aiFallbackAcceptedRewriteKey !== fallbackRewriteKey(rewrite)) {
             var rewriteIdx = aiRewriteOptions.push(rewrite) - 1;
             html += '  <div class="wf-ai-fallback-rewrite">';
             html += '    <div class="wf-ai-fallback-label">Frase clara sugerida</div>';
             html += '    <div class="wf-ai-fallback-rewrite-text">' + htmlEncode(rewrite) + '</div>';
-            html += '    <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-rewrite-index="' + rewriteIdx + '">Usar esta frase y verificar</button>';
+            html += '    <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-rewrite-index="' + rewriteIdx + '">Usar esta frase y redibujar</button>';
             html += '  </div>';
         } else {
             html += '  <div class="wf-ai-fallback-pending actionable">';
@@ -3954,6 +4340,7 @@
         if (!clarification) return;
 
         markFallbackResolved(info.questionKey || '', info.questionTitle || '', info.label || '', clarification);
+        aiVisualDraftSelectedIssueKey = '';
 
         // No acumulamos aclaraciones viejas indefinidamente en el texto visible.
         // Se conserva la frase original + las decisiones activas de esta sesión.
@@ -3983,6 +4370,7 @@
     }
 
     function openStepByStepGuide() {
+        clearVisualDraft();
         var refreshGuidedResult = !!(lastAssistantResult && lastAssistantResult.requiresFinalConfirmation);
         resetGuidedPlanConfirmation();
         var txt = $('wfAiPrompt');
@@ -4097,8 +4485,6 @@
         html += '  </div>';
         html += '  <div class="wf-ai-verify-phrase">' + htmlEncode(userText || '') + '</div>';
         html += '</div>';
-        html += assistantPhaseStripHtml(fallbackActive ? 2 : 3, 1);
-
         if (fallbackActive) {
             html += renderFallbackHelp(res, userText);
         } else if (!res || !res.ok) {
@@ -4146,7 +4532,8 @@
         html += '<button type="button" class="btn" id="wfAiVerifyCopyPhrase">Copiar frase</button>';
         html += '<button type="button" class="btn" id="wfAiVerifyCopyJson">Copiar JSON técnico</button>';
         if (canInterpretSafely) {
-            html += '<button type="button" class="btn" id="wfAiVerifyInterpret">Revisar plan propuesto</button>';
+            html += '<button type="button" class="btn wf-ai-create-workflow" id="wfAiCreateVerifiedWorkflow">Crear workflow</button>';
+            html += '<button type="button" class="btn" id="wfAiVerifyInterpret">Ver resumen detallado</button>';
         }
         html += '</div>';
         html += '<details class="wf-ai-json"><summary>Ver JSON técnico de verificación</summary><pre id="wfAiVerifyJsonPre">' + htmlEncode(technicalJson) + '</pre></details>';
@@ -4160,8 +4547,28 @@
         var copyJson = $('wfAiVerifyCopyJson');
         if (copyJson) copyJson.addEventListener('click', function () { copyToClipboard(technicalJson, 'JSON técnico copiado.'); });
 
+        var createVerified = $('wfAiCreateVerifiedWorkflow');
+        if (createVerified) createVerified.addEventListener('click', function () {
+            lastPlan = plan;
+            lastAssistantResult = res || null;
+            confirmGuidedPlan(lastPlan);
+            applyLastPlan();
+        });
+
         var interpretBtn = $('wfAiVerifyInterpret');
         if (interpretBtn) interpretBtn.addEventListener('click', function () { interpretar(); });
+
+        renderVisualDraft(res, userText, {
+            questions: fallbackActive ? buildFallbackQuestions(res, userText) : [],
+            complete: !fallbackActive && canInterpretSafely
+        });
+
+        if (fallbackActive && aiVisualDraftSelectedIssueKey) {
+            setTimeout(function () {
+                var card = document.querySelector('[data-wf-ai-question-key="' + aiVisualDraftSelectedIssueKey.replace(/"/g, '') + '"]');
+                if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 0);
+        }
     }
 
     function getCurrentAiPhrase() {
@@ -4277,7 +4684,7 @@
         return createStepTitle(step);
     }
 
-    function guidedResolutionReviewHtml(confirmed) {
+    function guidedResolutionReviewHtml() {
         var cond = null;
         var trueSteps = [];
         var falseSteps = [];
@@ -4287,56 +4694,37 @@
             if (st.type === 'condition' && !cond) cond = st;
             if (st.branch === 'if_cond_true') trueSteps.push(st);
             else if (st.branch === 'if_cond_false') falseSteps.push(st);
-            else if (!isBranchChildStep(st) && st.type !== 'end') mainSteps.push(st);
+            else if (st.type !== 'end') mainSteps.push(st);
         });
 
         var html = '';
-        html += '<div class="wf-ai-guided-review ' + (confirmed ? 'confirmed' : '') + '">';
+        html += '<div class="wf-ai-guided-review wf-ai-guided-visual-ready">';
         html += '  <div class="wf-ai-guided-review-head">';
-        html += '    <div><div class="wf-ai-guided-review-kicker">' + (confirmed ? 'Paso 4 de 5 · Plan confirmado' : 'Paso 3 de 5 · Revisar plan') + '</div><div class="wf-ai-guided-review-title">Resumen final del flujo antes de aplicarlo</div></div>';
-        html += '    <span class="wf-ai-guided-review-badge">' + (confirmed ? 'Confirmado' : 'Pendiente') + '</span>';
+        html += '    <div><div class="wf-ai-guided-review-kicker">Propuesta visual completa</div><div class="wf-ai-guided-review-title">Revisá el flujo directamente en el canvas</div></div>';
+        html += '    <span class="wf-ai-guided-review-badge">Borrador</span>';
         html += '  </div>';
-        html += '  <div class="wf-ai-guided-review-text">Este es el plan funcional definitivo. No se aplicará ningún nodo hasta que confirmes exactamente este contenido.</div>';
+        html += '  <div class="wf-ai-guided-review-text">Los nodos que ves todavía no están guardados. Si el dibujo representa lo que querés, una sola acción lo convierte en el workflow real.</div>';
+        html += '  <details class="wf-ai-guided-summary"><summary>Ver resumen textual</summary>';
 
         if (mainSteps.length) {
             html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Flujo principal</div><ol>';
             mainSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
             html += '</ol></div>';
         }
-
-        if (cond) {
-            html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Condición</div><div>' + htmlEncode(guidedStepHumanText(cond)) + '</div></div>';
-        }
+        if (cond) html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Condición</div><div>' + htmlEncode(guidedStepHumanText(cond)) + '</div></div>';
 
         html += '  <div class="wf-ai-guided-branches">';
-        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">Rama SI / cumple</div>';
-        if (trueSteps.length) {
-            html += '<ol>';
-            trueSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
-            html += '<li>Finalizar flujo</li></ol>';
-        } else {
-            html += '<div class="wf-ai-guided-muted">Sin pasos específicos; finaliza.</div>';
-        }
-        html += '    </div>';
-        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">Rama NO / no cumple</div>';
-        if (falseSteps.length) {
-            html += '<ol>';
-            falseSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
-            html += '<li>Finalizar flujo</li></ol>';
-        } else {
-            html += '<div class="wf-ai-guided-muted">Sin pasos específicos; finaliza.</div>';
-        }
-        html += '    </div>';
+        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">SI / cumple</div><ol>';
+        trueSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+        html += '<li>Finalizar flujo</li></ol></div>';
+        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">NO / no cumple</div><ol>';
+        falseSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+        html += '<li>Finalizar flujo</li></ol></div>';
+        html += '  </div></details>';
+        html += '  <div class="wf-ai-guided-review-actions">';
+        html += '    <button type="button" class="btn wf-ai-create-workflow" id="wfAiCreateGuidedWorkflow">Crear workflow</button>';
+        html += '    <button type="button" class="btn" data-wf-ai-open-guide="1">Cambiarlo paso a paso</button>';
         html += '  </div>';
-
-        if (!confirmed) {
-            html += '  <div class="wf-ai-guided-review-actions">';
-            html += '    <button type="button" class="btn wf-ai-guided-confirm" id="wfAiConfirmGuidedPlan">Confirmar este plan</button>';
-            html += '    <button type="button" class="btn" data-wf-ai-open-guide="1">Editar paso a paso</button>';
-            html += '  </div>';
-        } else {
-            html += '  <div class="wf-ai-guided-confirmed-note">Plan confirmado sin cambios. El próximo paso es aplicarlo al canvas.</div>';
-        }
         html += '</div>';
         return html;
     }
@@ -4347,6 +4735,7 @@
         lastAssistantResult = res || null;
 
         if (!res || !res.ok) {
+            clearVisualDraft();
             lastPlan = null;
             var msg = (res && (res.messageToUser || res.error)) || 'Error del Asistente IA.';
             var detail = res && res.error ? res.error : '';
@@ -4377,8 +4766,7 @@
         html += '<div class="wf-ai-meta">Modelo: ' + htmlEncode(res.model || '') + ' · Validación: ' + (validation.ok ? 'OK' : 'con errores') + '</div>';
 
         if (requiresGuidedConfirmation) {
-            html += assistantPhaseStripHtml(guidedConfirmed ? 5 : 3, guidedConfirmed ? 4 : 2);
-            html += guidedResolutionReviewHtml(guidedConfirmed);
+            html += guidedResolutionReviewHtml();
         } else {
             if (actions.length) {
                 html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Acciones propuestas</div><ol>';
@@ -4414,14 +4802,13 @@
             html += renderFallbackHelp(res, getCurrentAiPhrase());
         }
 
-        if (actions.length && (!requiresGuidedConfirmation || guidedConfirmed)) {
+        if (actions.length && !requiresGuidedConfirmation) {
             var canApply = canApplyPlan(plan, validation, missing);
             var disabled = canApply ? '' : ' disabled';
             var guidedCss = requiresGuidedConfirmation ? ' guided-ready' : '';
             html += '<div class="wf-ai-apply-zone' + guidedCss + '">';
-            if (requiresGuidedConfirmation) html += '<div class="wf-ai-apply-kicker">Paso 5 de 5 · Aplicar al canvas</div>';
-            html += '<button type="button" class="btn wf-ai-apply-ready" id="wfAiApply"' + disabled + '>Aplicar al canvas</button>';
-            html += '<div class="wf-ai-meta">' + htmlEncode(canApply ? 'Aplicará únicamente el plan confirmado. Después revisá el canvas antes de guardar.' : 'La propuesta todavía tiene errores o datos faltantes.') + '</div>';
+            html += '<button type="button" class="btn wf-ai-create-workflow" id="wfAiApply"' + disabled + '>Crear workflow</button>';
+            html += '<div class="wf-ai-meta">' + htmlEncode(canApply ? 'Convierte exactamente el borrador visible en el workflow real.' : 'La propuesta todavía tiene errores o datos faltantes.') + '</div>';
             html += '</div>';
         }
 
@@ -4448,15 +4835,16 @@
         var applyBtn = $('wfAiApply');
         if (applyBtn) applyBtn.addEventListener('click', applyLastPlan);
 
-        var confirmGuidedBtn = $('wfAiConfirmGuidedPlan');
-        if (confirmGuidedBtn) confirmGuidedBtn.addEventListener('click', function () {
+        var createGuidedBtn = $('wfAiCreateGuidedWorkflow');
+        if (createGuidedBtn) createGuidedBtn.addEventListener('click', function () {
             if (!confirmGuidedPlan(lastPlan)) {
-                setStatus('No se pudo confirmar porque el plan no está disponible.', 'error');
+                setStatus('No se pudo crear porque el plan visual ya no está disponible.', 'error');
                 return;
             }
-            setStatus('Plan confirmado. Ahora podés aplicar exactamente esta versión al canvas.', 'ok');
-            renderResult(lastAssistantResult);
+            applyLastPlan();
         });
+
+        renderVisualDraft(res, getCurrentAiPhrase(), { questions: [], complete: true });
     }
 
     // ------------------------------------------------------------
@@ -5073,7 +5461,7 @@
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix72',
+            model: 'Constructor IA estructurado fix73',
             messageToUser: plan.messageToUser,
             plan: plan,
             validation: buildFunctionalValidation(),
@@ -5121,7 +5509,7 @@
         setTimeout(importRegressionPhraseIntoConstructor, 0);
 
         var btn = $('wfAiRun');
-        if (btn) btn.addEventListener('click', interpretar);
+        if (btn) btn.addEventListener('click', openStepByStepGuide);
 
         var verify = $('wfAiVerify');
         if (verify) verify.addEventListener('click', verificarFrase);
@@ -5139,6 +5527,8 @@
             aiFallbackBaseKey = '';
             aiFallbackAcceptedRewriteKey = '';
             resetGuidedPlanConfirmation();
+            clearVisualDraft();
+            aiVisualDraftSelectedIssueKey = '';
             setStatus('', '');
         });
     }
