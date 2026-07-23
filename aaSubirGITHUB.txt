@@ -7,7 +7,7 @@ git status             # para ver qué cambió
 git add .              # agrega todos los cambios
 git commit -m "Lo que hiciste hoy" 
 git push origin main   # lo sube a GitHub
-
+fix72_cierre_desambiguacion_constructor_ia
 @CalliaDesigner
 @calliadesigner
 C:\temp\NC_00002_00000001.pdf

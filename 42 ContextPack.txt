@@ -1,0 +1,444 @@
+CONTEXTPACK — Workflow Studio / Constructor IA v2
+Cierre de versión posterior a fix71f
+1. Estado general de la versión
+
+Omar va a cerrar una nueva versión del proyecto Workflow Studio WebForms después de aplicar la línea de fixes:
+
+fix69
+fix69b
+fix70
+fix70b
+fix71
+fix71b
+fix71c
+fix71d
+fix71e
+fix71f
+
+El objetivo de esta etapa fue evolucionar el Constructor IA desde un generador basado en frase libre hacia un asistente más confiable, con verificación, fallback asistido, resolución de ambigüedades y plan guiado confirmable.
+
+La decisión conceptual importante fue:
+
+No entender perfecto no debe generar un grafo incorrecto.
+El sistema debe preguntar, resolver, mostrar el plan y recién después aplicar al canvas.
+2. Reglas obligatorias de trabajo
+
+Mantener reglas habituales de Omar:
+
+No inventar nada.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Trabajar siempre sobre código real del ZIP.
+No mandar archivo completo si no se verificó el archivo real actual.
+Entregar correcciones como ZIP con estructura real de carpetas.
+Incluir LEEME en cada ZIP correctivo.
+Cambios mínimos y precisos.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+No volver atrás sobre temas ya cerrados salvo bug real.
+Proponer siempre la mejor versión de entrada.
+
+No tocar salvo bug real explícito:
+
+Motor de ejecución
+Handlers runtime
+WorkflowUI canvas/aristas/zoom/minimapa
+WF_Instancia_Mapa
+WF_Instancias
+Queue runtime
+SMTP / email.send
+HSubFlow.cs / runtime subflow
+NC_AR
+FACTURA_AR
+Extractores documentales
+
+Excepción actual: se puede tocar el panel del Asistente IA dentro de WorkflowUI.aspx y sus scripts/estilos asociados, porque la línea actual de trabajo está ahí. No tocar mecánica del canvas salvo necesidad real y explícita.
+
+3. Estado base que debe venir incorporado
+
+La base nueva debería contener todo lo aplicado hasta fix68c más los fixes de UX/desambiguación.
+
+Estado previo ya validado antes de esta etapa:
+
+WF_AiRegression.aspx
+OK=14 / FALLA=0 / SKIP=0
+
+Casos base esperados:
+
+A_NO_SUPERA_CASO_CONTRARIO
+B_NOTIFY_POR_RAMA
+C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE
+D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO
+E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS
+F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS
+G_HTTP_REQUEST_LOGGER
+H_SQL_SELECT_LOGGER
+I_LOGGER_SIMPLE
+J_FILE_WRITE_LOGGER
+K_FILE_READ_LOGGER
+L_STATE_VARS_LOGGER
+M_QUEUE_PUBLISH_LOGGER
+N_QUEUE_CONSUME_LOGGER
+
+Queue consume debe seguir limpio:
+
+debug visible en inspector
+debug default false
+logs debug solo con debug=true
+sin [Queue.ConsumeSql/BUILD]
+sin [Queue.ConsumeSql/debug] cuando debug=false
+4. Fixes aplicados en esta etapa
+fix69_ux_banco_regresion_ia
+
+Objetivo: mejorar WF_AiRegression.aspx como herramienta profesional de QA.
+
+Se agregó/mejoró:
+
+Filtro Todos / OK / FALLA / SKIP
+Filtro por tipo de nodo
+Resumen por tipo de nodo
+Indicador semántico fuerte
+Botón copiar frase
+Botón copiar JSON técnico
+Botón abrir Constructor IA con frase
+JSON técnico colapsado
+Mejor lectura visual de casos largos
+
+Archivos tocados principalmente:
+
+WF_AiRegression.aspx
+WF_AiRegression.aspx.cs
+fix69b_constructor_frase_desde_banco
+
+Objetivo: que Abrir Constructor desde el banco IA lleve la frase al Asistente IA.
+
+Se agregó:
+
+Lectura de aiPhrase por querystring
+Uso de sessionStorage como apoyo
+Carga de frase en textarea del Constructor IA
+Botones visibles en tabla resumen del banco
+
+Archivos tocados principalmente:
+
+WorkflowUI.aspx
+Scripts/workflow.ai.assistant.js
+WF_AiRegression.aspx.cs
+fix70_verificar_frase_constructor
+
+Objetivo: agregar verificación dinámica/transitoria desde el Constructor IA sin escribir en App_Data.
+
+Se agregó botón:
+
+Verificar frase
+
+La verificación muestra:
+
+Estado OK / OK CON AVISOS / REVISAR / FALLA
+Qué se entendió
+Nodos que se crearían
+Ramas detectadas
+Datos faltantes
+Errores
+Advertencias
+Copiar frase
+Copiar JSON técnico
+Interpretar para aplicar
+
+Importante:
+
+No aplica al canvas.
+No ejecuta motor.
+No escribe ai_regression_cases.json.
+No toca App_Data.
+fix70b_limpieza_verificacion_frase
+
+Objetivo: separar advertencias funcionales de advertencias técnicas.
+
+Se corrigió:
+
+Advertencias MLNET / Phrase Engine quedan ocultas en bloque técnico.
+Solo advertencias funcionales afectan la vista simple.
+Si solo hay warnings técnicos, estado visual queda OK.
+fix71_desambiguacion_constructor_ia
+
+Objetivo: agregar fallback asistido amigable e intuitivo.
+
+Cuando la frase queda ambigua o incompleta, el sistema muestra tarjetas como:
+
+Usar notificación interna
+Crear tarea humana
+Solo registrar log
+Advertencia como notificación
+Advertencia como log Warn
+Advertencia como tarea
+NO: notificar a COMPRAS
+NO: registrar advertencia
+NO: terminar flujo
+Incluir número de CAE
+Incluir proveedor
+IT siempre
+IT solo si falta CAE
+IT solo si tiene CAE
+
+Principio definido:
+
+No voy a aplicar nada hasta que quede claro.
+fix71b_fallback_tarjetas_resueltas
+
+Objetivo: si el usuario responde una tarjeta, no debe volver a aparecer.
+
+Se agregó:
+
+Tarjetas respondidas desaparecen.
+Decisiones tomadas quedan registradas.
+La misma tarjeta no reaparece durante esa frase.
+Si ya no hay tarjetas pero el parser sigue trabado, se muestra que todavía no conviene aplicar.
+fix71c_fallback_error_solucionable
+
+Objetivo: si queda error de rama/dato faltante, el fallback debe ofrecer salida concreta.
+
+Se agregó para errores de rama NO:
+
+NO: notificar a COMPRAS y finalizar
+NO: registrar log Warn y finalizar
+NO: crear tarea para COMPRAS
+
+También se corrigió:
+
+"Usar esta frase y verificar" no debe insistir si la frase consolidada ya está cargada.
+Interpretar para aplicar queda bloqueado con errores/datos faltantes.
+Armarlo paso a paso limpia aclaraciones acumuladas.
+fix71d_verificacion_accionable
+
+Objetivo: Verificar frase nunca debe dejar al usuario mirando un error sin salida.
+
+Se agregó salida:
+
+Generar plan guiado válido
+
+Pero luego se detectó que el nombre/flujo seguía siendo confuso.
+
+fix71e_confirmacion_plan_guiado
+
+Objetivo: después de generar plan guiado, no permitir aplicar directo sin confirmación.
+
+Se agregó:
+
+Panel de revisión del plan guiado
+Botón Confirmar plan guiado
+Aplicar al canvas bloqueado hasta confirmar
+Títulos mejores de nodos generados
+
+Ejemplo de títulos:
+
+Notificar a DIR_GENERAL
+Notificar a COMPRAS
+Notificar a IT
+fix71f_fallback_resolver_en_el_error
+
+Objetivo: resolver el problema exactamente donde aparece, no mandar al usuario a un camino genérico.
+
+Se cambió enfoque:
+
+"Generar plan guiado válido" pasa a presentarse como "Resolver acá" / "Resolver y revisar plan".
+
+El fallback debe explicar:
+
+Ya detecté dónde quedó trabado el intérprete libre.
+
+Voy a completar:
+- Validar CAE con condición SI / NO completa.
+- Rama SI: notificar a DIR_GENERAL con número de CAE.
+- Rama NO: notificar a COMPRAS con advertencia y finalizar.
+- Agregar notificación a IT en la rama NO incluyendo proveedor.
+- Cerrar todas las ramas con Fin.
+
+Resultado validado visualmente:
+
+Inicio
+→ Cargar nota de crédito
+→ IF CAE no está vacío
+
+SI / true:
+  → Notificar a DIR_GENERAL
+  → Fin
+
+NO / false:
+  → Notificar a COMPRAS
+  → Notificar a IT
+  → Fin
+
+Parámetros revisados por Omar:
+
+Condición:
+  Campo biz.notaCredito.cae
+  Operador No vacío
+
+Notificar a DIR_GENERAL:
+  Rol DIR_GENERAL
+  Mensaje con {{biz.notaCredito.cae}}
+
+Notificar a COMPRAS:
+  Rol COMPRAS
+  Nivel Warn
+  Mensaje indicando falta CAE
+
+Notificar a IT:
+  Rol IT
+  Mensaje con {{biz.notaCredito.proveedor}}
+
+Fin:
+  ambas ramas terminan correctamente
+
+Este resultado es correcto si la decisión funcional es:
+
+IT se notifica solo cuando falta CAE.
+5. Decisión conceptual tomada
+
+Omar planteó correctamente que un parser libre universal en español es un camino riesgoso, porque el abanico de formas de decir lo mismo es enorme.
+
+Decisión acordada:
+
+No apostar todo al parser libre.
+No intentar resolver cada frase específica con más reglas infinitas.
+Construir un asistente confiable:
+  No entiendo perfecto → pregunto.
+  El usuario decide → genero plan.
+  El usuario confirma → aplico.
+
+El Constructor IA debe funcionar como copiloto controlado, no como adivinador.
+
+6. Estado actual del enfoque
+
+El circuito ya demostró que puede:
+
+Recibir una frase compleja.
+Detectar que la interpretación libre quedó incompleta.
+No aplicar al canvas si hay riesgo.
+Preguntar o resolver con fallback asistido.
+Generar plan guiado válido.
+Mostrar propuesta revisable.
+Pedir confirmación.
+Aplicar al canvas solo después.
+
+Eso es suficiente como base del enfoque.
+
+No conviene seguir ahora agregando más frases puntuales al parser libre.
+
+7. Próximo fix recomendado
+
+El próximo paso debe ser:
+
+fix72_cierre_desambiguacion_constructor_ia
+
+Objetivo:
+
+Cerrar y estabilizar la experiencia completa de verificación/desambiguación antes de agregar nodos nuevos.
+
+Alcance recomendado:
+
+Limpiar textos repetidos del fallback.
+Asegurar secuencia visual clara:
+  Verificar frase
+  Resolver dudas
+  Revisar plan
+  Confirmar plan
+  Aplicar al canvas
+
+Evitar que aparezcan juntos:
+  errores viejos
+  plan resuelto
+  fallback anterior
+  botones redundantes
+
+Mostrar resumen final del plan antes de aplicar.
+Mejorar títulos de nodos generados por plan guiado.
+Mantener bloque técnico colapsado.
+Bloquear Aplicar al canvas hasta confirmación real.
+Que "Resolver acá" sea la salida principal cuando hay un error accionable.
+Que "Armarlo paso a paso" sea alternativa, no escape confuso.
+No insistir con parser libre cuando ya se sabe que quedó trabado.
+
+No tocar en fix72:
+
+Motor
+Handlers
+Mapa
+Runtime
+Queue
+Subflow
+SMTP
+Banco JSON de regresión
+Extractores documentales
+
+Sí se puede tocar:
+
+WorkflowUI.aspx solo para versionado o estructura del panel Asistente IA
+Scripts/workflow.ai.assistant.js
+Styles/workflow.ai.assistant.css
+8. Después de fix72
+
+Recién después de cerrar fix72, avanzar con nodos faltantes por grupos.
+
+Grupo 1 — nodos simples y seguros
+control.delay
+control.retry
+util.notify directo
+state.vars remove
+
+Objetivo: ampliar valor sin meter demasiada complejidad.
+
+Grupo 2 — control de flujo
+control.switch
+control.parallel
+control.join
+control.loop
+
+Objetivo: ampliar capacidad de modelado, pero con más cuidado porque estos nodos afectan estructura visual y validación.
+
+Grupo 3 — combinaciones reales
+file.read → data.sql
+http.request POST
+queue.publish → queue.consume
+state.vars → control.if
+
+Objetivo: workflows de negocio más reales.
+
+No meter todos juntos. Cada grupo debe tener banco/regresión y pruebas visuales.
+
+9. Validaciones iniciales para próxima sesión
+
+Al recibir el nuevo ZIP:
+
+1. Revisar ZIP real.
+2. Confirmar archivos.
+3. Compilar si el entorno lo permite.
+4. Ejecutar WF_AiRegression.aspx → Probar todos.
+5. Confirmar OK=14 / FALLA=0 / SKIP=0, salvo que Omar haya agregado casos nuevos.
+6. Verificar que queue.consume siga limpio con debug=false.
+7. Probar Constructor IA con frase compleja NC/CAE/notificaciones.
+8. Confirmar que no aplica al canvas sin confirmación.
+9. Confirmar que el plan guiado final genera grafo coherente.
+10. Recién después avanzar con fix72.
+10. Frase de prueba clave
+
+Usar esta frase para validar el circuito:
+
+Cargar una NC, si tiene CAE enviar a DIR_General una notificacion con el numero de CAE, sino crear una advertencia que no lo tiene a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion a IT informando que no lo tienen, todos termina el flujo
+
+Resultado funcional esperado, si IT va solo cuando falta CAE:
+
+Inicio
+→ Cargar nota de crédito
+→ IF biz.notaCredito.cae no está vacío
+
+SI:
+  → Notificar a DIR_GENERAL con número de CAE
+  → Fin
+
+NO:
+  → Notificar a COMPRAS con advertencia por falta de CAE
+  → Notificar a IT con proveedor de la NC
+  → Fin

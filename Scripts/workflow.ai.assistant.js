@@ -11,6 +11,7 @@
 // fix71d: cuando la frase libre queda trabada, el fallback termina en una acción válida: convertir a plan guiado estructurado o abrir paso a paso.
 // fix71e: el plan guiado requiere confirmación explícita y muestra un resumen funcional antes de aplicar al canvas.
 // fix71f: el fallback no termina en un botón genérico; muestra resolución accionable en el mismo lugar del error.
+// fix72: cierra la secuencia Verificar → Resolver → Revisar → Confirmar → Aplicar, evita mezclar planes parciales y ata la confirmación al plan exacto.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -21,6 +22,7 @@
     var aiFallbackBaseKey = "";
     var aiFallbackAcceptedRewriteKey = "";
     var aiGuidedPlanConfirmed = false;
+    var aiGuidedConfirmedPlanKey = "";
     var lastAssistantResult = null;
 
     function $(id) { return document.getElementById(id); }
@@ -47,6 +49,41 @@
         if (!el) return;
         el.className = 'wf-ai-status ' + (css || '');
         el.textContent = text || '';
+    }
+
+
+    // ------------------------------------------------------------
+    // fix72: confirmación vinculada al contenido exacto del plan
+    // ------------------------------------------------------------
+    function guidedPlanConfirmationKey(plan) {
+        if (!plan) return '';
+        try {
+            return JSON.stringify({
+                actions: plan.actions || [],
+                proposedConnections: plan.proposedConnections || [],
+                branchPlan: plan.branchPlan || null,
+                missingData: plan.missingData || []
+            });
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function resetGuidedPlanConfirmation() {
+        aiGuidedPlanConfirmed = false;
+        aiGuidedConfirmedPlanKey = '';
+    }
+
+    function confirmGuidedPlan(plan) {
+        var key = guidedPlanConfirmationKey(plan);
+        aiGuidedPlanConfirmed = !!key;
+        aiGuidedConfirmedPlanKey = key;
+        return aiGuidedPlanConfirmed;
+    }
+
+    function guidedPlanIsConfirmed(plan) {
+        var key = guidedPlanConfirmationKey(plan);
+        return !!(aiGuidedPlanConfirmed && key && aiGuidedConfirmedPlanKey === key);
     }
 
     // ------------------------------------------------------------
@@ -1873,6 +1910,7 @@
     }
 
     function updatePromptFromSteps(runAfter) {
+        resetGuidedPlanConfirmation();
         var prompt = $('wfAiPrompt');
         if (!prompt) return;
         if (!guideSteps.length) {
@@ -3498,11 +3536,19 @@
         return false;
     }
 
+    function guidedItScope(userText) {
+        if (!textHasAny(userText, ['it'])) return 'none';
+        if (textHasAny(userText, ['notificar a it en ambas ramas', 'it siempre'])) return 'both';
+        if (textHasAny(userText, ['notificar a it solo cuando la nc tenga cae', 'it solo si tiene cae'])) return 'true';
+        return 'false';
+    }
+
     function buildSuggestedRewrite(userText) {
         var hasNc = textHasAny(userText, ['nc', 'nota de credito', 'nota de crédito']);
         var hasCae = textHasAny(userText, ['cae']);
         var hasProveedor = textHasAny(userText, ['proveedor']);
         var hasIt = textHasAny(userText, ['it']);
+        var itScope = guidedItScope(userText);
         var hasCompras = textHasAny(userText, ['compras']);
         var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
         var hasNotify = textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
@@ -3510,7 +3556,11 @@
         if (hasNc && hasCae && hasNotify && (hasDir || hasCompras || hasIt)) {
             var txt = 'Cargar una NC. Si tiene CAE, notificar a DIR_GENERAL con el número de CAE.';
             txt += ' Si no tiene CAE, notificar a COMPRAS con nivel advertencia indicando que falta CAE.';
-            if (hasProveedor || hasIt) txt += ' Notificar a IT con el proveedor obtenido de la NC.';
+            if (hasProveedor || hasIt) {
+                if (itScope === 'both') txt += ' Notificar a IT en ambas ramas con el proveedor obtenido de la NC.';
+                else if (itScope === 'true') txt += ' En la rama SI, notificar a IT con el proveedor obtenido de la NC.';
+                else txt += ' En esa misma rama NO, notificar a IT con el proveedor obtenido de la NC.';
+            }
             txt += ' Finalizar el flujo.';
             return txt;
         }
@@ -3537,11 +3587,18 @@
         return fallbackHasOnlyActionableResolution(res, userText);
     }
 
-    function fallbackResolutionTitle(res, userText) {
-        if (canBuildGuidedResolution(userText)) {
-            return 'La frase libre quedó trabada, pero puedo convertirla a un plan guiado válido.';
-        }
-        return 'La frase libre quedó trabada. Resolvela con el modo paso a paso.';
+    function assistantPhaseStripHtml(activeStep, completedThrough) {
+        var labels = ['Verificar frase', 'Resolver dudas', 'Revisar plan', 'Confirmar plan', 'Aplicar al canvas'];
+        activeStep = parseInt(activeStep || '1', 10);
+        completedThrough = parseInt(completedThrough || '0', 10);
+        var html = '<div class="wf-ai-phase-strip" aria-label="Etapas del Constructor IA">';
+        labels.forEach(function (label, idx) {
+            var step = idx + 1;
+            var css = step <= completedThrough ? ' done' : (step === activeStep ? ' active' : '');
+            html += '<div class="wf-ai-phase' + css + '"><span>' + step + '</span><strong>' + htmlEncode(label) + '</strong></div>';
+        });
+        html += '</div>';
+        return html;
     }
 
     function fallbackResolutionText(res, userText) {
@@ -3554,6 +3611,7 @@
     function guidedResolutionFixItems(userText) {
         var items = [];
         var hasIt = textHasAny(userText, ['it']);
+        var itScope = guidedItScope(userText);
         var hasCompras = textHasAny(userText, ['compras']);
         var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
         var hasProveedor = textHasAny(userText, ['proveedor']);
@@ -3562,7 +3620,8 @@
         if (hasDir) items.push('Rama SI: notificar a DIR_GENERAL con el número de CAE.');
         if (hasCompras) items.push('Rama NO: notificar a COMPRAS con nivel advertencia y finalizar esa rama.');
         if (hasIt) {
-            items.push('Agregar notificación a IT en la rama NO' + (hasProveedor ? ' incluyendo el proveedor obtenido de la NC.' : '.'));
+            var itWhere = itScope === 'both' ? 'en ambas ramas' : (itScope === 'true' ? 'en la rama SI' : 'en la rama NO');
+            items.push('Agregar notificación a IT ' + itWhere + (hasProveedor ? ' incluyendo el proveedor obtenido de la NC.' : '.'));
         }
         items.push('Cerrar todas las ramas con Fin para que no quede ninguna salida pendiente.');
         return items;
@@ -3590,6 +3649,10 @@
         if (!canBuildGuidedResolution(userText)) return false;
 
         var hasIt = textHasAny(userText, ['it']);
+        var itScope = guidedItScope(userText);
+        var itInBothBranches = hasIt && itScope === 'both';
+        var itOnlyWhenHasCae = hasIt && itScope === 'true';
+        var itOnlyWhenMissingCae = hasIt && itScope === 'false';
         var docId = guideSeq++;
         var condId = guideSeq++;
         var steps = [];
@@ -3637,18 +3700,33 @@
             message: 'La nota de crédito no tiene CAE informado. Revisar la documentación.'
         });
 
-        if (hasIt) {
+        function addItNotification(branch, title, message) {
             steps.push({
                 id: guideSeq++,
                 type: 'notify',
-                branch: 'if_cond_false',
+                branch: branch,
                 branchSourceId: condId,
                 destType: 'rol',
                 role: 'IT',
                 user: '',
-                title: 'Proveedor de NC sin CAE',
-                message: 'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC no tiene CAE informado.'
+                title: title,
+                message: message
             });
+        }
+
+        if (itInBothBranches || itOnlyWhenHasCae) {
+            addItNotification(
+                'if_cond_true',
+                'Proveedor de NC con CAE',
+                'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC tiene CAE informado.'
+            );
+        }
+        if (itInBothBranches || itOnlyWhenMissingCae) {
+            addItNotification(
+                'if_cond_false',
+                'Proveedor de NC sin CAE',
+                'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC no tiene CAE informado.'
+            );
         }
 
         steps.push({ id: guideSeq++, type: 'end' });
@@ -3672,7 +3750,7 @@
 
         if (buildGuidedResolutionStepsFromPhrase(userText || base || '')) {
             setWideMode(true);
-            aiGuidedPlanConfirmed = false;
+            resetGuidedPlanConfirmation();
             var structuredResult = buildStructuredGuideResult(getCurrentAiPhrase());
             if (structuredResult) {
                 structuredResult.guidedResolution = true;
@@ -3812,26 +3890,11 @@
         var html = '';
         html += '<div class="wf-ai-fallback">';
         html += '  <div class="wf-ai-fallback-head">';
-        html += '    <div><div class="wf-ai-fallback-kicker">Fallback asistido</div><div class="wf-ai-fallback-title">No voy a aplicar nada hasta que quede claro</div></div>';
-        html += '    <span class="wf-ai-fallback-badge">Necesita confirmación</span>';
+        html += '    <div><div class="wf-ai-fallback-kicker">Paso 2 de 5 · Resolver dudas</div><div class="wf-ai-fallback-title">No voy a aplicar nada hasta que las decisiones queden claras</div></div>';
+        html += '    <span class="wf-ai-fallback-badge">Aplicación bloqueada</span>';
         html += '  </div>';
-        html += '  <div class="wf-ai-fallback-text">La frase parece tener una o más ambigüedades. Cada respuesta elegida queda tomada y no vuelve a mostrarse. Después verificamos de nuevo.</div>';
+        html += '  <div class="wf-ai-fallback-text">Respondé únicamente las decisiones pendientes. Cada respuesta queda registrada y la tarjeta desaparece.</div>';
         html += renderFallbackResolvedSummary();
-
-        if (rewrite) {
-            var rewriteKey = fallbackRewriteKey(rewrite);
-            var alreadyUsingRewrite = sameFallbackPhrase(userText, rewrite) || aiFallbackAcceptedRewriteKey === rewriteKey;
-            html += '  <div class="wf-ai-fallback-rewrite' + (alreadyUsingRewrite ? ' done' : '') + '">';
-            html += '    <div class="wf-ai-fallback-label">' + (aiFallbackResolvedItems.length ? 'Frase clara consolidada' : 'Frase más clara sugerida') + '</div>';
-            html += '    <div class="wf-ai-fallback-rewrite-text">' + htmlEncode(rewrite) + '</div>';
-            if (!alreadyUsingRewrite) {
-                var rewriteIdx = aiRewriteOptions.push(rewrite) - 1;
-                html += '    <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-rewrite-index="' + rewriteIdx + '">Usar esta frase y verificar</button>';
-            } else {
-                html += '    <div class="wf-ai-fallback-done-note">Esta frase clara ya está cargada. Si todavía hay errores, conviene armarlo paso a paso en vez de volver a verificar lo mismo.</div>';
-            }
-            html += '  </div>';
-        }
 
         if (questions.length) {
             questions.forEach(function (q) {
@@ -3851,23 +3914,31 @@
                 html += '    </div>';
                 html += '  </div>';
             });
-        } else {
-            if (canBuildGuidedResolution(userText)) {
-                html += renderGuidedResolutionAction(res, userText);
-            } else {
-                html += '  <div class="wf-ai-fallback-pending actionable">';
-                html += '    <div class="wf-ai-fallback-label">Siguiente salida válida</div>';
-                html += '    <div>' + htmlEncode(fallbackResolutionText(res, userText)) + '</div>';
-                html += '    <div class="wf-ai-fallback-next-actions">';
-                html += '      <button type="button" class="btn wf-ai-fallback-btn" data-wf-ai-open-guide="1">Armarlo paso a paso</button>';
-                html += '    </div>';
+        } else if (canBuildGuidedResolution(userText)) {
+            html += renderGuidedResolutionAction(res, userText);
+            if (rewrite) {
+                html += '  <div class="wf-ai-fallback-consolidated">';
+                html += '    <div class="wf-ai-fallback-label">Frase clara consolidada</div>';
+                html += '    <div>' + htmlEncode(rewrite) + '</div>';
                 html += '  </div>';
             }
+        } else if (rewrite && !sameFallbackPhrase(userText, rewrite) && aiFallbackAcceptedRewriteKey !== fallbackRewriteKey(rewrite)) {
+            var rewriteIdx = aiRewriteOptions.push(rewrite) - 1;
+            html += '  <div class="wf-ai-fallback-rewrite">';
+            html += '    <div class="wf-ai-fallback-label">Frase clara sugerida</div>';
+            html += '    <div class="wf-ai-fallback-rewrite-text">' + htmlEncode(rewrite) + '</div>';
+            html += '    <button type="button" class="btn wf-ai-fallback-btn primary" data-wf-ai-rewrite-index="' + rewriteIdx + '">Usar esta frase y verificar</button>';
+            html += '  </div>';
+        } else {
+            html += '  <div class="wf-ai-fallback-pending actionable">';
+            html += '    <div class="wf-ai-fallback-label">Alternativa segura</div>';
+            html += '    <div>' + htmlEncode(fallbackResolutionText(res, userText)) + '</div>';
+            html += '    <div class="wf-ai-fallback-next-actions">';
+            html += '      <button type="button" class="btn wf-ai-fallback-btn" data-wf-ai-open-guide="1">Armarlo paso a paso</button>';
+            html += '    </div>';
+            html += '  </div>';
         }
 
-        html += '  <div class="wf-ai-fallback-tools">';
-        html += '    <span>' + htmlEncode(fallbackResolutionTitle(res, userText)) + '</span>';
-        html += '  </div>';
         html += '</div>';
         return html;
     }
@@ -3912,6 +3983,8 @@
     }
 
     function openStepByStepGuide() {
+        var refreshGuidedResult = !!(lastAssistantResult && lastAssistantResult.requiresFinalConfirmation);
+        resetGuidedPlanConfirmation();
         var txt = $('wfAiPrompt');
         if (txt) {
             var clean = buildSuggestedRewrite(txt.value || '') || stripFallbackClarifications(txt.value || '');
@@ -3921,7 +3994,8 @@
         var toggle = $('wfAiGuideToggle');
         if (body && body.style.display === 'none' && toggle) toggle.click();
         setWideMode(true);
-        setStatus('Modo paso a paso abierto. La frase quedó limpia para usarla como guía, sin aclaraciones acumuladas.', 'ok');
+        if (refreshGuidedResult) renderResult(lastAssistantResult);
+        setStatus('Modo paso a paso abierto. Cualquier confirmación anterior quedó invalidada hasta volver a revisar el plan.', 'ok');
     }
 
     function bindFallbackActions(container) {
@@ -3999,6 +4073,7 @@
         var out = $('wfAiResult');
         if (!out) return;
         lastPlan = null;
+        lastAssistantResult = res || null;
 
         var status = verificationStatus(res, userText);
         var plan = (res && res.plan) || {};
@@ -4007,6 +4082,7 @@
         var warningGroups = collectPhraseWarnings(res, validation, plan);
         var functionalWarnings = warningGroups.functional || [];
         var technicalWarnings = warningGroups.technical || [];
+        var fallbackActive = fallbackNeedsHelp(res, userText);
 
         var technical = res || { ok: false, error: 'Sin respuesta de verificación.' };
         var technicalJson = JSON.stringify(technical, null, 2);
@@ -4016,17 +4092,19 @@
         var html = '';
         html += '<div class="wf-ai-verify-card ' + htmlEncode(status.css) + '">';
         html += '  <div class="wf-ai-verify-head">';
-        html += '    <div><div class="wf-ai-verify-kicker">Verificación de frase</div><div class="wf-ai-verify-title">' + htmlEncode(status.title) + '</div></div>';
+        html += '    <div><div class="wf-ai-verify-kicker">Paso 1 de 5 · Verificar frase</div><div class="wf-ai-verify-title">' + htmlEncode(status.title) + '</div></div>';
         html += '    <span class="wf-ai-verify-badge ' + htmlEncode(status.css) + '">' + htmlEncode(status.label) + '</span>';
         html += '  </div>';
         html += '  <div class="wf-ai-verify-phrase">' + htmlEncode(userText || '') + '</div>';
         html += '</div>';
-        html += renderFallbackHelp(res, userText);
+        html += assistantPhaseStripHtml(fallbackActive ? 2 : 3, 1);
 
-        if (!res || !res.ok) {
+        if (fallbackActive) {
+            html += renderFallbackHelp(res, userText);
+        } else if (!res || !res.ok) {
             html += '<div class="wf-ai-error">' + htmlEncode((res && (res.messageToUser || res.error)) || 'No se pudo verificar la frase.') + '</div>';
         } else {
-            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Se entendió</div>';
+            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Lectura funcional verificada</div>';
             if (understood.length) {
                 html += '<ul>';
                 understood.forEach(function (x) { html += '<li>' + htmlEncode(x) + '</li>'; });
@@ -4049,16 +4127,12 @@
                 });
                 html += '</ul></div>';
             }
-        }
 
-        var fallbackOwnsErrors = shouldLetFallbackOwnErrors(res, userText);
-        if (!fallbackOwnsErrors) {
             html += renderList('Datos faltantes', missing, 'wf-ai-warning-list');
             html += renderList('Errores', validation.errors || [], 'wf-ai-error-list');
             html += renderList('Advertencias funcionales', functionalWarnings, 'wf-ai-warning-list');
-        } else if (functionalWarnings.length) {
-            html += renderList('Advertencias funcionales', functionalWarnings, 'wf-ai-warning-list');
         }
+
         if (technicalWarnings.length) {
             html += '<details class="wf-ai-tech-warnings"><summary>Advertencias técnicas ocultas (' + technicalWarnings.length + ')</summary>';
             html += renderList('Solo diagnóstico técnico', technicalWarnings, 'wf-ai-tech-warning-list');
@@ -4066,16 +4140,13 @@
         }
 
         var hasValidationErrors = ((validation.errors || []).length > 0) || (missing.length > 0);
-        var stillNeedsFallback = fallbackNeedsHelp(res, userText);
-        var canInterpretSafely = !!(res && res.ok && !hasValidationErrors && !stillNeedsFallback);
+        var canInterpretSafely = !!(res && res.ok && !hasValidationErrors && !fallbackActive);
 
         html += '<div class="wf-ai-actions wf-ai-verify-actions">';
         html += '<button type="button" class="btn" id="wfAiVerifyCopyPhrase">Copiar frase</button>';
         html += '<button type="button" class="btn" id="wfAiVerifyCopyJson">Copiar JSON técnico</button>';
         if (canInterpretSafely) {
-            html += '<button type="button" class="btn" id="wfAiVerifyInterpret">Interpretar para aplicar</button>';
-        } else if (res && res.ok) {
-            html += '<button type="button" class="btn" disabled="disabled" title="Primero resolvé datos faltantes, errores o ambigüedades.">Interpretar para aplicar</button>';
+            html += '<button type="button" class="btn" id="wfAiVerifyInterpret">Revisar plan propuesto</button>';
         }
         html += '</div>';
         html += '<details class="wf-ai-json"><summary>Ver JSON técnico de verificación</summary><pre id="wfAiVerifyJsonPre">' + htmlEncode(technicalJson) + '</pre></details>';
@@ -4120,7 +4191,7 @@
     }
 
     function verificarFrase() {
-        aiGuidedPlanConfirmed = false;
+        resetGuidedPlanConfirmation();
         var userText = getCurrentAiPhrase();
         if (!userText) {
             setStatus('Escribí primero una frase para verificar.', 'warn');
@@ -4164,6 +4235,11 @@
         }
         if (!window.__WF_UI || typeof window.__WF_UI.applyAiPlan !== 'function') {
             setStatus('No está disponible la API del canvas para aplicar la propuesta.', 'error');
+            return;
+        }
+        if (lastAssistantResult && lastAssistantResult.requiresFinalConfirmation && !guidedPlanIsConfirmed(lastPlan)) {
+            setStatus('El plan cambió o todavía no fue confirmado. Revisalo y confirmalo antes de aplicar.', 'warn');
+            renderResult(lastAssistantResult);
             return;
         }
 
@@ -4217,13 +4293,13 @@
         var html = '';
         html += '<div class="wf-ai-guided-review ' + (confirmed ? 'confirmed' : '') + '">';
         html += '  <div class="wf-ai-guided-review-head">';
-        html += '    <div><div class="wf-ai-guided-review-kicker">Plan guiado generado</div><div class="wf-ai-guided-review-title">Revisá esta lectura funcional antes de aplicar</div></div>';
-        html += '    <span class="wf-ai-guided-review-badge">' + (confirmed ? 'Confirmado' : 'Pendiente de confirmar') + '</span>';
+        html += '    <div><div class="wf-ai-guided-review-kicker">' + (confirmed ? 'Paso 4 de 5 · Plan confirmado' : 'Paso 3 de 5 · Revisar plan') + '</div><div class="wf-ai-guided-review-title">Resumen final del flujo antes de aplicarlo</div></div>';
+        html += '    <span class="wf-ai-guided-review-badge">' + (confirmed ? 'Confirmado' : 'Pendiente') + '</span>';
         html += '  </div>';
-        html += '  <div class="wf-ai-guided-review-text">Este plan ya no depende de seguir adivinando con la frase libre. Está armado con pasos explícitos. Si esto coincide con lo esperado, confirmalo y recién después aplicalo al canvas.</div>';
+        html += '  <div class="wf-ai-guided-review-text">Este es el plan funcional definitivo. No se aplicará ningún nodo hasta que confirmes exactamente este contenido.</div>';
 
         if (mainSteps.length) {
-            html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Antes de la condición</div><ol>';
+            html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Flujo principal</div><ol>';
             mainSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
             html += '</ol></div>';
         }
@@ -4255,11 +4331,11 @@
 
         if (!confirmed) {
             html += '  <div class="wf-ai-guided-review-actions">';
-            html += '    <button type="button" class="btn wf-ai-guided-confirm" id="wfAiConfirmGuidedPlan">Confirmar plan guiado</button>';
+            html += '    <button type="button" class="btn wf-ai-guided-confirm" id="wfAiConfirmGuidedPlan">Confirmar este plan</button>';
             html += '    <button type="button" class="btn" data-wf-ai-open-guide="1">Editar paso a paso</button>';
             html += '  </div>';
         } else {
-            html += '  <div class="wf-ai-guided-confirmed-note">Plan confirmado. Ahora podés aplicarlo al canvas.</div>';
+            html += '  <div class="wf-ai-guided-confirmed-note">Plan confirmado sin cambios. El próximo paso es aplicarlo al canvas.</div>';
         }
         html += '</div>';
         return html;
@@ -4276,7 +4352,7 @@
             var detail = res && res.error ? res.error : '';
             var htmlErr = '<div class="wf-ai-error">' + htmlEncode(msg) + '</div>';
             if (detail && detail !== msg) {
-                htmlErr += '<details class="wf-ai-json" open><summary>Error técnico</summary><pre>' + htmlEncode(detail) + '</pre></details>';
+                htmlErr += '<details class="wf-ai-json"><summary>Error técnico</summary><pre>' + htmlEncode(detail) + '</pre></details>';
             }
             if (res && (res.provider || res.model)) {
                 htmlErr += '<div class="wf-ai-meta">Proveedor: ' + htmlEncode(res.provider || '') + ' · Modelo: ' + htmlEncode(res.model || '') + '</div>';
@@ -4293,71 +4369,71 @@
         var warningGroups = collectPhraseWarnings(res, validation, plan);
         var warnings = warningGroups.functional || [];
         var technicalWarnings = warningGroups.technical || [];
+        var requiresGuidedConfirmation = !!res.requiresFinalConfirmation;
+        var guidedConfirmed = requiresGuidedConfirmation && guidedPlanIsConfirmed(plan);
 
         var html = '';
         html += '<div class="wf-ai-message">' + htmlEncode(res.messageToUser || plan.messageToUser || '') + '</div>';
         html += '<div class="wf-ai-meta">Modelo: ' + htmlEncode(res.model || '') + ' · Validación: ' + (validation.ok ? 'OK' : 'con errores') + '</div>';
 
-        if (actions.length) {
-            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Acciones propuestas</div><ol>';
-            actions.forEach(function (a) {
-                html += '<li><strong>' + htmlEncode(a.action || '') + '</strong>';
-                if (a.nodeType) html += ' · ' + htmlEncode(a.nodeType);
-                if (a.label) html += ' · ' + htmlEncode(a.label);
-                html += '</li>';
-            });
-            html += '</ol></div>';
-        }
-
-        if (plan.branchPlan && plan.branchPlan.branches && plan.branchPlan.branches.length) {
-            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Plan de ramas</div><ul>';
-            plan.branchPlan.branches.forEach(function (b) {
-                html += '<li><strong>' + htmlEncode(b.condition || '') + '</strong>';
-                html += '<br>SI: ' + htmlEncode(b.truePath || '');
-                html += '<br>NO: ' + htmlEncode(b.falsePath || '');
-                html += '</li>';
-            });
-            html += '</ul></div>';
-        }
-
-        if (plan.proposedConnections && plan.proposedConnections.length) {
-            html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Conexiones propuestas</div><ol>';
-            plan.proposedConnections.forEach(function (c) {
-                var cond = c.condition ? ' [' + c.condition + ']' : '';
-                html += '<li>' + htmlEncode(c.from || '') + htmlEncode(cond) + ' → ' + htmlEncode(c.to || '') + '</li>';
-            });
-            html += '</ol></div>';
-        }
-
-        var requiresGuidedConfirmation = !!res.requiresFinalConfirmation;
         if (requiresGuidedConfirmation) {
-            html += guidedResolutionReviewHtml(aiGuidedPlanConfirmed);
+            html += assistantPhaseStripHtml(guidedConfirmed ? 5 : 3, guidedConfirmed ? 4 : 2);
+            html += guidedResolutionReviewHtml(guidedConfirmed);
+        } else {
+            if (actions.length) {
+                html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Acciones propuestas</div><ol>';
+                actions.forEach(function (a) {
+                    html += '<li><strong>' + htmlEncode(a.action || '') + '</strong>';
+                    if (a.nodeType) html += ' · ' + htmlEncode(a.nodeType);
+                    if (a.label) html += ' · ' + htmlEncode(a.label);
+                    html += '</li>';
+                });
+                html += '</ol></div>';
+            }
+
+            if (plan.branchPlan && plan.branchPlan.branches && plan.branchPlan.branches.length) {
+                html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Plan de ramas</div><ul>';
+                plan.branchPlan.branches.forEach(function (b) {
+                    html += '<li><strong>' + htmlEncode(b.condition || '') + '</strong>';
+                    html += '<br>SI: ' + htmlEncode(b.truePath || '');
+                    html += '<br>NO: ' + htmlEncode(b.falsePath || '');
+                    html += '</li>';
+                });
+                html += '</ul></div>';
+            }
+
+            if (plan.proposedConnections && plan.proposedConnections.length) {
+                html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Conexiones propuestas</div><ol>';
+                plan.proposedConnections.forEach(function (c) {
+                    var cond = c.condition ? ' [' + c.condition + ']' : '';
+                    html += '<li>' + htmlEncode(c.from || '') + htmlEncode(cond) + ' → ' + htmlEncode(c.to || '') + '</li>';
+                });
+                html += '</ol></div>';
+            }
+
+            html += renderFallbackHelp(res, getCurrentAiPhrase());
         }
 
-        html += renderFallbackHelp(res, getCurrentAiPhrase());
-
-        if (actions.length) {
+        if (actions.length && (!requiresGuidedConfirmation || guidedConfirmed)) {
             var canApply = canApplyPlan(plan, validation, missing);
-            if (requiresGuidedConfirmation && !aiGuidedPlanConfirmed) canApply = false;
             var disabled = canApply ? '' : ' disabled';
-            var hint = canApply
-                ? 'Aplicará nodos y aristas en el canvas. Revisar antes de guardar.'
-                : (requiresGuidedConfirmation && !aiGuidedPlanConfirmed)
-                    ? 'Confirmá primero el plan guiado. No aplico automáticamente una conversión desde fallback.'
-                    : 'Para aplicar al canvas, la propuesta no debe tener datos faltantes ni errores de validación.';
-            html += '<div class="wf-ai-actions" style="margin-top:8px">';
-            html += '<button type="button" class="btn" id="wfAiApply"' + disabled + '>Aplicar al canvas</button>';
+            var guidedCss = requiresGuidedConfirmation ? ' guided-ready' : '';
+            html += '<div class="wf-ai-apply-zone' + guidedCss + '">';
+            if (requiresGuidedConfirmation) html += '<div class="wf-ai-apply-kicker">Paso 5 de 5 · Aplicar al canvas</div>';
+            html += '<button type="button" class="btn wf-ai-apply-ready" id="wfAiApply"' + disabled + '>Aplicar al canvas</button>';
+            html += '<div class="wf-ai-meta">' + htmlEncode(canApply ? 'Aplicará únicamente el plan confirmado. Después revisá el canvas antes de guardar.' : 'La propuesta todavía tiene errores o datos faltantes.') + '</div>';
             html += '</div>';
-            html += '<div class="wf-ai-meta">' + htmlEncode(hint) + '</div>';
         }
 
-        var resultFallbackOwnsErrors = shouldLetFallbackOwnErrors(res, getCurrentAiPhrase());
-        if (!resultFallbackOwnsErrors) {
-            html += renderList('Datos faltantes', missing, '');
-            html += renderList('Errores de validación', validation.errors || [], 'wf-ai-error-list');
-            html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
-        } else if (warnings.length) {
-            html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
+        if (!requiresGuidedConfirmation) {
+            var resultFallbackOwnsErrors = shouldLetFallbackOwnErrors(res, getCurrentAiPhrase());
+            if (!resultFallbackOwnsErrors) {
+                html += renderList('Datos faltantes', missing, '');
+                html += renderList('Errores de validación', validation.errors || [], 'wf-ai-error-list');
+                html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
+            } else if (warnings.length) {
+                html += renderList('Advertencias funcionales', warnings, 'wf-ai-warning-list');
+            }
         }
         if (technicalWarnings.length) {
             html += '<details class="wf-ai-tech-warnings"><summary>Advertencias técnicas ocultas (' + technicalWarnings.length + ')</summary>';
@@ -4374,8 +4450,11 @@
 
         var confirmGuidedBtn = $('wfAiConfirmGuidedPlan');
         if (confirmGuidedBtn) confirmGuidedBtn.addEventListener('click', function () {
-            aiGuidedPlanConfirmed = true;
-            setStatus('Plan guiado confirmado. Ahora podés aplicarlo al canvas.', 'ok');
+            if (!confirmGuidedPlan(lastPlan)) {
+                setStatus('No se pudo confirmar porque el plan no está disponible.', 'error');
+                return;
+            }
+            setStatus('Plan confirmado. Ahora podés aplicar exactamente esta versión al canvas.', 'ok');
             renderResult(lastAssistantResult);
         });
     }
@@ -4419,6 +4498,14 @@
         if (doc === 'NOTA_CREDITO_ELECTRONICA_AR') return 'Cargar nota de crédito';
         if (doc === 'FACTURA_ELECTRONICA_AR') return 'Cargar factura';
         return 'Cargar documento';
+    }
+
+    function conditionLabelForPlan(step) {
+        step = step || {};
+        var field = normalizePhraseForSearch(step.fieldPath || '');
+        var op = String(step.operator || 'not_empty').trim();
+        if (field.indexOf('notaCredito.cae'.toLowerCase()) >= 0 && op === 'not_empty') return 'Validar CAE informado';
+        return 'Condición: ' + conditionInfo(step).text;
     }
 
     function humanTaskTitleForPlan(step) {
@@ -4478,7 +4565,7 @@
                     if (r.transform) item.transform = r.transform;
                     return item;
                 });
-                return makePlanAction('control.if', labelFor('Condición: ' + conditionInfo(step).text), {
+                return makePlanAction('control.if', labelFor(conditionLabelForPlan(step)), {
                     rulesMode: step.rulesMode || 'all',
                     rules: planRules
                 });
@@ -4491,7 +4578,7 @@
                 op: op
             };
             if (operatorNeedsValue(op)) p.value = valueBox.value || '';
-            return makePlanAction('control.if', labelFor('Condición: ' + conditionInfo(step).text), p);
+            return makePlanAction('control.if', labelFor(conditionLabelForPlan(step)), p);
         }
 
         if (step.type === 'human_task') {
@@ -4986,7 +5073,7 @@
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix71e',
+            model: 'Constructor IA estructurado fix72',
             messageToUser: plan.messageToUser,
             plan: plan,
             validation: buildFunctionalValidation(),
@@ -4996,7 +5083,7 @@
 
 
     function interpretar() {
-        aiGuidedPlanConfirmed = false;
+        resetGuidedPlanConfirmation();
         var userText = getCurrentAiPhrase();
         if (!userText) {
             setStatus('Escribí primero qué querés construir.', 'warn');
@@ -5046,6 +5133,12 @@
             if (t) t.value = '';
             if (r) r.innerHTML = '';
             lastPlan = null;
+            lastAssistantResult = null;
+            aiFallbackResolved = {};
+            aiFallbackResolvedItems = [];
+            aiFallbackBaseKey = '';
+            aiFallbackAcceptedRewriteKey = '';
+            resetGuidedPlanConfirmation();
             setStatus('', '');
         });
     }

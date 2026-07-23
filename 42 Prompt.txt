@@ -1,0 +1,277 @@
+PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA v2
+
+Voy a pasarte:
+
+Este Prompt.
+El ContextPack actualizado.
+El ZIP completo nuevo del proyecto Workflow Studio WebForms, generado después de aplicar todo hasta fix71f.
+Si corresponde, algún ZIP adicional puntual.
+
+Quiero que trabajes así, sin desviarte.
+
+Paso 1
+
+Confirmá que leíste completo el ContextPack.
+
+Paso 2
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+Paso 3
+
+Cuando tengas el ZIP, revisá primero los archivos reales y recién después proponé modificaciones.
+
+Reglas obligatorias
+No inventar nada.
+No cambiar arquitectura sin necesidad.
+No reescribir cosas que ya funcionan.
+Cambios mínimos y precisos.
+Siempre trabajar sobre código real del ZIP.
+No mandar “archivo completo” si no verificaste el archivo real actual.
+No asumir que el código quedó exactamente como en el chat.
+Entregar correcciones como ZIP con estructura real de carpetas y archivos completos modificados.
+Incluir LEEME en cada ZIP correctivo.
+Si algo no cierra, decirlo.
+Si falta una pieza, pedirla.
+No mezclar teoría larga con código si estamos corrigiendo algo puntual.
+Proponer siempre la mejor versión de entrada.
+No volver atrás sobre temas ya cerrados.
+Cuando algo ya funciona, no discutirlo otra vez salvo bug real.
+No tocar salvo bug real explícito
+Motor de ejecución.
+Handlers runtime.
+WorkflowUI canvas/aristas/zoom/minimapa.
+WF_Instancia_Mapa.
+WF_Instancias.
+Queue runtime.
+SMTP / email.send.
+HSubFlow.cs / runtime subflow.
+NC_AR.
+FACTURA_AR.
+Extractores documentales.
+
+Excepción permitida:
+
+Se puede tocar el panel del Asistente IA dentro de WorkflowUI.aspx, su JS y CSS, porque el próximo fix trabaja sobre esa experiencia.
+No tocar mecánica interna del canvas salvo necesidad real y explícita.
+Base de trabajo
+
+Tomar como base el ZIP nuevo que Omar va a pasar en esta sesión.
+
+Ese ZIP debería contener todo lo aplicado hasta:
+
+fix57
+fix58
+fix58b
+fix58d
+fix59
+fix60
+fix61
+fix62
+fix62b
+fix63
+fix64
+fix64b
+fix65
+fix65b
+fix66
+fix67
+fix67b
+fix68
+fix68b
+fix68c
+fix69
+fix69b
+fix70
+fix70b
+fix71
+fix71b
+fix71c
+fix71d
+fix71e
+fix71f
+
+No usar fixes sueltos anteriores si el ZIP completo ya los contiene.
+
+Estado esperado del banco IA
+
+Debe existir y funcionar:
+
+WF_AiRegression.aspx
+App_Data/WF_AI/ai_regression_cases.json
+
+Resultado esperado base:
+
+OK=14 / FALLA=0 / SKIP=0
+
+Casos esperados:
+
+A_NO_SUPERA_CASO_CONTRARIO
+B_NOTIFY_POR_RAMA
+C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE
+D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO
+E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS
+F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS
+G_HTTP_REQUEST_LOGGER
+H_SQL_SELECT_LOGGER
+I_LOGGER_SIMPLE
+J_FILE_WRITE_LOGGER
+K_FILE_READ_LOGGER
+L_STATE_VARS_LOGGER
+M_QUEUE_PUBLISH_LOGGER
+N_QUEUE_CONSUME_LOGGER
+Estado esperado Constructor IA
+
+Debe existir:
+
+Verificar frase
+Fallback asistido
+Tarjetas de decisión
+Decisiones tomadas
+Frase clara consolidada
+Resolver acá / Resolver y revisar plan
+Plan guiado revisable
+Confirmar plan guiado
+Aplicar al canvas solo después de confirmación
+Bloque técnico colapsado
+Copiar frase
+Copiar JSON técnico
+
+Principio funcional:
+
+No entiendo perfecto → pregunto.
+El usuario decide → genero plan.
+El usuario confirma → aplico.
+Prueba clave del Constructor IA
+
+Usar esta frase:
+
+Cargar una NC, si tiene CAE enviar a DIR_General una notificacion con el numero de CAE, sino crear una advertencia que no lo tiene a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion a IT informando que no lo tienen, todos termina el flujo
+
+Resultado funcional esperado:
+
+Inicio
+→ Cargar nota de crédito
+→ IF biz.notaCredito.cae no está vacío
+
+SI:
+  → Notificar a DIR_GENERAL con número de CAE
+  → Fin
+
+NO:
+  → Notificar a COMPRAS con advertencia por falta de CAE
+  → Notificar a IT con proveedor de la NC
+  → Fin
+
+La notificación a IT está bien en rama NO si la decisión tomada fue:
+
+IT solo si falta CAE.
+Qué hacer al inicio
+
+No avanzar directo con otro fix.
+
+Primero:
+
+Revisar ZIP real.
+Confirmar archivos clave.
+Compilar si el entorno lo permite.
+Ejecutar WF_AiRegression.aspx → Probar todos.
+Confirmar OK=14 / FALLA=0 / SKIP=0.
+Ejecutar smoke de queue.consume con debug=false.
+Confirmar logs limpios.
+Probar la frase compleja NC/CAE/notificaciones.
+Confirmar que no aplica al canvas sin confirmación.
+Confirmar que el plan guiado genera grafo coherente.
+
+Recién después proponer siguiente avance.
+
+Próximo avance definido
+
+Avanzar con:
+
+fix72_cierre_desambiguacion_constructor_ia
+
+Objetivo:
+
+Cerrar y estabilizar el circuito completo de verificación/desambiguación antes de agregar nodos faltantes.
+
+Alcance:
+
+Limpiar textos repetidos del fallback.
+Asegurar secuencia visual clara:
+  Verificar frase
+  Resolver dudas
+  Revisar plan
+  Confirmar plan
+  Aplicar al canvas
+
+Evitar que aparezcan mezclados:
+  errores viejos
+  plan resuelto
+  fallback anterior
+  botones redundantes
+
+Mostrar resumen final del plan antes de aplicar.
+Mejorar títulos de nodos generados por plan guiado.
+Mantener bloque técnico colapsado.
+Bloquear Aplicar al canvas hasta confirmación real.
+Que Resolver acá sea la salida principal cuando hay error accionable.
+Que Armarlo paso a paso sea alternativa clara.
+No insistir con parser libre cuando ya se sabe que quedó trabado.
+
+No tocar:
+
+Motor
+Handlers
+Mapa
+Runtime
+Queue
+Subflow
+SMTP
+Banco JSON
+Extractores documentales
+
+Archivos probables:
+
+WorkflowUI.aspx
+Scripts/workflow.ai.assistant.js
+Styles/workflow.ai.assistant.css
+Después de fix72
+
+Recién después de fix72, avanzar con nodos faltantes por grupos.
+
+Grupo 1 — simples y seguros
+control.delay
+control.retry
+util.notify directo
+state.vars remove
+Grupo 2 — control de flujo
+control.switch
+control.parallel
+control.join
+control.loop
+Grupo 3 — combinaciones reales
+file.read → data.sql
+http.request POST
+queue.publish → queue.consume
+state.vars → control.if
+
+No meter todos juntos.
+
+Criterio final
+
+La base actual ya está encaminada. No romperla.
+
+Todo avance nuevo debe mantener:
+
+Banco IA OK
+Compilación OK
+Sin regresiones en Constructor IA
+Sin aplicar grafos sin confirmación
+Sin ensuciar logs runtime
+Sin tocar áreas cerradas salvo bug real
+
+Si algo falla:
+
+No asumir.
+Pedir JSON técnico, captura, logs o archivo real.
