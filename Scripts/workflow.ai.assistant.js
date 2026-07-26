@@ -13,6 +13,8 @@
 // fix71f: el fallback no termina en un botón genérico; muestra resolución accionable en el mismo lugar del error.
 // fix72: cierra la secuencia Verificar → Resolver → Revisar → Confirmar → Aplicar, evita mezclar planes parciales y ata la confirmación al plan exacto.
 // fix73: presenta la interpretación como borrador visual sobre el canvas, concentra una duda por vez y convierte la propuesta en workflow con una sola confirmación.
+// fix73b: conserva un resumen simple de las decisiones usadas y lo deja disponible en el Inspector después de crear el workflow.
+// fix73c: transforma las decisiones de desambiguación en tipos reales de nodo y bloquea cualquier plan inconsistente.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -28,6 +30,7 @@
     var aiVisualDraftSelectedIssueKey = '';
     var aiVisualDraftLastQuestions = [];
     var aiVisualDraftActive = false;
+    var aiAppliedDecisionSummary = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -3113,8 +3116,12 @@
             '    <div class="wf-ai-kicker">Asistente IA</div>' +
             '    <div id="wfAiCollapsedMsg" class="wf-ai-collapsed-msg"></div>' +
             '  </div>' +
-            '  <button type="button" class="btn" id="wfAiShow">Mostrar Asistente IA</button>' +
-            '</div>';
+            '  <div class="wf-ai-collapsed-actions">' +
+            '    <button type="button" class="btn wf-ai-decisions-toggle" id="wfAiShowDecisions" style="display:none" aria-expanded="false">Ver decisiones IA</button>' +
+            '    <button type="button" class="btn" id="wfAiShow">Mostrar Asistente IA</button>' +
+            '  </div>' +
+            '</div>' +
+            '<div id="wfAiAppliedSummary" class="wf-ai-applied-summary" style="display:none"></div>';
 
         panel.parentNode.insertBefore(box, panel);
 
@@ -3130,7 +3137,135 @@
             });
         }
 
+        var decisionsBtn = $('wfAiShowDecisions');
+        if (decisionsBtn) {
+            decisionsBtn.addEventListener('click', function () {
+                var summary = $('wfAiAppliedSummary');
+                if (!summary || !aiAppliedDecisionSummary) return;
+                var open = summary.style.display === 'none';
+                summary.style.display = open ? '' : 'none';
+                decisionsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                decisionsBtn.textContent = open ? 'Ocultar decisiones' : 'Ver decisiones IA';
+            });
+        }
+
+        updateAppliedDecisionSummaryUi();
         return box;
+    }
+
+    // ------------------------------------------------------------
+    // fix73b: memoria visible de las decisiones usadas al crear el workflow
+    // ------------------------------------------------------------
+    function appliedDecisionEffectText(questionKey, plan) {
+        var phrase = getCurrentAiPhrase() || '';
+        if (questionKey === 'notify-mode') {
+            var mode = guidedNotifyActionMode(phrase);
+            return 'Aplicado como ' + (mode === 'human_task' ? 'tareas humanas' : (mode === 'logger' ? 'registros de log' : 'notificaciones internas')) + ' para los destinatarios informados.';
+        }
+        if (questionKey === 'branch-no' || questionKey === 'missing-branch-no-action') {
+            var noMode = guidedNoBranchActionMode(phrase);
+            return 'La rama NO quedó con ' + (noMode === 'human_task' ? 'una tarea humana para COMPRAS' : (noMode === 'logger' ? 'un log Warn' : (noMode === 'end' ? 'cierre directo' : 'una notificación a COMPRAS'))) + '.';
+        }
+        if (questionKey === 'it-scope') {
+            var scope = guidedItScope(phrase);
+            return scope === 'both' ? 'IT quedó en ambas ramas.' : (scope === 'true' ? 'IT quedó en la rama SI.' : 'IT quedó en la rama NO.');
+        }
+        if (questionKey === 'data-message') {
+            var data = guidedMessageData(phrase);
+            var parts = [];
+            if (data.cae) parts.push('CAE');
+            if (data.proveedor) parts.push('proveedor');
+            return parts.length ? 'Los nodos generados incorporan ' + parts.join(' y ') + ' en el contenido.' : '';
+        }
+        if (questionKey === 'warning-mode') {
+            var warningMode = guidedWarningActionMode(phrase);
+            var noMode2 = guidedNoBranchActionMode(phrase);
+            if (fallbackResolvedItem('missing-branch-no-action') || fallbackResolvedItem('branch-no')) {
+                if (warningMode !== noMode2) return 'La decisión específica de la rama NO tuvo prioridad sobre esta opción general.';
+            }
+            return 'La advertencia se aplicó como ' + (warningMode === 'human_task' ? 'tarea humana' : (warningMode === 'logger' ? 'log Warn' : 'notificación interna')) + '.';
+        }
+        return '';
+    }
+
+    function buildAppliedDecisionSummary(plan) {
+        var decisions = [];
+        aiFallbackResolvedItems.forEach(function (x) {
+            if (!x) return;
+            decisions.push({
+                title: String(x.title || 'Decisión').trim(),
+                value: String(x.label || x.clarification || 'Opción seleccionada').trim(),
+                effect: appliedDecisionEffectText(x.key || '', plan)
+            });
+        });
+
+        var nodeCount = 0;
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (a && a.action === 'ADD_NODE') nodeCount++;
+        });
+
+        return {
+            phrase: stripFallbackClarifications(getCurrentAiPhrase() || '').trim(),
+            decisions: decisions,
+            nodeCount: nodeCount
+        };
+    }
+
+    function appliedDecisionSummaryHtml(summary) {
+        summary = summary || {};
+        var decisions = summary.decisions || [];
+        var html = '';
+        html += '<div class="wf-ai-applied-summary-head">';
+        html += '  <div><div class="wf-ai-applied-summary-kicker">Decisiones usadas para crear este workflow</div>';
+        html += '  <div class="wf-ai-applied-summary-title">Así se explica la ubicación de los nodos y las ramas.</div></div>';
+        html += '  <span class="wf-ai-applied-summary-count">' + decisions.length + ' ' + (decisions.length === 1 ? 'decisión' : 'decisiones') + '</span>';
+        html += '</div>';
+
+        if (decisions.length) {
+            html += '<ul class="wf-ai-applied-summary-list">';
+            decisions.forEach(function (x) {
+                html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + '</strong><span>' + htmlEncode(x.value || 'Opción seleccionada') + '</span>';
+                if (x.effect) html += '<em>Efecto: ' + htmlEncode(x.effect) + '</em>';
+                html += '</li>';
+            });
+            html += '</ul>';
+        } else {
+            html += '<div class="wf-ai-applied-summary-empty">La frase se entendió sin pedir aclaraciones adicionales.</div>';
+        }
+
+        if (summary.nodeCount) {
+            html += '<div class="wf-ai-applied-summary-result">Resultado aplicado: ' + summary.nodeCount + ' nodo' + (summary.nodeCount === 1 ? '' : 's') + ' creado' + (summary.nodeCount === 1 ? '' : 's') + ' en el canvas.</div>';
+        }
+        if (summary.phrase) {
+            html += '<details class="wf-ai-applied-summary-phrase"><summary>Ver frase original</summary><div>' + htmlEncode(summary.phrase) + '</div></details>';
+        }
+        return html;
+    }
+
+    function updateAppliedDecisionSummaryUi() {
+        var btn = $('wfAiShowDecisions');
+        var summary = $('wfAiAppliedSummary');
+        if (!btn || !summary) return;
+
+        if (!aiAppliedDecisionSummary) {
+            btn.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+            btn.textContent = 'Ver decisiones IA';
+            summary.style.display = 'none';
+            summary.innerHTML = '';
+            return;
+        }
+
+        btn.style.display = '';
+        btn.setAttribute('aria-expanded', 'false');
+        btn.textContent = 'Ver decisiones IA';
+        summary.style.display = 'none';
+        summary.innerHTML = appliedDecisionSummaryHtml(aiAppliedDecisionSummary);
+    }
+
+    function clearAppliedDecisionSummary() {
+        aiAppliedDecisionSummary = null;
+        updateAppliedDecisionSummaryUi();
     }
 
     function collapseAssistant(message, reason) {
@@ -3148,6 +3283,7 @@
             collapsed.style.display = '';
             collapsed.setAttribute('data-reason', reason || 'manual');
         }
+        updateAppliedDecisionSummaryUi();
     }
 
     function showAssistant() {
@@ -3476,6 +3612,101 @@
         return html;
     }
 
+    // ------------------------------------------------------------
+    // fix73c: una decisión registrada debe cambiar el tipo real de nodo
+    // ------------------------------------------------------------
+    function fallbackResolvedItem(questionKey) {
+        questionKey = String(questionKey || '').trim();
+        if (!questionKey) return null;
+        for (var i = aiFallbackResolvedItems.length - 1; i >= 0; i--) {
+            var item = aiFallbackResolvedItems[i];
+            if (item && String(item.key || '') === questionKey) return item;
+        }
+        return null;
+    }
+
+    function fallbackDecisionText(questionKey) {
+        var item = fallbackResolvedItem(questionKey);
+        if (!item) return '';
+        return normalizePhraseForSearch((item.label || '') + ' ' + (item.clarification || ''));
+    }
+
+    function fallbackDecisionMode(questionKey, defaultMode) {
+        var txt = fallbackDecisionText(questionKey);
+        if (!txt) return defaultMode || '';
+        if (txt.indexOf('tarea humana') >= 0 || txt.indexOf('crear tarea') >= 0) return 'human_task';
+        if (txt.indexOf('logger') >= 0 || txt.indexOf('log warn') >= 0 || txt.indexOf('registrar log') >= 0) return 'logger';
+        if (txt.indexOf('terminar flujo') >= 0 || txt.indexOf('finalizar el flujo sin') >= 0) return 'end';
+        if (txt.indexOf('notificacion') >= 0 || txt.indexOf('notificar') >= 0 || txt.indexOf('aviso visible') >= 0) return 'notify';
+        return defaultMode || '';
+    }
+
+    function guidedNotifyActionMode(userText) {
+        var mode = fallbackDecisionMode('notify-mode', '');
+        if (mode) return mode;
+        var x = normalizePhraseForSearch(userText || '');
+        if (x.indexOf('crear tareas humanas') >= 0) return 'human_task';
+        if (x.indexOf('registrar logs del workflow') >= 0) return 'logger';
+        return 'notify';
+    }
+
+    function guidedWarningActionMode(userText) {
+        var mode = fallbackDecisionMode('warning-mode', '');
+        if (mode) return mode;
+        var x = normalizePhraseForSearch(userText || '');
+        if (x.indexOf('advertencia debe crear una tarea') >= 0) return 'human_task';
+        if (x.indexOf('advertencia debe ser un logger warn') >= 0) return 'logger';
+        return 'notify';
+    }
+
+    function guidedNoBranchActionMode(userText) {
+        // La respuesta específica de cierre de rama tiene prioridad sobre la genérica.
+        var specific = fallbackResolvedItem('missing-branch-no-action');
+        if (specific) {
+            var specificText = normalizePhraseForSearch((specific.label || '') + ' ' + (specific.clarification || ''));
+            var specificMode = fallbackDecisionMode('missing-branch-no-action', 'notify');
+            if (specificMode === 'notify' && specificText.indexOf('notificar') >= 0) return guidedNotifyActionMode(userText);
+            return specificMode;
+        }
+
+        var branch = fallbackResolvedItem('branch-no');
+        if (branch) {
+            var branchText = normalizePhraseForSearch((branch.label || '') + ' ' + (branch.clarification || ''));
+            if (branchText.indexOf('registrar una advertencia') >= 0) return guidedWarningActionMode(userText);
+            var branchMode = fallbackDecisionMode('branch-no', 'notify');
+            if (branchMode === 'notify' && branchText.indexOf('notificar') >= 0) return guidedNotifyActionMode(userText);
+            return branchMode;
+        }
+
+        return guidedWarningActionMode(userText);
+    }
+
+    function guidedMessageData(userText) {
+        var item = fallbackResolvedItem('data-message');
+        var txt = item
+            ? normalizePhraseForSearch((item.label || '') + ' ' + (item.clarification || ''))
+            : normalizePhraseForSearch(userText || '');
+        return {
+            cae: txt.indexOf('cae') >= 0,
+            proveedor: txt.indexOf('proveedor') >= 0
+        };
+    }
+
+    function guidedActionNodeType(mode) {
+        if (mode === 'human_task') return 'human.task';
+        if (mode === 'logger') return 'util.logger';
+        if (mode === 'end') return '';
+        return 'util.notify';
+    }
+
+    function guidedActionVerb(mode, role) {
+        role = role || 'destino';
+        if (mode === 'human_task') return 'crear una tarea humana para ' + role;
+        if (mode === 'logger') return 'registrar un log para ' + role;
+        if (mode === 'end') return 'finalizar sin agregar otra acción';
+        return 'notificar a ' + role;
+    }
+
     function textHasAny(text, words) {
         var x = normalizePhraseForSearch(text);
         for (var i = 0; i < (words || []).length; i++) {
@@ -3544,6 +3775,12 @@
 
     function guidedItScope(userText) {
         if (!textHasAny(userText, ['it'])) return 'none';
+        var decision = fallbackDecisionText('it-scope');
+        if (decision) {
+            if (decision.indexOf('ambas ramas') >= 0 || decision.indexOf('it siempre') >= 0) return 'both';
+            if (decision.indexOf('solo si tiene cae') >= 0 || decision.indexOf('solo cuando la nc tenga cae') >= 0) return 'true';
+            if (decision.indexOf('solo si falta cae') >= 0 || decision.indexOf('solo cuando la nc no tenga cae') >= 0) return 'false';
+        }
         if (textHasAny(userText, ['notificar a it en ambas ramas', 'it siempre'])) return 'both';
         if (textHasAny(userText, ['notificar a it solo cuando la nc tenga cae', 'it solo si tiene cae'])) return 'true';
         return 'false';
@@ -3620,14 +3857,20 @@
         var itScope = guidedItScope(userText);
         var hasCompras = textHasAny(userText, ['compras']);
         var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
-        var hasProveedor = textHasAny(userText, ['proveedor']);
+        var data = guidedMessageData(userText);
+        var notifyMode = guidedNotifyActionMode(userText);
+        var noMode = guidedNoBranchActionMode(userText);
+        var dataText = [];
+        if (data.cae) dataText.push('CAE');
+        if (data.proveedor) dataText.push('proveedor');
+        var includeText = dataText.length ? ' incluyendo ' + dataText.join(' y ') + '.' : '.';
 
         items.push('Validar CAE con una condición SI / NO completa.');
-        if (hasDir) items.push('Rama SI: notificar a DIR_GENERAL con el número de CAE.');
-        if (hasCompras) items.push('Rama NO: notificar a COMPRAS con nivel advertencia y finalizar esa rama.');
+        if (hasDir) items.push('Rama SI: ' + guidedActionVerb(notifyMode, 'DIR_GENERAL') + includeText);
+        if (hasCompras) items.push('Rama NO: ' + guidedActionVerb(noMode, 'COMPRAS') + (noMode === 'end' ? '.' : includeText));
         if (hasIt) {
             var itWhere = itScope === 'both' ? 'en ambas ramas' : (itScope === 'true' ? 'en la rama SI' : 'en la rama NO');
-            items.push('Agregar notificación a IT ' + itWhere + (hasProveedor ? ' incluyendo el proveedor obtenido de la NC.' : '.'));
+            items.push('Agregar ' + guidedActionVerb(notifyMode, 'IT') + ' ' + itWhere + includeText);
         }
         items.push('Cerrar todas las ramas con Fin para que no quede ninguna salida pendiente.');
         return items;
@@ -3655,13 +3898,71 @@
         if (!canBuildGuidedResolution(userText)) return false;
 
         var hasIt = textHasAny(userText, ['it']);
+        var hasDir = textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']);
+        var hasCompras = textHasAny(userText, ['compras']);
         var itScope = guidedItScope(userText);
         var itInBothBranches = hasIt && itScope === 'both';
         var itOnlyWhenHasCae = hasIt && itScope === 'true';
         var itOnlyWhenMissingCae = hasIt && itScope === 'false';
+        var notifyMode = guidedNotifyActionMode(userText);
+        var noBranchMode = guidedNoBranchActionMode(userText);
+        var messageData = guidedMessageData(userText);
         var docId = guideSeq++;
         var condId = guideSeq++;
         var steps = [];
+
+        function selectedDataText(hasCae) {
+            var parts = [];
+            if (messageData.cae && hasCae) parts.push('CAE: {{biz.notaCredito.cae}}');
+            if (messageData.proveedor) parts.push('Proveedor: {{biz.notaCredito.proveedor}}');
+            return parts.length ? ' ' + parts.join('. ') + '.' : '';
+        }
+
+        function roleMessage(role, hasCae) {
+            var base;
+            if (role === 'DIR_GENERAL') base = hasCae ? 'La nota de crédito tiene CAE informado.' : 'La nota de crédito no tiene CAE informado.';
+            else if (role === 'COMPRAS') base = hasCae ? 'Revisar la nota de crédito con CAE informado.' : 'La nota de crédito no tiene CAE informado. Revisar la documentación.';
+            else base = hasCae ? 'Revisar los datos de la nota de crédito con CAE.' : 'Revisar los datos de la nota de crédito sin CAE.';
+            return base + selectedDataText(hasCae);
+        }
+
+        function addRoleAction(mode, branch, role, title, message, level) {
+            mode = mode || 'notify';
+            if (mode === 'end') return;
+
+            var common = {
+                id: guideSeq++,
+                branch: branch,
+                branchSourceId: condId
+            };
+
+            if (mode === 'human_task') {
+                common.type = 'human_task';
+                common.destType = 'rol';
+                common.role = role;
+                common.user = '';
+                common.purpose = message || ('Revisión para ' + role);
+                steps.push(common);
+                return;
+            }
+
+            if (mode === 'logger') {
+                common.type = 'logger';
+                common.level = level || 'Warn';
+                common.message = role + ': ' + (message || 'Aviso generado por el Constructor IA');
+                steps.push(common);
+                return;
+            }
+
+            common.type = 'notify';
+            common.destType = 'rol';
+            common.role = role;
+            common.user = '';
+            common.title = title || ('Aviso para ' + role);
+            common.level = level || 'info';
+            common.message = message || 'Hay una novedad pendiente en el workflow.';
+            steps.push(common);
+        }
 
         steps.push({
             id: docId,
@@ -3681,57 +3982,46 @@
             value: ''
         });
 
-        steps.push({
-            id: guideSeq++,
-            type: 'notify',
-            branch: 'if_cond_true',
-            branchSourceId: condId,
-            destType: 'rol',
-            role: 'DIR_GENERAL',
-            user: '',
-            title: 'NC con CAE informado',
-            message: 'La nota de crédito tiene CAE informado: {{biz.notaCredito.cae}}.'
-        });
+        if (hasDir) {
+            addRoleAction(
+                notifyMode,
+                'if_cond_true',
+                'DIR_GENERAL',
+                notifyMode === 'human_task' ? 'Aprobación Dirección' : 'NC con CAE informado',
+                roleMessage('DIR_GENERAL', true),
+                'info'
+            );
+        }
 
-        steps.push({
-            id: guideSeq++,
-            type: 'notify',
-            branch: 'if_cond_false',
-            branchSourceId: condId,
-            destType: 'rol',
-            role: 'COMPRAS',
-            user: '',
-            title: 'NC sin CAE',
-            level: 'warn',
-            message: 'La nota de crédito no tiene CAE informado. Revisar la documentación.'
-        });
-
-        function addItNotification(branch, title, message) {
-            steps.push({
-                id: guideSeq++,
-                type: 'notify',
-                branch: branch,
-                branchSourceId: condId,
-                destType: 'rol',
-                role: 'IT',
-                user: '',
-                title: title,
-                message: message
-            });
+        if (hasCompras) {
+            addRoleAction(
+                noBranchMode,
+                'if_cond_false',
+                'COMPRAS',
+                noBranchMode === 'human_task' ? 'Revisión de Compras' : 'NC sin CAE',
+                roleMessage('COMPRAS', false),
+                noBranchMode === 'logger' || noBranchMode === 'notify' ? 'Warn' : 'info'
+            );
         }
 
         if (itInBothBranches || itOnlyWhenHasCae) {
-            addItNotification(
+            addRoleAction(
+                notifyMode,
                 'if_cond_true',
+                'IT',
                 'Proveedor de NC con CAE',
-                'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC tiene CAE informado.'
+                roleMessage('IT', true),
+                'info'
             );
         }
         if (itInBothBranches || itOnlyWhenMissingCae) {
-            addItNotification(
+            addRoleAction(
+                notifyMode,
                 'if_cond_false',
+                'IT',
                 'Proveedor de NC sin CAE',
-                'Proveedor obtenido de la nota de crédito: {{biz.notaCredito.proveedor}}. La NC no tiene CAE informado.'
+                roleMessage('IT', false),
+                'info'
             );
         }
 
@@ -4649,9 +4939,16 @@
             renderResult(lastAssistantResult);
             return;
         }
+        var lastValidationErrors = lastAssistantResult && lastAssistantResult.validation && lastAssistantResult.validation.errors || [];
+        if (lastValidationErrors.length) {
+            setStatus('La propuesta no se aplicó porque una decisión todavía no coincide con el grafo.', 'error');
+            renderResult(lastAssistantResult);
+            return;
+        }
 
         var result = window.__WF_UI.applyAiPlan(lastPlan, {});
         if (result && result.ok) {
+            aiAppliedDecisionSummary = buildAppliedDecisionSummary(lastPlan);
             hideAssistantAfterApply(result.message || 'Propuesta aplicada al canvas.');
         } else if (result && result.cancelled) {
             setStatus(result.message || 'Aplicación cancelada.', 'warn');
@@ -5455,16 +5752,68 @@
         };
     }
 
+    function planActionMatchesRole(action, nodeType, role) {
+        if (!action || String(action.nodeType || '') !== nodeType) return false;
+        var params = action.params || {};
+        var wanted = normalizeKey(role || '');
+        if (nodeType === 'human.task') return normalizeKey(params.rol || params.RolDestino || '') === wanted;
+        if (nodeType === 'util.notify') return normalizeKey(params.rolDestino || params.destino || '') === wanted;
+        if (nodeType === 'util.logger') {
+            return normalizeKey((action.label || '') + ' ' + (params.message || '')).indexOf(wanted) >= 0;
+        }
+        return false;
+    }
+
+    function planHasExpectedRoleAction(plan, mode, role) {
+        var nodeType = guidedActionNodeType(mode);
+        if (!nodeType) return true;
+        var actions = (plan && plan.actions) || [];
+        for (var i = 0; i < actions.length; i++) {
+            if (planActionMatchesRole(actions[i], nodeType, role)) return true;
+        }
+        return false;
+    }
+
+    function guidedDecisionConsistencyErrors(plan, userText) {
+        var errors = [];
+        var notifyMode = guidedNotifyActionMode(userText);
+        var noMode = guidedNoBranchActionMode(userText);
+        var data = guidedMessageData(userText);
+
+        if (textHasAny(userText, ['dir_general', 'direccion', 'dirección', 'dir general']) && !planHasExpectedRoleAction(plan, notifyMode, 'DIR_GENERAL')) {
+            errors.push('La decisión sobre notificar/avisar no coincide con el nodo generado para DIR_GENERAL.');
+        }
+        if (textHasAny(userText, ['it']) && !planHasExpectedRoleAction(plan, notifyMode, 'IT')) {
+            errors.push('La decisión sobre notificar/avisar no coincide con el nodo generado para IT.');
+        }
+        if (textHasAny(userText, ['compras']) && noMode !== 'end' && !planHasExpectedRoleAction(plan, noMode, 'COMPRAS')) {
+            errors.push('La decisión de la rama NO no coincide con el nodo generado para COMPRAS.');
+        }
+
+        var allParams = JSON.stringify(((plan && plan.actions) || []).map(function (a) { return a && a.params || {}; }));
+        if (data.cae && allParams.indexOf('{{biz.notaCredito.cae}}') < 0) {
+            errors.push('Se eligió incluir CAE, pero el plan no lo incorporó en mensajes o descripciones.');
+        }
+        if (data.proveedor && allParams.indexOf('{{biz.notaCredito.proveedor}}') < 0) {
+            errors.push('Se eligió incluir proveedor, pero el plan no lo incorporó en mensajes o descripciones.');
+        }
+        return errors;
+    }
+
     function buildStructuredGuideResult(userText) {
         var plan = buildStructuredGuidePlan();
         if (!plan) return null;
+        var validation = buildFunctionalValidation();
+        var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
+        consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+        validation.ok = validation.errors.length === 0;
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix73',
+            model: 'Constructor IA estructurado fix73c',
             messageToUser: plan.messageToUser,
             plan: plan,
-            validation: buildFunctionalValidation(),
+            validation: validation,
             rawText: userText || ''
         };
     }
@@ -5530,6 +5879,12 @@
             clearVisualDraft();
             aiVisualDraftSelectedIssueKey = '';
             setStatus('', '');
+        });
+
+        var canvasClear = $('btnClear');
+        if (canvasClear) canvasClear.addEventListener('click', function () {
+            // El resumen pertenece al workflow visible; al vaciar el canvas deja de corresponder.
+            clearAppliedDecisionSummary();
         });
     }
 
