@@ -1979,3 +1979,135 @@
     font-style: normal;
     line-height: 1.35;
 }
+
+
+/* fix73d: mostrar con claridad qué elecciones fueron reemplazadas */
+.wf-ai-fallback-replaced {
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px dashed #f59e0b;
+    color: #92400e;
+}
+
+.wf-ai-fallback-replaced-title {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.wf-ai-fallback-replaced ul {
+    margin: 5px 0 0 16px !important;
+}
+
+.wf-ai-fallback-replaced li span {
+    display: block;
+    margin-top: 2px;
+    color: #92400e;
+    font-size: 10px;
+}
+
+.wf-ai-applied-summary-replacements {
+    margin-top: 8px;
+    padding: 7px 8px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 10.5px;
+}
+
+    .wf-ai-applied-summary-replacements summary {
+        cursor: pointer;
+        font-weight: 800;
+    }
+
+    .wf-ai-applied-summary-replacements ul {
+        display: grid;
+        gap: 6px;
+        margin: 7px 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .wf-ai-applied-summary-replacements li {
+        display: grid;
+        gap: 2px;
+        padding: 6px 7px;
+        border-radius: 8px;
+        background: #fff;
+    }
+
+        .wf-ai-applied-summary-replacements li span {
+            color: #a16207;
+            font-size: 10px;
+        }
+
+
+/* fix74: contrato determinístico entre decisiones, borrador y workflow real */
+.wf-ai-contract-status {
+    display: grid;
+    gap: 3px;
+    margin: 9px 0;
+    padding: 8px 10px;
+    border: 1px solid;
+    border-radius: 10px;
+    font-size: 10.5px;
+    line-height: 1.35;
+}
+
+    .wf-ai-contract-status strong {
+        font-size: 11px;
+    }
+
+    .wf-ai-contract-status span {
+        color: inherit;
+        opacity: .84;
+    }
+
+    .wf-ai-contract-status.valid {
+        border-color: #86efac;
+        background: #f0fdf4;
+        color: #166534;
+    }
+
+    .wf-ai-contract-status.invalid {
+        border-color: #fca5a5;
+        background: #fef2f2;
+        color: #991b1b;
+    }
+
+        .wf-ai-contract-status.invalid ul {
+            margin: 4px 0 0 16px;
+            padding: 0;
+        }
+
+.wf-ai-guided-review.contract-invalid .wf-ai-guided-review-badge {
+    border-color: #fca5a5;
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.wf-ai-applied-contract {
+    margin-top: 7px;
+    padding: 6px 8px;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+
+/* fix74b: detalle textual generado desde los parámetros reales de cada nodo. */
+.wf-ai-contract-data-note {
+    margin-top: 3px;
+    color: #475569;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.wf-ai-guided-branch .wf-ai-contract-data-note {
+    padding-left: 1px;
+}

@@ -15,6 +15,9 @@
 // fix73: presenta la interpretación como borrador visual sobre el canvas, concentra una duda por vez y convierte la propuesta en workflow con una sola confirmación.
 // fix73b: conserva un resumen simple de las decisiones usadas y lo deja disponible en el Inspector después de crear el workflow.
 // fix73c: transforma las decisiones de desambiguación en tipos reales de nodo y bloquea cualquier plan inconsistente.
+// fix73d: elimina preguntas redundantes, prioriza decisiones específicas y muestra qué elección fue reemplazada.
+// fix74: consolida un contrato determinístico de plan, valida borrador/proyección/canvas y bloquea cualquier divergencia.
+// fix74b: genera y valida la explicación textual desde los parámetros reales de cada nodo y rama.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -31,6 +34,8 @@
     var aiVisualDraftLastQuestions = [];
     var aiVisualDraftActive = false;
     var aiAppliedDecisionSummary = null;
+    var aiFix74SelfTestResult = null;
+    var aiFix74LastContractCheck = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -69,7 +74,8 @@
                 actions: plan.actions || [],
                 proposedConnections: plan.proposedConnections || [],
                 branchPlan: plan.branchPlan || null,
-                missingData: plan.missingData || []
+                missingData: plan.missingData || [],
+                contractFingerprint: plan.contract && plan.contract.fingerprint || ''
             });
         } catch (e) {
             return '';
@@ -3171,11 +3177,7 @@
             return scope === 'both' ? 'IT quedó en ambas ramas.' : (scope === 'true' ? 'IT quedó en la rama SI.' : 'IT quedó en la rama NO.');
         }
         if (questionKey === 'data-message') {
-            var data = guidedMessageData(phrase);
-            var parts = [];
-            if (data.cae) parts.push('CAE');
-            if (data.proveedor) parts.push('proveedor');
-            return parts.length ? 'Los nodos generados incorporan ' + parts.join(' y ') + ' en el contenido.' : '';
+            return fix74bContractDataSummary(plan && plan.contract);
         }
         if (questionKey === 'warning-mode') {
             var warningMode = guidedWarningActionMode(phrase);
@@ -3190,13 +3192,20 @@
 
     function buildAppliedDecisionSummary(plan) {
         var decisions = [];
-        aiFallbackResolvedItems.forEach(function (x) {
+        activeFallbackResolvedItems().forEach(function (x) {
             if (!x) return;
             decisions.push({
                 title: String(x.title || 'Decisión').trim(),
                 value: String(x.label || x.clarification || 'Opción seleccionada').trim(),
                 effect: appliedDecisionEffectText(x.key || '', plan)
             });
+        });
+        var replacements = supersededFallbackResolvedItems().map(function (x) {
+            return {
+                title: String(x.title || 'Decisión').trim(),
+                value: String(x.label || x.clarification || 'Opción anterior').trim(),
+                reason: String(x.supersededReason || 'Fue reemplazada por una decisión más específica.').trim()
+            };
         });
 
         var nodeCount = 0;
@@ -3207,7 +3216,9 @@
         return {
             phrase: stripFallbackClarifications(getCurrentAiPhrase() || '').trim(),
             decisions: decisions,
-            nodeCount: nodeCount
+            replacements: replacements,
+            nodeCount: nodeCount,
+            contractFingerprint: plan && plan.contract && plan.contract.fingerprint || ''
         };
     }
 
@@ -3233,8 +3244,20 @@
             html += '<div class="wf-ai-applied-summary-empty">La frase se entendió sin pedir aclaraciones adicionales.</div>';
         }
 
+        var replacements = summary.replacements || [];
+        if (replacements.length) {
+            html += '<details class="wf-ai-applied-summary-replacements"><summary>' + replacements.length + ' elección' + (replacements.length === 1 ? '' : 'es') + ' reemplazada' + (replacements.length === 1 ? '' : 's') + '</summary><ul>';
+            replacements.forEach(function (x) {
+                html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + ':</strong> ' + htmlEncode(x.value || 'Opción anterior') + '<span>' + htmlEncode(x.reason || 'Fue reemplazada por una decisión más específica.') + '</span></li>';
+            });
+            html += '</ul></details>';
+        }
+
         if (summary.nodeCount) {
             html += '<div class="wf-ai-applied-summary-result">Resultado aplicado: ' + summary.nodeCount + ' nodo' + (summary.nodeCount === 1 ? '' : 's') + ' creado' + (summary.nodeCount === 1 ? '' : 's') + ' en el canvas.</div>';
+        }
+        if (summary.contractFingerprint) {
+            html += '<div class="wf-ai-applied-contract">Contrato fix74b validado · ' + htmlEncode(summary.contractFingerprint) + '</div>';
         }
         if (summary.phrase) {
             html += '<details class="wf-ai-applied-summary-phrase"><summary>Ver frase original</summary><div>' + htmlEncode(summary.phrase) + '</div></details>';
@@ -3552,6 +3575,81 @@
         }
     }
 
+    function fallbackResolvedItemAny(questionKey) {
+        questionKey = String(questionKey || '').trim();
+        if (!questionKey) return null;
+        for (var i = aiFallbackResolvedItems.length - 1; i >= 0; i--) {
+            var item = aiFallbackResolvedItems[i];
+            if (item && String(item.key || '') === questionKey) return item;
+        }
+        return null;
+    }
+
+    function fallbackItemText(item) {
+        return normalizePhraseForSearch(((item && item.label) || '') + ' ' + ((item && item.clarification) || ''));
+    }
+
+    function markFallbackItemSuperseded(item, byItem, reason) {
+        if (!item || !byItem || item === byItem) return;
+        item.superseded = true;
+        item.supersededByKey = String(byItem.key || '');
+        item.supersededByLabel = String(byItem.label || byItem.title || 'una decisión más específica');
+        item.supersededReason = String(reason || 'Una decisión más específica reemplazó esta opción.');
+    }
+
+    function recalculateFallbackDecisionConflicts() {
+        aiFallbackResolvedItems.forEach(function (item) {
+            if (!item) return;
+            item.superseded = false;
+            item.supersededByKey = '';
+            item.supersededByLabel = '';
+            item.supersededReason = '';
+        });
+
+        var specificNo = fallbackResolvedItemAny('missing-branch-no-action');
+        var generalNo = fallbackResolvedItemAny('branch-no');
+        var warning = fallbackResolvedItemAny('warning-mode');
+
+        // La salida concreta de la rama NO es más específica que la pregunta genérica.
+        if (specificNo && generalNo) {
+            markFallbackItemSuperseded(
+                generalNo,
+                specificNo,
+                'La salida específica de la rama NO reemplazó la elección general anterior.'
+            );
+        }
+
+        // La forma de “advertencia” solo es necesaria cuando la rama eligió registrar una advertencia.
+        if (warning) {
+            if (specificNo) {
+                markFallbackItemSuperseded(
+                    warning,
+                    specificNo,
+                    'La salida específica de la rama NO definió directamente la acción para COMPRAS.'
+                );
+            } else if (generalNo) {
+                var branchText = fallbackItemText(generalNo);
+                if (branchText.indexOf('registrar una advertencia') < 0) {
+                    markFallbackItemSuperseded(
+                        warning,
+                        generalNo,
+                        'La rama NO quedó definida sin usar una advertencia configurable.'
+                    );
+                }
+            }
+        }
+    }
+
+    function activeFallbackResolvedItems() {
+        recalculateFallbackDecisionConflicts();
+        return aiFallbackResolvedItems.filter(function (item) { return item && !item.superseded; });
+    }
+
+    function supersededFallbackResolvedItems() {
+        recalculateFallbackDecisionConflicts();
+        return aiFallbackResolvedItems.filter(function (item) { return item && item.superseded; });
+    }
+
     function markFallbackResolved(questionKey, title, label, clarification) {
         questionKey = String(questionKey || '').trim();
         if (!questionKey) return;
@@ -3560,7 +3658,11 @@
             key: questionKey,
             title: String(title || '').trim(),
             label: String(label || '').trim(),
-            clarification: String(clarification || '').trim()
+            clarification: String(clarification || '').trim(),
+            superseded: false,
+            supersededByKey: '',
+            supersededByLabel: '',
+            supersededReason: ''
         };
         var replaced = false;
         for (var i = 0; i < aiFallbackResolvedItems.length; i++) {
@@ -3571,6 +3673,7 @@
             }
         }
         if (!replaced) aiFallbackResolvedItems.push(item);
+        recalculateFallbackDecisionConflicts();
     }
 
     function fallbackQuestionAlreadyAnswered(q, userText) {
@@ -3580,7 +3683,7 @@
         if (q.key === 'notify-mode' && textHasAny(x, ['crear notificaciones internas util.notify', 'crear tareas humanas', 'registrar logs del workflow'])) return true;
         if (q.key === 'warning-mode' && textHasAny(x, ['advertencia debe ser una notificacion', 'advertencia debe ser un logger warn', 'advertencia debe crear una tarea'])) return true;
         if (q.key === 'branch-no' && textHasAny(x, ['si la condicion no se cumple', 'si la condición no se cumple'])) return true;
-        if (q.key === 'data-message' && textHasAny(x, ['mensaje de la notificacion incluir', 'mensajes incluir'])) return true;
+        if (q.key === 'data-message' && textHasAny(x, ['mensaje de la notificacion incluir', 'mensajes incluir', 'contenido de la accion incluir', 'contenido de las acciones incluir'])) return true;
         if (q.key === 'it-scope' && textHasAny(x, ['notificar a it en ambas ramas', 'notificar a it solo cuando'])) return true;
         if (q.key.indexOf('missing-') === 0 && textHasAny(x, ['completar el dato faltante'])) return true;
         return false;
@@ -3599,15 +3702,30 @@
 
     function renderFallbackResolvedSummary() {
         if (!aiFallbackResolvedItems.length) return '';
+        var active = activeFallbackResolvedItems();
+        var superseded = supersededFallbackResolvedItems();
         var html = '';
         html += '<div class="wf-ai-fallback-resolved">';
-        html += '  <div class="wf-ai-fallback-label">Decisiones tomadas</div>';
-        html += '  <ul>';
-        aiFallbackResolvedItems.forEach(function (x) {
-            var label = x.label || x.clarification || 'Opción seleccionada';
-            html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + ':</strong> ' + htmlEncode(label) + '</li>';
-        });
-        html += '  </ul>';
+        html += '  <div class="wf-ai-fallback-label">Decisiones vigentes</div>';
+        if (active.length) {
+            html += '  <ul>';
+            active.forEach(function (x) {
+                var label = x.label || x.clarification || 'Opción seleccionada';
+                html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + ':</strong> ' + htmlEncode(label) + '</li>';
+            });
+            html += '  </ul>';
+        }
+        if (superseded.length) {
+            html += '<div class="wf-ai-fallback-replaced">';
+            html += '  <div class="wf-ai-fallback-replaced-title">Elecciones reemplazadas automáticamente</div>';
+            html += '  <ul>';
+            superseded.forEach(function (x) {
+                html += '<li><strong>' + htmlEncode(x.title || 'Decisión') + ':</strong> ' + htmlEncode(x.label || x.clarification || 'Opción anterior');
+                html += '<span>' + htmlEncode(x.supersededReason || 'Fue reemplazada por una decisión más específica.') + '</span></li>';
+            });
+            html += '  </ul>';
+            html += '</div>';
+        }
         html += '</div>';
         return html;
     }
@@ -3616,13 +3734,9 @@
     // fix73c: una decisión registrada debe cambiar el tipo real de nodo
     // ------------------------------------------------------------
     function fallbackResolvedItem(questionKey) {
-        questionKey = String(questionKey || '').trim();
-        if (!questionKey) return null;
-        for (var i = aiFallbackResolvedItems.length - 1; i >= 0; i--) {
-            var item = aiFallbackResolvedItems[i];
-            if (item && String(item.key || '') === questionKey) return item;
-        }
-        return null;
+        recalculateFallbackDecisionConflicts();
+        var item = fallbackResolvedItemAny(questionKey);
+        return item && !item.superseded ? item : null;
     }
 
     function fallbackDecisionText(questionKey) {
@@ -3860,17 +3974,30 @@
         var data = guidedMessageData(userText);
         var notifyMode = guidedNotifyActionMode(userText);
         var noMode = guidedNoBranchActionMode(userText);
-        var dataText = [];
-        if (data.cae) dataText.push('CAE');
-        if (data.proveedor) dataText.push('proveedor');
-        var includeText = dataText.length ? ' incluyendo ' + dataText.join(' y ') + '.' : '.';
+
+        function branchDataText(hasCae) {
+            var included = [];
+            if (data.cae && hasCae) included.push('CAE');
+            if (data.proveedor) included.push('proveedor');
+            var text = included.length ? ' incluyendo ' + included.join(' y ') : '';
+            if (data.cae && !hasCae) {
+                text += (text ? '; ' : ' ') + 'el CAE no se incluye porque esta rama representa CAE faltante';
+            }
+            return text + '.';
+        }
 
         items.push('Validar CAE con una condición SI / NO completa.');
-        if (hasDir) items.push('Rama SI: ' + guidedActionVerb(notifyMode, 'DIR_GENERAL') + includeText);
-        if (hasCompras) items.push('Rama NO: ' + guidedActionVerb(noMode, 'COMPRAS') + (noMode === 'end' ? '.' : includeText));
+        if (hasDir) items.push('Rama SI: ' + guidedActionVerb(notifyMode, 'DIR_GENERAL') + branchDataText(true));
+        if (hasCompras) items.push('Rama NO: ' + guidedActionVerb(noMode, 'COMPRAS') + (noMode === 'end' ? '.' : branchDataText(false)));
         if (hasIt) {
-            var itWhere = itScope === 'both' ? 'en ambas ramas' : (itScope === 'true' ? 'en la rama SI' : 'en la rama NO');
-            items.push('Agregar ' + guidedActionVerb(notifyMode, 'IT') + ' ' + itWhere + includeText);
+            if (itScope === 'both') {
+                items.push('Rama SI: ' + guidedActionVerb(notifyMode, 'IT') + branchDataText(true));
+                items.push('Rama NO: ' + guidedActionVerb(notifyMode, 'IT') + branchDataText(false));
+            } else if (itScope === 'true') {
+                items.push('Rama SI: ' + guidedActionVerb(notifyMode, 'IT') + branchDataText(true));
+            } else {
+                items.push('Rama NO: ' + guidedActionVerb(notifyMode, 'IT') + branchDataText(false));
+            }
         }
         items.push('Cerrar todas las ramas con Fin para que no quede ninguna salida pendiente.');
         return items;
@@ -4075,12 +4202,25 @@
         var hasProveedor = textHasAny(userText, ['proveedor']);
         var hasIt = textHasAny(userText, ['it']);
         var roles = friendlyRoleList(userText);
+        var missingText = normalizePhraseForSearch(missing.map(function (m) {
+            return String((m && (m.question || m.key || m.message)) || m || '');
+        }).join(' '));
+        var needsSpecificNoBranch = missing.length && (
+            missingText.indexOf('no se cumple') >= 0 ||
+            missingText.indexOf('rama') >= 0 ||
+            missingText.indexOf('condicion compuesta') >= 0
+        );
+        var generalBranchDecision = fallbackResolvedItem('branch-no');
+        var generalBranchText = fallbackItemText(generalBranchDecision);
+        var generalBranchUsesWarning = !!generalBranchDecision && generalBranchText.indexOf('registrar una advertencia') >= 0;
+        var needsGeneralBranch = !needsSpecificNoBranch && (branchLooksIncomplete(plan) || validationMentionsBranches(validation));
+        var needsGeneralBranchQuestion = needsGeneralBranch && !generalBranchDecision;
 
         if (hasNotifyWords && !planHasNodeType(plan, 'util.notify')) {
             var qNotify = {
                 key: 'notify-mode',
                 title: 'Cuando decís notificar / avisar / informar',
-                detail: 'Para evitar adivinar, necesito confirmar si esto es una notificación interna o una tarea humana.',
+                detail: 'Para evitar adivinar, necesito confirmar si esto es una notificación interna, una tarea humana o un registro.',
                 options: []
             };
             addFallbackOption(qNotify, 'Usar notificación interna', 'cuando diga notificar, avisar o informar a ' + roles + ', crear notificaciones internas util.notify, no tareas humanas.', 'primary');
@@ -4089,20 +4229,19 @@
             questions.push(qNotify);
         }
 
-        if (hasWarningWord) {
-            var qWarn = {
-                key: 'warning-mode',
-                title: 'La palabra advertencia puede significar dos cosas',
-                detail: 'Puede ser un aviso visible para un rol o un log técnico Warn. Elegí el comportamiento esperado.',
+        // fix73d: si el validador pide una salida concreta, no mostramos además la pregunta genérica.
+        if (needsSpecificNoBranch) {
+            var qMissingBranch = {
+                key: 'missing-branch-no-action',
+                title: 'Falta cerrar la rama NO',
+                detail: 'El plan sigue pidiendo qué hacer cuando la condición NO se cumple. Elegí una única salida concreta.',
                 options: []
             };
-            addFallbackOption(qWarn, 'Advertencia como notificación', 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
-            addFallbackOption(qWarn, 'Advertencia como log Warn', 'la advertencia debe ser un logger Warn del workflow.', '');
-            addFallbackOption(qWarn, 'Advertencia como tarea', 'la advertencia debe crear una tarea humana de revisión.', '');
-            questions.push(qWarn);
-        }
-
-        if (branchLooksIncomplete(plan) || validationMentionsBranches(validation)) {
+            addFallbackOption(qMissingBranch, 'NO: notificar a COMPRAS y finalizar', 'si la condición no se cumple, notificar a COMPRAS con nivel advertencia indicando que falta CAE y luego finalizar.', 'primary');
+            addFallbackOption(qMissingBranch, 'NO: registrar log Warn y finalizar', 'si la condición no se cumple, registrar un logger Warn indicando que falta CAE y luego finalizar; no crear tarea humana en esa rama.', '');
+            addFallbackOption(qMissingBranch, 'NO: crear tarea para COMPRAS', 'si la condición no se cumple, crear una tarea humana para COMPRAS y luego finalizar cuando se complete.', '');
+            questions.push(qMissingBranch);
+        } else if (needsGeneralBranchQuestion) {
             var qBranch = {
                 key: 'branch-no',
                 title: 'Falta completar una rama SI / NO',
@@ -4115,24 +4254,26 @@
             questions.push(qBranch);
         }
 
-        if (hasCae || hasProveedor) {
-            var qData = {
-                key: 'data-message',
-                title: 'Datos dentro del mensaje',
-                detail: 'Detecté datos del documento. Conviene aclarar si deben ir dentro de las notificaciones.',
+        // La forma de la advertencia se pregunta solo si realmente sigue teniendo efecto.
+        var warningQuestionUseful = hasWarningWord && !needsSpecificNoBranch && !needsGeneralBranchQuestion && (!generalBranchDecision || generalBranchUsesWarning);
+        if (warningQuestionUseful) {
+            var qWarn = {
+                key: 'warning-mode',
+                title: 'La palabra advertencia puede significar dos cosas',
+                detail: 'Puede ser un aviso visible para un rol, un log técnico Warn o una tarea de revisión.',
                 options: []
             };
-            if (hasCae) addFallbackOption(qData, 'Incluir número de CAE', 'en el mensaje de la notificación incluir el número de CAE extraído de la NC.', '');
-            if (hasProveedor) addFallbackOption(qData, 'Incluir proveedor', 'en el mensaje de la notificación incluir el proveedor obtenido de la NC.', '');
-            if (hasCae && hasProveedor) addFallbackOption(qData, 'Incluir CAE y proveedor', 'en los mensajes incluir el número de CAE y el proveedor obtenido de la NC.', 'primary');
-            if (qData.options.length) questions.push(qData);
+            addFallbackOption(qWarn, 'Advertencia como notificación', 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
+            addFallbackOption(qWarn, 'Advertencia como log Warn', 'la advertencia debe ser un logger Warn del workflow.', '');
+            addFallbackOption(qWarn, 'Advertencia como tarea', 'la advertencia debe crear una tarea humana de revisión.', '');
+            questions.push(qWarn);
         }
 
         if (hasIt && hasCae) {
             var qScope = {
                 key: 'it-scope',
-                title: '¿La notificación a IT va siempre o solo en una rama?',
-                detail: 'Cuando una frase mezcla varias acciones, conviene ubicar cada acción en la rama correcta.',
+                title: '¿La acción para IT va siempre o solo en una rama?',
+                detail: 'Cuando una frase mezcla varias acciones, conviene ubicar cada una en la rama correcta.',
                 options: []
             };
             addFallbackOption(qScope, 'IT siempre', 'notificar a IT en ambas ramas, tenga o no tenga CAE.', 'primary');
@@ -4141,35 +4282,31 @@
             questions.push(qScope);
         }
 
-        if (missing.length) {
-            var missingText = normalizePhraseForSearch(missing.map(function (m) {
-                return String((m && (m.question || m.key || m.message)) || m || '');
-            }).join(' '));
+        if (hasCae || hasProveedor) {
+            var qData = {
+                key: 'data-message',
+                title: 'Datos dentro del contenido',
+                detail: 'Detecté datos del documento. Conviene aclarar cuáles deben incluirse en notificaciones, tareas o registros.',
+                options: []
+            };
+            if (hasCae) addFallbackOption(qData, 'Incluir número de CAE', 'en el contenido de la acción incluir el número de CAE extraído de la NC.', '');
+            if (hasProveedor) addFallbackOption(qData, 'Incluir proveedor', 'en el contenido de la acción incluir el proveedor obtenido de la NC.', '');
+            if (hasCae && hasProveedor) addFallbackOption(qData, 'Incluir CAE y proveedor', 'en el contenido de las acciones incluir el número de CAE y el proveedor obtenido de la NC.', 'primary');
+            if (qData.options.length) questions.push(qData);
+        }
 
-            if (missingText.indexOf('no se cumple') >= 0 || missingText.indexOf('rama') >= 0 || missingText.indexOf('condicion compuesta') >= 0) {
-                var qMissingBranch = {
-                    key: 'missing-branch-no-action',
-                    title: 'Falta cerrar la rama NO',
-                    detail: 'El plan sigue pidiendo qué hacer cuando la condición NO se cumple. Elegí una salida concreta.',
-                    options: []
-                };
-                addFallbackOption(qMissingBranch, 'NO: notificar a COMPRAS y finalizar', 'si la condición no se cumple, notificar a COMPRAS con nivel advertencia indicando que falta CAE y luego finalizar.', 'primary');
-                addFallbackOption(qMissingBranch, 'NO: registrar log Warn y finalizar', 'si la condición no se cumple, registrar un logger Warn indicando que falta CAE y luego finalizar; no crear tarea humana en esa rama.', '');
-                addFallbackOption(qMissingBranch, 'NO: crear tarea para COMPRAS', 'si la condición no se cumple, crear una tarea humana para COMPRAS y luego finalizar cuando se complete.', '');
-                questions.push(qMissingBranch);
-            } else {
-                var qMissing = {
-                    key: 'missing-data',
-                    title: 'Dato faltante detectado',
-                    detail: 'El validador pidió completar información antes de aplicar al canvas.',
-                    options: []
-                };
-                missing.slice(0, 2).forEach(function (m) {
-                    var q = String((m && (m.question || m.key || m.message)) || m || '');
-                    addFallbackOption(qMissing, q, 'completar el dato faltante: ' + q, '');
-                });
-                questions.push(qMissing);
-            }
+        if (missing.length && !needsSpecificNoBranch) {
+            var qMissing = {
+                key: 'missing-data',
+                title: 'Dato faltante detectado',
+                detail: 'El validador pidió completar información antes de aplicar al canvas.',
+                options: []
+            };
+            missing.slice(0, 2).forEach(function (m) {
+                var q = String((m && (m.question || m.key || m.message)) || m || '');
+                addFallbackOption(qMissing, q, 'completar el dato faltante: ' + q, '');
+            });
+            questions.push(qMissing);
         }
 
         return questions.filter(function (q) { return !fallbackQuestionAlreadyAnswered(q, userText); }).slice(0, 5);
@@ -4636,7 +4773,7 @@
         // Se conserva la frase original + las decisiones activas de esta sesión.
         var base = stripFallbackClarifications(cleanGuidePhraseText(txt.value || '')).trim();
         var adds = [];
-        aiFallbackResolvedItems.forEach(function (x) {
+        activeFallbackResolvedItems().forEach(function (x) {
             var c = String(x && x.clarification || '').trim();
             if (c) adds.push('Aclaración: ' + c);
         });
@@ -4922,6 +5059,7 @@
         if (!plan || !plan.actions || !plan.actions.length) return false;
         if (missing && missing.length) return false;
         if (validation && validation.errors && validation.errors.length) return false;
+        if (validateFix74PlanContract(plan, getCurrentAiPhrase(), true).length) return false;
         return !!(window.__WF_UI && typeof window.__WF_UI.applyAiPlan === 'function');
     }
 
@@ -4940,16 +5078,24 @@
             return;
         }
         var lastValidationErrors = lastAssistantResult && lastAssistantResult.validation && lastAssistantResult.validation.errors || [];
+        var preflightErrors = validateFix74PlanContract(lastPlan, getCurrentAiPhrase(), true);
+        preflightErrors.forEach(function (e) { pushUnique(lastValidationErrors, e); });
         if (lastValidationErrors.length) {
-            setStatus('La propuesta no se aplicó porque una decisión todavía no coincide con el grafo.', 'error');
+            setStatus('La propuesta no se aplicó porque el contrato detectó una diferencia entre decisiones, borrador o grafo.', 'error');
             renderResult(lastAssistantResult);
             return;
         }
 
         var result = window.__WF_UI.applyAiPlan(lastPlan, {});
         if (result && result.ok) {
+            var canvasErrors = fix74CanvasContractErrors(lastPlan);
+            if (canvasErrors.length) {
+                setStatus(canvasErrors[0], 'error');
+                return;
+            }
             aiAppliedDecisionSummary = buildAppliedDecisionSummary(lastPlan);
-            hideAssistantAfterApply(result.message || 'Propuesta aplicada al canvas.');
+            if (aiAppliedDecisionSummary) aiAppliedDecisionSummary.contractFingerprint = lastPlan.contract && lastPlan.contract.fingerprint || '';
+            hideAssistantAfterApply(result.message || 'Propuesta aplicada al canvas y validada contra el contrato.');
         } else if (result && result.cancelled) {
             setStatus(result.message || 'Aplicación cancelada.', 'warn');
         } else {
@@ -4981,45 +5127,42 @@
         return createStepTitle(step);
     }
 
-    function guidedResolutionReviewHtml() {
-        var cond = null;
-        var trueSteps = [];
-        var falseSteps = [];
-        var mainSteps = [];
-        guideSteps.forEach(function (st) {
-            if (!st) return;
-            if (st.type === 'condition' && !cond) cond = st;
-            if (st.branch === 'if_cond_true') trueSteps.push(st);
-            else if (st.branch === 'if_cond_false') falseSteps.push(st);
-            else if (st.type !== 'end') mainSteps.push(st);
-        });
+    function guidedResolutionReviewHtml(plan, validation) {
+        var contract = plan && plan.contract;
+        var review = fix74ReviewModel(contract || { nodes: [], edges: [] });
+        var errors = (validation && validation.errors) || [];
+        var disabled = errors.length ? ' disabled' : '';
 
         var html = '';
-        html += '<div class="wf-ai-guided-review wf-ai-guided-visual-ready">';
+        html += '<div class="wf-ai-guided-review wf-ai-guided-visual-ready' + (errors.length ? ' contract-invalid' : '') + '">';
         html += '  <div class="wf-ai-guided-review-head">';
         html += '    <div><div class="wf-ai-guided-review-kicker">Propuesta visual completa</div><div class="wf-ai-guided-review-title">Revisá el flujo directamente en el canvas</div></div>';
         html += '    <span class="wf-ai-guided-review-badge">Borrador</span>';
         html += '  </div>';
-        html += '  <div class="wf-ai-guided-review-text">Los nodos que ves todavía no están guardados. Si el dibujo representa lo que querés, una sola acción lo convierte en el workflow real.</div>';
+        html += fix74ContractStatusHtml(plan, validation);
+        html += '  <div class="wf-ai-guided-review-text">El borrador, el resumen y el workflow real se generan desde el mismo contrato. Si algo no coincide, Crear workflow queda bloqueado.</div>';
         html += '  <details class="wf-ai-guided-summary"><summary>Ver resumen textual</summary>';
 
-        if (mainSteps.length) {
+        if (review.main.length) {
             html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Flujo principal</div><ol>';
-            mainSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
+            review.main.forEach(function (n) { var note = fix74bHumanNodeDataText(n, 'main', contract); html += '<li><div>' + htmlEncode(fix74HumanNodeText(n)) + '</div>' + (note ? '<div class="wf-ai-contract-data-note">' + htmlEncode(note) + '</div>' : '') + '</li>'; });
             html += '</ol></div>';
         }
-        if (cond) html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Condición</div><div>' + htmlEncode(guidedStepHumanText(cond)) + '</div></div>';
+        if (review.condition) html += '  <div class="wf-ai-guided-flow"><div class="wf-ai-guided-flow-title">Condición</div><div>' + htmlEncode(fix74HumanNodeText(review.condition)) + '</div></div>';
 
-        html += '  <div class="wf-ai-guided-branches">';
-        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">SI / cumple</div><ol>';
-        trueSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
-        html += '<li>Finalizar flujo</li></ol></div>';
-        html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">NO / no cumple</div><ol>';
-        falseSteps.forEach(function (st) { html += '<li>' + htmlEncode(guidedStepHumanText(st)) + '</li>'; });
-        html += '<li>Finalizar flujo</li></ol></div>';
-        html += '  </div></details>';
+        if (review.condition) {
+            html += '  <div class="wf-ai-guided-branches">';
+            html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">SI / cumple</div><ol>';
+            review.truePath.forEach(function (n) { var note = fix74bHumanNodeDataText(n, 'true', contract); html += '<li><div>' + htmlEncode(fix74HumanNodeText(n)) + '</div>' + (note ? '<div class="wf-ai-contract-data-note">' + htmlEncode(note) + '</div>' : '') + '</li>'; });
+            html += '    </ol></div>';
+            html += '    <div class="wf-ai-guided-branch"><div class="wf-ai-guided-flow-title">NO / no cumple</div><ol>';
+            review.falsePath.forEach(function (n) { var note = fix74bHumanNodeDataText(n, 'false', contract); html += '<li><div>' + htmlEncode(fix74HumanNodeText(n)) + '</div>' + (note ? '<div class="wf-ai-contract-data-note">' + htmlEncode(note) + '</div>' : '') + '</li>'; });
+            html += '    </ol></div>';
+            html += '  </div>';
+        }
+        html += '  </details>';
         html += '  <div class="wf-ai-guided-review-actions">';
-        html += '    <button type="button" class="btn wf-ai-create-workflow" id="wfAiCreateGuidedWorkflow">Crear workflow</button>';
+        html += '    <button type="button" class="btn wf-ai-create-workflow" id="wfAiCreateGuidedWorkflow"' + disabled + '>Crear workflow</button>';
         html += '    <button type="button" class="btn" data-wf-ai-open-guide="1">Cambiarlo paso a paso</button>';
         html += '  </div>';
         html += '</div>';
@@ -5050,8 +5193,27 @@
         var plan = res.plan || {};
         lastPlan = plan;
         var validation = res.validation || {};
+        validation.errors = validation.errors || [];
+        validation.warnings = validation.warnings || [];
         var actions = plan.actions || [];
         var missing = plan.missingData || [];
+
+        // fix74 también protege planes provenientes del proveedor ML.NET/legacy.
+        if (actions.length) {
+            if (!plan.contract) plan.contract = buildFix74PlanContract(plan, getCurrentAiPhrase());
+            var renderContractErrors = validateFix74PlanContract(plan, getCurrentAiPhrase(), true);
+            renderContractErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+            var renderSelfTest = runFix74ContractSelfTest();
+            if (!renderSelfTest.ok) pushUnique(validation.errors, 'La matriz interna del contrato fix74b no pasó completa.');
+            validation.contract = {
+                ok: renderContractErrors.length === 0 && renderSelfTest.ok,
+                fingerprint: plan.contract && plan.contract.fingerprint || '',
+                graphFingerprint: plan.contract && plan.contract.graphFingerprint || '',
+                matrixPassed: renderSelfTest.passed,
+                matrixTotal: renderSelfTest.total
+            };
+            validation.ok = validation.errors.length === 0;
+        }
         var warningGroups = collectPhraseWarnings(res, validation, plan);
         var warnings = warningGroups.functional || [];
         var technicalWarnings = warningGroups.technical || [];
@@ -5063,7 +5225,7 @@
         html += '<div class="wf-ai-meta">Modelo: ' + htmlEncode(res.model || '') + ' · Validación: ' + (validation.ok ? 'OK' : 'con errores') + '</div>';
 
         if (requiresGuidedConfirmation) {
-            html += guidedResolutionReviewHtml();
+            html += guidedResolutionReviewHtml(plan, validation);
         } else {
             if (actions.length) {
                 html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Acciones propuestas</div><ol>';
@@ -5734,7 +5896,7 @@
         });
 
         return {
-            assistantVersion: 'constructor-structured-fix39e',
+            assistantVersion: 'constructor-structured-fix74',
             intent: 'build_workflow',
             confidence: 1,
             messageToUser: 'Propuesta generada desde el Constructor IA con plan estructurado local.',
@@ -5744,7 +5906,7 @@
                 ? []
                 : ['Se agregó un nodo Fin técnico en la propuesta para evitar un grafo abierto.'],
             branchPlan: {
-                planner: 'constructor-local-fix39e',
+                planner: 'constructor-local-fix74',
                 hasBranches: branchItems.length > 0,
                 branches: branchItems
             },
@@ -5800,17 +5962,811 @@
         return errors;
     }
 
+
+    // ------------------------------------------------------------
+    // fix74: contrato determinístico entre decisiones, plan, borrador y canvas
+    // ------------------------------------------------------------
+    function fix74NormalizeCondition(value) {
+        var v = normalizePhraseForSearch(value || 'always').trim();
+        if (!v || v === 'always') return 'always';
+        if (v === 'si' || v === 'sí' || v === 'true') return 'true';
+        if (v === 'no' || v === 'false') return 'false';
+        return v;
+    }
+
+    function fix74StableValue(value, keyName) {
+        if (value == null) return value;
+        if (Array.isArray(value)) return value.map(function (x) { return fix74StableValue(x, ''); });
+        if (typeof value === 'object') {
+            var out = {};
+            Object.keys(value).sort().forEach(function (k) {
+                if (k === 'position' || k === 'contract') return;
+                out[k] = fix74StableValue(value[k], k);
+            });
+            return out;
+        }
+        if (typeof value === 'string') return String(value).trim();
+        return value;
+    }
+
+    function fix74StableStringify(value) {
+        try { return JSON.stringify(fix74StableValue(value, '')); }
+        catch (e) { return ''; }
+    }
+
+    function fix74Hash(text) {
+        text = String(text || '');
+        var h = 2166136261;
+        for (var i = 0; i < text.length; i++) {
+            h ^= text.charCodeAt(i);
+            h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+        }
+        return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+    }
+
+    function fix74LabelKey(label) {
+        return normalizePhraseForSearch(label || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function fix74RoleFromAction(action) {
+        action = action || {};
+        var p = action.params || {};
+        var type = String(action.nodeType || '');
+        if (type === 'human.task') return normalizeKey(p.rol || p.RolDestino || p.role || '');
+        if (type === 'util.notify') return normalizeKey(p.rolDestino || p.destino || p.role || '');
+        if (type === 'util.logger') {
+            var txt = normalizeKey((action.label || '') + ' ' + (p.message || ''));
+            var roles = ['DIR_GENERAL', 'COMPRAS', 'ADM_FIN', 'OPERACIONES', 'IT'];
+            for (var i = 0; i < roles.length; i++) if (txt.indexOf(roles[i]) >= 0) return roles[i];
+        }
+        return '';
+    }
+
+    function fix74DataRefs(value, out) {
+        out = out || [];
+        if (value == null) return out;
+        if (Array.isArray(value)) {
+            value.forEach(function (x) { fix74DataRefs(x, out); });
+            return out;
+        }
+        if (typeof value === 'object') {
+            Object.keys(value).forEach(function (k) {
+                if (k !== 'position' && k !== 'contract') fix74DataRefs(value[k], out);
+            });
+            return out;
+        }
+        if (typeof value === 'string') {
+            var re = /\{\{\s*([^}]+?)\s*\}\}/g;
+            var m;
+            while ((m = re.exec(value))) pushUnique(out, String(m[1] || '').trim());
+        }
+        return out;
+    }
+
+    function fix74CanonicalNodesFromPlan(plan) {
+        var nodes = [];
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || String(a.action || '').toUpperCase() !== 'ADD_NODE' || !a.nodeType) return;
+            var params = fix74StableValue(a.params || {}, 'params');
+            nodes.push({
+                key: fix74LabelKey(a.label),
+                label: String(a.label || '').trim(),
+                nodeType: String(a.nodeType || '').trim(),
+                role: fix74RoleFromAction(a),
+                params: params,
+                dataRefs: fix74DataRefs(params, []).sort()
+            });
+        });
+        nodes.sort(function (a, b) {
+            var ak = a.key + '|' + a.nodeType;
+            var bk = b.key + '|' + b.nodeType;
+            return ak < bk ? -1 : (ak > bk ? 1 : 0);
+        });
+        return nodes;
+    }
+
+    function fix74CanonicalEdgesFromPlan(plan) {
+        var edges = [];
+        var typeByLabel = {};
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || String(a.action || '').toUpperCase() !== 'ADD_NODE') return;
+            typeByLabel[fix74LabelKey(a.label)] = String(a.nodeType || '').trim();
+        });
+        ((plan && plan.proposedConnections) || []).forEach(function (c) {
+            if (!c) return;
+            var fromKey = fix74LabelKey(c.from);
+            var toKey = fix74LabelKey(c.to);
+            edges.push({
+                from: fromKey,
+                to: toKey,
+                condition: fix74NormalizeCondition(c.condition),
+                fromNodeType: String(c.fromNodeType || typeByLabel[fromKey] || '').trim(),
+                toNodeType: String(c.toNodeType || typeByLabel[toKey] || '').trim()
+            });
+        });
+        if (!edges.length) {
+            var ordered = ((plan && plan.actions) || []).filter(function (a) {
+                return a && String(a.action || '').toUpperCase() === 'ADD_NODE' && a.nodeType;
+            });
+            for (var oi = 0; oi < ordered.length - 1; oi++) {
+                edges.push({
+                    from: fix74LabelKey(ordered[oi].label),
+                    to: fix74LabelKey(ordered[oi + 1].label),
+                    condition: 'always',
+                    fromNodeType: String(ordered[oi].nodeType || '').trim(),
+                    toNodeType: String(ordered[oi + 1].nodeType || '').trim()
+                });
+            }
+        }
+        edges.sort(function (a, b) {
+            var ak = a.from + '|' + a.condition + '|' + a.to;
+            var bk = b.from + '|' + b.condition + '|' + b.to;
+            return ak < bk ? -1 : (ak > bk ? 1 : 0);
+        });
+        return edges;
+    }
+
+    function fix74ActiveDecisionSnapshot(items) {
+        var source = items || activeFallbackResolvedItems();
+        var decisions = [];
+        (source || []).forEach(function (x) {
+            if (!x || x.superseded) return;
+            decisions.push({
+                key: String(x.key || '').trim(),
+                choice: String(x.label || x.clarification || '').trim()
+            });
+        });
+        decisions.sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
+        return decisions;
+    }
+
+    function fix74GraphSnapshotFromPlan(plan) {
+        return {
+            nodes: fix74CanonicalNodesFromPlan(plan),
+            edges: fix74CanonicalEdgesFromPlan(plan)
+        };
+    }
+
+    function fix74GraphFingerprint(snapshot) {
+        return fix74Hash(fix74StableStringify(snapshot || { nodes: [], edges: [] }));
+    }
+
+    function buildFix74PlanContract(plan, userText, decisionItems) {
+        var graph = fix74GraphSnapshotFromPlan(plan);
+        var decisions = fix74ActiveDecisionSnapshot(decisionItems);
+        var phraseKey = fallbackBaseKeyFor(userText || '');
+        var graphFingerprint = fix74GraphFingerprint(graph);
+        var decisionFingerprint = fix74Hash(fix74StableStringify(decisions));
+        var contract = {
+            version: 'fix74b-v1',
+            phraseKey: phraseKey,
+            decisions: decisions,
+            nodes: graph.nodes,
+            edges: graph.edges,
+            graphFingerprint: graphFingerprint,
+            decisionFingerprint: decisionFingerprint
+        };
+        contract.textProfile = fix74bBuildTextProfile(contract);
+        contract.textFingerprint = fix74Hash(fix74StableStringify(contract.textProfile));
+        contract.fingerprint = fix74Hash(graphFingerprint + '|' + decisionFingerprint + '|' + contract.textFingerprint + '|' + phraseKey);
+        return contract;
+    }
+
+    function fix74NodeByKey(contract, key) {
+        var nodes = (contract && contract.nodes) || [];
+        for (var i = 0; i < nodes.length; i++) if (nodes[i].key === key) return nodes[i];
+        return null;
+    }
+
+    function fix74Outgoing(contract, key) {
+        return ((contract && contract.edges) || []).filter(function (e) { return e.from === key; });
+    }
+
+    function fix74CoreContractErrors(contract) {
+        var errors = [];
+        if (!contract || contract.version !== 'fix74b-v1') return ['El plan no contiene un contrato fix74b válido.'];
+        var nodes = contract.nodes || [];
+        var edges = contract.edges || [];
+        var byKey = {};
+        var starts = [];
+        var ends = [];
+
+        nodes.forEach(function (n) {
+            if (!n.key) errors.push('Existe un nodo sin etiqueta identificable.');
+            if (byKey[n.key]) errors.push('Hay etiquetas duplicadas: "' + n.label + '". El canvas no puede resolverlas de forma determinística.');
+            byKey[n.key] = n;
+            if (n.nodeType === 'util.start') starts.push(n);
+            if (n.nodeType === 'util.end') ends.push(n);
+
+            var p = n.params || {};
+            if (n.nodeType === 'doc.load' && (!p.docTipoCodigo || !p.path)) errors.push('El nodo "' + n.label + '" no tiene tipo documental o ruta.');
+            if (n.nodeType === 'control.if' && (!p.field || !p.op)) errors.push('La condición "' + n.label + '" no tiene campo u operador.');
+            if (n.nodeType === 'human.task' && !n.role && !p.usuario && !p.UsuarioAsignado) errors.push('La tarea "' + n.label + '" no tiene rol ni usuario destino.');
+            if (n.nodeType === 'util.notify' && !n.role && !p.usuarioDestino && !p.destino) errors.push('La notificación "' + n.label + '" no tiene destinatario.');
+            if (n.nodeType === 'util.logger' && !p.message) errors.push('El logger "' + n.label + '" no tiene mensaje.');
+        });
+
+        if (starts.length !== 1) errors.push('El workflow debe tener exactamente un nodo Inicio.');
+        if (!ends.length) errors.push('El workflow debe tener al menos un nodo Fin.');
+
+        var edgeSeen = {};
+        edges.forEach(function (e) {
+            if (!byKey[e.from] || !byKey[e.to]) errors.push('Hay una conexión cuyo origen o destino no existe: ' + e.from + ' → ' + e.to + '.');
+            if (e.from === e.to) errors.push('No se permite una conexión de un nodo hacia sí mismo: ' + e.from + '.');
+            var ek = e.from + '|' + e.condition + '|' + e.to;
+            if (edgeSeen[ek]) errors.push('Hay una conexión duplicada: ' + e.from + ' [' + e.condition + '] → ' + e.to + '.');
+            edgeSeen[ek] = true;
+        });
+
+        nodes.forEach(function (n) {
+            var outgoing = fix74Outgoing(contract, n.key);
+            if (n.nodeType === 'util.end' && outgoing.length) errors.push('El nodo Fin "' + n.label + '" no puede tener salidas.');
+            if (n.nodeType !== 'util.end' && !outgoing.length) errors.push('El nodo "' + n.label + '" quedó sin salida.');
+            if (n.nodeType === 'control.if') {
+                var t = outgoing.filter(function (e) { return e.condition === 'true'; }).length;
+                var f = outgoing.filter(function (e) { return e.condition === 'false'; }).length;
+                if (t !== 1 || f !== 1) errors.push('La condición "' + n.label + '" debe tener exactamente una salida SI y una salida NO.');
+            }
+        });
+
+        if (starts.length === 1) {
+            var reachable = {};
+            var queue = [starts[0].key];
+            while (queue.length) {
+                var k = queue.shift();
+                if (reachable[k]) continue;
+                reachable[k] = true;
+                fix74Outgoing(contract, k).forEach(function (e) { if (!reachable[e.to]) queue.push(e.to); });
+            }
+            nodes.forEach(function (n) {
+                if (!reachable[n.key]) errors.push('El nodo "' + n.label + '" no es alcanzable desde Inicio.');
+            });
+        }
+
+        if (ends.length) {
+            var canReachEnd = {};
+            var reverseQueue = ends.map(function (n) { return n.key; });
+            while (reverseQueue.length) {
+                var endKey = reverseQueue.shift();
+                if (canReachEnd[endKey]) continue;
+                canReachEnd[endKey] = true;
+                edges.forEach(function (e) { if (e.to === endKey && !canReachEnd[e.from]) reverseQueue.push(e.from); });
+            }
+            nodes.forEach(function (n) {
+                if (!canReachEnd[n.key]) errors.push('El nodo "' + n.label + '" no conduce a ningún Fin.');
+            });
+        }
+
+        return uniqueArray(errors);
+    }
+
+    function fix74GraphSnapshotFromVisualModel(model) {
+        var nodes = [];
+        var edges = [];
+        ((model && model.nodes) || []).forEach(function (n) {
+            if (!n || n.isIssue || !n.action) return;
+            var a = n.action;
+            var params = fix74StableValue(a.params || {}, 'params');
+            nodes.push({
+                key: fix74LabelKey(a.label),
+                label: String(a.label || '').trim(),
+                nodeType: String(a.nodeType || '').trim(),
+                role: fix74RoleFromAction(a),
+                params: params,
+                dataRefs: fix74DataRefs(params, []).sort()
+            });
+        });
+        ((model && model.edges) || []).forEach(function (e) {
+            if (!e || e.issue || !e.from || !e.to) return;
+            edges.push({
+                from: fix74LabelKey(e.from.label),
+                to: fix74LabelKey(e.to.label),
+                condition: fix74NormalizeCondition(e.condition),
+                fromNodeType: String(e.from.nodeType || ''),
+                toNodeType: String(e.to.nodeType || '')
+            });
+        });
+        nodes.sort(function (a, b) { var ak = a.key + '|' + a.nodeType, bk = b.key + '|' + b.nodeType; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        edges.sort(function (a, b) { var ak = a.from + '|' + a.condition + '|' + a.to, bk = b.from + '|' + b.condition + '|' + b.to; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function fix74ProjectedCanvasSnapshot(plan) {
+        var actions = ((plan && plan.actions) || []).filter(function (a) {
+            return a && String(a.action || '').toUpperCase() === 'ADD_NODE' && a.nodeType;
+        });
+        var labels = {};
+        var nodes = [];
+        actions.forEach(function (a) {
+            var key = fix74LabelKey(a.label);
+            labels[key] = a;
+            var params = fix74StableValue(a.params || {}, 'params');
+            nodes.push({
+                key: key,
+                label: String(a.label || '').trim(),
+                nodeType: String(a.nodeType || '').trim(),
+                role: fix74RoleFromAction(a),
+                params: params,
+                dataRefs: fix74DataRefs(params, []).sort()
+            });
+        });
+        var edges = [];
+        ((plan && plan.proposedConnections) || []).forEach(function (c) {
+            if (!c) return;
+            var fk = fix74LabelKey(c.from), tk = fix74LabelKey(c.to);
+            if (!labels[fk] || !labels[tk] || fk === tk) return;
+            edges.push({
+                from: fk,
+                to: tk,
+                condition: fix74NormalizeCondition(c.condition),
+                fromNodeType: String(c.fromNodeType || labels[fk].nodeType || ''),
+                toNodeType: String(c.toNodeType || labels[tk].nodeType || '')
+            });
+        });
+        if (!edges.length) {
+            for (var i = 0; i < nodes.length - 1; i++) {
+                edges.push({ from: nodes[i].key, to: nodes[i + 1].key, condition: 'always', fromNodeType: nodes[i].nodeType, toNodeType: nodes[i + 1].nodeType });
+            }
+        }
+        nodes.sort(function (a, b) { var ak = a.key + '|' + a.nodeType, bk = b.key + '|' + b.nodeType; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        edges.sort(function (a, b) { var ak = a.from + '|' + a.condition + '|' + a.to, bk = b.from + '|' + b.condition + '|' + b.to; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function fix74CanvasSnapshot() {
+        if (!window.__WF_UI) return null;
+        var uiNodes = window.__WF_UI.nodes || [];
+        var uiEdges = window.__WF_UI.edges || [];
+        var idMap = {};
+        var nodes = [];
+        uiNodes.forEach(function (n) {
+            if (!n) return;
+            var params = fix74StableValue(n.params || {}, 'params');
+            var actionLike = { nodeType: n.key, label: n.label, params: params };
+            idMap[n.id] = { key: fix74LabelKey(n.label), nodeType: String(n.key || '') };
+            nodes.push({
+                key: fix74LabelKey(n.label),
+                label: String(n.label || '').trim(),
+                nodeType: String(n.key || '').trim(),
+                role: fix74RoleFromAction(actionLike),
+                params: params,
+                dataRefs: fix74DataRefs(params, []).sort()
+            });
+        });
+        var edges = [];
+        uiEdges.forEach(function (e) {
+            var from = idMap[e && e.from], to = idMap[e && e.to];
+            if (!from || !to) return;
+            edges.push({
+                from: from.key,
+                to: to.key,
+                condition: fix74NormalizeCondition(e.condition),
+                fromNodeType: from.nodeType,
+                toNodeType: to.nodeType
+            });
+        });
+        nodes.sort(function (a, b) { var ak = a.key + '|' + a.nodeType, bk = b.key + '|' + b.nodeType; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        edges.sort(function (a, b) { var ak = a.from + '|' + a.condition + '|' + a.to, bk = b.from + '|' + b.condition + '|' + b.to; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function validateFix74PlanContract(plan, userText, includeVisual, decisionItems) {
+        var errors = [];
+        if (!plan || !plan.contract) return ['No se generó el contrato estructurado del workflow.'];
+        var current = buildFix74PlanContract(plan, userText || '', decisionItems);
+        var stored = plan.contract;
+        if (current.graphFingerprint !== stored.graphFingerprint) errors.push('El plan cambió después de crear su contrato. Volvé a revisar la propuesta.');
+        if (current.decisionFingerprint !== stored.decisionFingerprint) errors.push('Las decisiones cambiaron después de crear el plan. Volvé a generar la propuesta.');
+        if (current.textFingerprint !== stored.textFingerprint) errors.push('La explicación textual cambió o no coincide con los parámetros reales del plan. Volvé a revisar la propuesta.');
+        errors = errors.concat(fix74CoreContractErrors(current));
+        errors = errors.concat(fix74bTextContractErrors(stored));
+
+        var projection = fix74ProjectedCanvasSnapshot(plan);
+        if (fix74GraphFingerprint(projection) !== stored.graphFingerprint) errors.push('La proyección que recibiría el canvas no coincide con el contrato del plan.');
+
+        if (includeVisual !== false) {
+            var visual = fix74GraphSnapshotFromVisualModel(buildVisualDraftModel(plan, []));
+            if (fix74GraphFingerprint(visual) !== stored.graphFingerprint) errors.push('El borrador visual no coincide con el contrato del plan.');
+        }
+        return uniqueArray(errors);
+    }
+
+    function fix74CanvasContractErrors(plan) {
+        if (!plan || !plan.contract) return ['No existe contrato para verificar el canvas.'];
+        var canvas = fix74CanvasSnapshot();
+        if (!canvas) return ['No se pudo leer el grafo aplicado desde la API pública del canvas.'];
+        if (fix74GraphFingerprint(canvas) !== plan.contract.graphFingerprint) return ['El grafo aplicado no coincide con el contrato confirmado. No lo guardes hasta revisar.'];
+        return [];
+    }
+
+    function fix74HumanNodeText(node) {
+        node = node || {};
+        var p = node.params || {};
+        if (node.nodeType === 'doc.load') return 'Cargar documento: ' + (p.docTipoCodigo || node.label);
+        if (node.nodeType === 'control.if') return 'Validar ' + (p.field || node.label) + ' (' + (p.op || 'condición') + ')';
+        if (node.nodeType === 'human.task') return 'Crear tarea humana para ' + (node.role || 'destino') + ': ' + (p.titulo || node.label);
+        if (node.nodeType === 'util.notify') return 'Notificar a ' + (node.role || 'destino') + ': ' + (p.asunto || node.label);
+        if (node.nodeType === 'util.logger') return 'Registrar log ' + (p.level || 'Info') + ': ' + (p.message || node.label);
+        if (node.nodeType === 'util.end') return 'Finalizar flujo';
+        if (node.nodeType === 'util.start') return 'Inicio';
+        return node.label || node.nodeType;
+    }
+
+    function fix74bIsActionNode(node) {
+        var t = String(node && node.nodeType || '');
+        return t === 'human.task' || t === 'util.notify' || t === 'util.logger';
+    }
+
+    function fix74bKnownDataRefs(refs) {
+        var known = [];
+        (refs || []).forEach(function (ref) {
+            ref = String(ref || '').trim();
+            if (ref === 'biz.notaCredito.cae' || ref === 'biz.notaCredito.proveedor') pushUnique(known, ref);
+        });
+        known.sort();
+        return known;
+    }
+
+    function fix74bDataRefLabel(ref) {
+        if (ref === 'biz.notaCredito.cae') return 'CAE';
+        if (ref === 'biz.notaCredito.proveedor') return 'proveedor';
+        return ref;
+    }
+
+    function fix74bJoinLabels(refs) {
+        var labels = (refs || []).map(fix74bDataRefLabel);
+        if (!labels.length) return '';
+        if (labels.length === 1) return labels[0];
+        return labels.slice(0, -1).join(', ') + ' y ' + labels[labels.length - 1];
+    }
+
+    function fix74bRequestedDataRefs(contract) {
+        var refs = [];
+        ((contract && contract.decisions) || []).forEach(function (d) {
+            if (String(d && d.key || '') !== 'data-message') return;
+            var choice = normalizePhraseForSearch(d.choice || '');
+            if (choice.indexOf('cae') >= 0) pushUnique(refs, 'biz.notaCredito.cae');
+            if (choice.indexOf('proveedor') >= 0) pushUnique(refs, 'biz.notaCredito.proveedor');
+        });
+        refs.sort();
+        return refs;
+    }
+
+    function fix74bConditionRepresentsMissingCae(contract, branch) {
+        if (branch !== 'false') return false;
+        var review = fix74ReviewModel(contract || { nodes: [], edges: [] });
+        var cond = review.condition || {};
+        var p = cond.params || {};
+        return String(cond.nodeType || '') === 'control.if' &&
+            String(p.field || '').trim() === 'biz.notaCredito.cae' &&
+            normalizeKey(p.op || '') === 'NOT_EMPTY';
+    }
+
+    function fix74bTextItem(node, branch, contract) {
+        var actual = fix74bKnownDataRefs(node && node.dataRefs || []);
+        var requested = fix74bRequestedDataRefs(contract);
+        var omitted = [];
+        if (fix74bIsActionNode(node)) {
+            requested.forEach(function (ref) { if (actual.indexOf(ref) < 0) omitted.push(ref); });
+        }
+        var reason = '';
+        if (omitted.indexOf('biz.notaCredito.cae') >= 0 && fix74bConditionRepresentsMissingCae(contract, branch)) {
+            reason = 'cae_missing_branch';
+        }
+        return {
+            nodeKey: String(node && node.key || ''),
+            branch: branch || 'main',
+            dataRefs: actual,
+            omittedRefs: omitted.sort(),
+            omissionReason: reason
+        };
+    }
+
+    function fix74bBuildTextProfile(contract) {
+        var review = fix74ReviewModel(contract || { nodes: [], edges: [] });
+        function mapPath(path, branch) {
+            return (path || []).filter(fix74bIsActionNode).map(function (node) {
+                return fix74bTextItem(node, branch, contract);
+            });
+        }
+        return {
+            version: 'fix74b-text-v1',
+            requestedDataRefs: fix74bRequestedDataRefs(contract),
+            main: mapPath(review.main, 'main'),
+            truePath: mapPath(review.truePath, 'true'),
+            falsePath: mapPath(review.falsePath, 'false')
+        };
+    }
+
+    function fix74bTextContractErrors(contract) {
+        var errors = [];
+        if (!contract || !contract.textProfile || contract.textProfile.version !== 'fix74b-text-v1') {
+            return ['El contrato no contiene una explicación textual fix74b válida.'];
+        }
+        var profile = contract.textProfile;
+        var all = [].concat(profile.main || [], profile.truePath || [], profile.falsePath || []);
+        all.forEach(function (item) {
+            var node = fix74NodeByKey(contract, item.nodeKey);
+            if (!node) {
+                errors.push('La explicación textual referencia un nodo inexistente: ' + item.nodeKey + '.');
+                return;
+            }
+            var expected = fix74bTextItem(node, item.branch, contract);
+            if (fix74StableStringify(expected.dataRefs) !== fix74StableStringify(item.dataRefs || [])) {
+                errors.push('La explicación de "' + node.label + '" anuncia datos distintos de sus parámetros reales.');
+            }
+            if (fix74StableStringify(expected.omittedRefs) !== fix74StableStringify(item.omittedRefs || [])) {
+                errors.push('La explicación de "' + node.label + '" no informa correctamente los datos omitidos.');
+            }
+            if (expected.omissionReason !== String(item.omissionReason || '')) {
+                errors.push('La explicación de "' + node.label + '" no justifica correctamente la omisión de datos por rama.');
+            }
+            var unexpected = (item.omittedRefs || []).filter(function (ref) {
+                return !(ref === 'biz.notaCredito.cae' && item.omissionReason === 'cae_missing_branch');
+            });
+            if (unexpected.length) {
+                errors.push('El nodo "' + node.label + '" omite ' + fix74bJoinLabels(unexpected) + ' sin una razón funcional permitida.');
+            }
+        });
+        var expectedFingerprint = fix74Hash(fix74StableStringify(profile));
+        if (String(contract.textFingerprint || '') !== expectedFingerprint) {
+            errors.push('La huella de la explicación textual no coincide con su contenido.');
+        }
+        return uniqueArray(errors);
+    }
+
+    function fix74bHumanNodeDataText(node, branch, contract) {
+        if (!fix74bIsActionNode(node)) return '';
+        var item = fix74bTextItem(node, branch, contract);
+        var parts = [];
+        if (item.dataRefs.length) parts.push('Incluye ' + fix74bJoinLabels(item.dataRefs) + '.');
+        else parts.push('No incorpora datos documentales en el contenido.');
+        if (item.omissionReason === 'cae_missing_branch') {
+            parts.push('El CAE no se incluye porque esta rama corresponde a CAE faltante.');
+        }
+        return parts.join(' ');
+    }
+
+    function fix74bBranchDataSummary(contract, path, branch, title) {
+        var actions = (path || []).filter(fix74bIsActionNode);
+        if (!actions.length) return '';
+        var groups = {};
+        actions.forEach(function (node) {
+            var item = fix74bTextItem(node, branch, contract);
+            var key = fix74StableStringify({ refs: item.dataRefs, omitted: item.omittedRefs, reason: item.omissionReason });
+            if (!groups[key]) groups[key] = { roles: [], item: item };
+            groups[key].roles.push(node.role || node.label || 'destino');
+        });
+        var chunks = [];
+        Object.keys(groups).forEach(function (key) {
+            var g = groups[key];
+            var who = g.roles.join(' e ');
+            var verb = g.roles.length > 1 ? ' incluyen ' : ' incluye ';
+            var noVerb = g.roles.length > 1 ? ' no incluyen datos documentales' : ' no incluye datos documentales';
+            var text = who + (g.item.dataRefs.length ? verb + fix74bJoinLabels(g.item.dataRefs) : noVerb);
+            if (g.item.omissionReason === 'cae_missing_branch') text += '; el CAE no se incluye porque la rama representa CAE faltante';
+            chunks.push(text);
+        });
+        return title + ': ' + chunks.join('. ') + '.';
+    }
+
+    function fix74bContractDataSummary(contract) {
+        if (!contract) return '';
+        var review = fix74ReviewModel(contract);
+        var parts = [];
+        var main = fix74bBranchDataSummary(contract, review.main, 'main', 'Flujo principal');
+        var yes = fix74bBranchDataSummary(contract, review.truePath, 'true', 'Rama SI');
+        var no = fix74bBranchDataSummary(contract, review.falsePath, 'false', 'Rama NO');
+        if (main) parts.push(main);
+        if (yes) parts.push(yes);
+        if (no) parts.push(no);
+        return parts.join(' ');
+    }
+
+    function fix74FollowPath(contract, fromKey, firstCondition) {
+        var out = [];
+        var seen = {};
+        var current = fromKey;
+        var condition = firstCondition;
+        for (var i = 0; i < 40; i++) {
+            var edges = fix74Outgoing(contract, current);
+            var edge = null;
+            for (var j = 0; j < edges.length; j++) {
+                if (condition && edges[j].condition === condition) { edge = edges[j]; break; }
+            }
+            if (!edge && !condition) {
+                for (var k = 0; k < edges.length; k++) if (edges[k].condition === 'always') { edge = edges[k]; break; }
+            }
+            if (!edge) break;
+            var node = fix74NodeByKey(contract, edge.to);
+            if (!node || seen[node.key]) break;
+            seen[node.key] = true;
+            out.push(node);
+            if (node.nodeType === 'util.end' || node.nodeType === 'control.if') break;
+            current = node.key;
+            condition = '';
+        }
+        return out;
+    }
+
+    function fix74ReviewModel(contract) {
+        var nodes = (contract && contract.nodes) || [];
+        var start = null, cond = null;
+        nodes.forEach(function (n) { if (n.nodeType === 'util.start') start = n; });
+        var main = [];
+        if (start) {
+            var path = fix74FollowPath(contract, start.key, '');
+            for (var i = 0; i < path.length; i++) {
+                if (path[i].nodeType === 'control.if') { cond = path[i]; break; }
+                if (path[i].nodeType !== 'util.end') main.push(path[i]);
+            }
+        }
+        if (!cond) {
+            for (var j = 0; j < nodes.length; j++) if (nodes[j].nodeType === 'control.if') { cond = nodes[j]; break; }
+        }
+        return {
+            main: main,
+            condition: cond,
+            truePath: cond ? fix74FollowPath(contract, cond.key, 'true') : [],
+            falsePath: cond ? fix74FollowPath(contract, cond.key, 'false') : []
+        };
+    }
+
+    function fix74ContractStatusHtml(plan, validation) {
+        var errors = (validation && validation.errors) || [];
+        var contract = plan && plan.contract;
+        var test = aiFix74SelfTestResult || { ok: false, total: 0, passed: 0 };
+        if (errors.length || !contract) {
+            var h = '<div class="wf-ai-contract-status invalid"><strong>Creación bloqueada por el contrato</strong>';
+            if (errors.length) {
+                h += '<ul>';
+                errors.forEach(function (e) { h += '<li>' + htmlEncode(e) + '</li>'; });
+                h += '</ul>';
+            }
+            return h + '</div>';
+        }
+        return '<div class="wf-ai-contract-status valid"><strong>Contrato estructural y textual validado</strong><span>' +
+            htmlEncode(String((contract.nodes || []).length) + ' nodos · ' + String((contract.edges || []).length) + ' conexiones · matriz ' + String(test.passed || 0) + '/' + String(test.total || 0)) +
+            '</span></div>';
+    }
+
+    function fix74SyntheticAction(mode, label, role, message) {
+        var type = guidedActionNodeType(mode);
+        if (type === 'human.task') return makePlanAction(type, label, { titulo: label, descripcion: message, rol: role });
+        if (type === 'util.logger') return makePlanAction(type, label, { level: 'Warn', message: role + ': ' + message });
+        return makePlanAction(type, label, { destinoTipo: 'rol', rolDestino: role, destino: role, asunto: label, mensaje: message });
+    }
+
+    function fix74SyntheticPlan(modeTrue, modeFalse, itScope, dataMode) {
+        var cae = dataMode === 'cae' || dataMode === 'both';
+        var proveedor = dataMode === 'proveedor' || dataMode === 'both';
+        function msg(hasCae) {
+            var parts = [hasCae ? 'Con CAE.' : 'Sin CAE.'];
+            if (cae && hasCae) parts.push('CAE: {{biz.notaCredito.cae}}.');
+            if (proveedor) parts.push('Proveedor: {{biz.notaCredito.proveedor}}.');
+            return parts.join(' ');
+        }
+        var actions = [
+            makePlanAction('util.start', 'Inicio', {}),
+            makePlanAction('doc.load', 'Cargar NC', { docTipoCodigo: 'NOTA_CREDITO_ELECTRONICA_AR', path: 'input.filePath', mode: 'auto' }),
+            makePlanAction('control.if', 'Validar CAE', { field: 'biz.notaCredito.cae', op: 'not_empty' }),
+            fix74SyntheticAction(modeTrue, 'Acción Dirección', 'DIR_GENERAL', msg(true)),
+            fix74SyntheticAction(modeFalse, 'Acción Compras', 'COMPRAS', msg(false))
+        ];
+        if (itScope === 'true' || itScope === 'both') actions.push(fix74SyntheticAction(modeTrue, 'Acción IT SI', 'IT', msg(true)));
+        if (itScope === 'false' || itScope === 'both') actions.push(fix74SyntheticAction(modeTrue, 'Acción IT NO', 'IT', msg(false)));
+        actions.push(makePlanAction('util.end', 'Fin', {}));
+
+        function find(label) { for (var i = 0; i < actions.length; i++) if (actions[i].label === label) return actions[i]; return null; }
+        var edges = [];
+        addStructuredConnection(edges, find('Inicio'), find('Cargar NC'), '');
+        addStructuredConnection(edges, find('Cargar NC'), find('Validar CAE'), '');
+        var trueFirst = find(itScope === 'true' || itScope === 'both' ? 'Acción Dirección' : 'Acción Dirección');
+        addStructuredConnection(edges, find('Validar CAE'), trueFirst, 'SI');
+        if (itScope === 'true' || itScope === 'both') {
+            addStructuredConnection(edges, find('Acción Dirección'), find('Acción IT SI'), '');
+            addStructuredConnection(edges, find('Acción IT SI'), find('Fin'), '');
+        } else addStructuredConnection(edges, find('Acción Dirección'), find('Fin'), '');
+        addStructuredConnection(edges, find('Validar CAE'), find('Acción Compras'), 'NO');
+        if (itScope === 'false' || itScope === 'both') {
+            addStructuredConnection(edges, find('Acción Compras'), find('Acción IT NO'), '');
+            addStructuredConnection(edges, find('Acción IT NO'), find('Fin'), '');
+        } else addStructuredConnection(edges, find('Acción Compras'), find('Fin'), '');
+        return { actions: actions, proposedConnections: edges, missingData: [], branchPlan: { branches: [] } };
+    }
+
+    function runFix74ContractSelfTest() {
+        if (aiFix74SelfTestResult) return aiFix74SelfTestResult;
+        var modes = ['notify', 'human_task', 'logger'];
+        var scopes = ['none', 'true', 'false', 'both'];
+        var dataModes = ['none', 'cae', 'proveedor', 'both'];
+        var total = 0, passed = 0, errors = [];
+        modes.forEach(function (trueMode) {
+            modes.forEach(function (falseMode) {
+                scopes.forEach(function (scope) {
+                    dataModes.forEach(function (dataMode) {
+                        total++;
+                        var plan = fix74SyntheticPlan(trueMode, falseMode, scope, dataMode);
+                        plan.contract = buildFix74PlanContract(plan, '', []);
+                        var testErrors = validateFix74PlanContract(plan, '', true, []);
+                        if (!testErrors.length) passed++;
+                        else if (errors.length < 8) errors.push(trueMode + '/' + falseMode + '/' + scope + '/' + dataMode + ': ' + testErrors.join(' | '));
+                    });
+                });
+            });
+        });
+
+        total += 6;
+        var brokenBranch = fix74SyntheticPlan('notify', 'notify', 'false', 'both');
+        brokenBranch.contract = buildFix74PlanContract(brokenBranch, '', []);
+        brokenBranch.proposedConnections = brokenBranch.proposedConnections.filter(function (e) { return !(e.from === 'Validar CAE' && fix74NormalizeCondition(e.condition) === 'false'); });
+        if (validateFix74PlanContract(brokenBranch, '', true, []).length) passed++; else errors.push('No se detectó una rama NO eliminada.');
+
+        var changedType = fix74SyntheticPlan('notify', 'notify', 'false', 'both');
+        changedType.contract = buildFix74PlanContract(changedType, '', []);
+        changedType.actions[3].nodeType = 'human.task';
+        if (validateFix74PlanContract(changedType, '', true, []).length) passed++; else errors.push('No se detectó un tipo de nodo modificado.');
+
+        var duplicate = fix74SyntheticPlan('notify', 'notify', 'false', 'both');
+        duplicate.actions[4].label = duplicate.actions[3].label;
+        duplicate.contract = buildFix74PlanContract(duplicate, '', []);
+        if (fix74CoreContractErrors(duplicate.contract).length) passed++; else errors.push('No se detectó una etiqueta duplicada.');
+
+        var changedDecision = fix74SyntheticPlan('notify', 'notify', 'false', 'both');
+        var initialDecision = [{ key: 'notify-mode', label: 'Usar notificación interna', clarification: '', superseded: false }];
+        var laterDecision = [{ key: 'notify-mode', label: 'Crear tarea humana', clarification: '', superseded: false }];
+        changedDecision.contract = buildFix74PlanContract(changedDecision, '', initialDecision);
+        if (validateFix74PlanContract(changedDecision, '', true, laterDecision).length) passed++; else errors.push('No se detectó una decisión modificada después del contrato.');
+
+        var changedTextRefs = fix74SyntheticPlan('human_task', 'human_task', 'false', 'both');
+        changedTextRefs.contract = buildFix74PlanContract(changedTextRefs, '', [{ key: 'data-message', label: 'Incluir CAE y proveedor', superseded: false }]);
+        if (changedTextRefs.contract.textProfile.falsePath.length) {
+            changedTextRefs.contract.textProfile.falsePath[0].dataRefs.push('biz.notaCredito.cae');
+            changedTextRefs.contract.textProfile.falsePath[0].dataRefs.sort();
+            changedTextRefs.contract.textFingerprint = fix74Hash(fix74StableStringify(changedTextRefs.contract.textProfile));
+        }
+        if (fix74bTextContractErrors(changedTextRefs.contract).length) passed++; else errors.push('No se detectó un dato textual anunciado que no existe en el nodo.');
+
+        var missingTextReason = fix74SyntheticPlan('human_task', 'human_task', 'false', 'both');
+        missingTextReason.contract = buildFix74PlanContract(missingTextReason, '', [{ key: 'data-message', label: 'Incluir CAE y proveedor', superseded: false }]);
+        if (missingTextReason.contract.textProfile.falsePath.length) {
+            missingTextReason.contract.textProfile.falsePath[0].omissionReason = '';
+            missingTextReason.contract.textFingerprint = fix74Hash(fix74StableStringify(missingTextReason.contract.textProfile));
+        }
+        if (fix74bTextContractErrors(missingTextReason.contract).length) passed++; else errors.push('No se detectó la falta de explicación para CAE omitido en la rama NO.');
+
+        aiFix74SelfTestResult = { ok: passed === total, total: total, passed: passed, errors: errors };
+        return aiFix74SelfTestResult;
+    }
+
     function buildStructuredGuideResult(userText) {
         var plan = buildStructuredGuidePlan();
         if (!plan) return null;
+        plan.assistantVersion = 'constructor-structured-fix74b';
+        plan.contract = buildFix74PlanContract(plan, userText || '');
+
         var validation = buildFunctionalValidation();
         var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
         consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        var contractErrors = validateFix74PlanContract(plan, userText || '', true);
+        contractErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        var selfTest = runFix74ContractSelfTest();
+        if (!selfTest.ok) pushUnique(validation.errors, 'La matriz interna del contrato fix74b no pasó completa.');
+        validation.contract = {
+            ok: contractErrors.length === 0 && selfTest.ok,
+            fingerprint: plan.contract.fingerprint,
+            graphFingerprint: plan.contract.graphFingerprint,
+            matrixPassed: selfTest.passed,
+            matrixTotal: selfTest.total
+        };
         validation.ok = validation.errors.length === 0;
+        aiFix74LastContractCheck = validation.contract;
         return {
             ok: true,
             provider: 'constructor-local',
-            model: 'Constructor IA estructurado fix73c',
+            model: 'Constructor IA estructurado fix74b',
             messageToUser: plan.messageToUser,
             plan: plan,
             validation: validation,

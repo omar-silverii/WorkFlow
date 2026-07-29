@@ -428,6 +428,19 @@ Usar esta frase para validar el circuito:
 
 Cargar una NC, si tiene CAE enviar a DIR_General una notificacion con el numero de CAE, sino crear una advertencia que no lo tiene a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion a IT informando que no lo tienen, todos termina el flujo
 
+
+
+
+
+
+
+
+
+Cargar una NC, si tiene CAE enviar a DIR_General una notificacion con el numero de CAE, sino crear una advertencia que no lo tiene a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion a IT informando que no lo tienen, todos termina el flujo Imagen 1. 
+
+Cargar una NC, si tiene CAE enviar a DIR_General una notificacion con el numero de CAE, sino crear una advertencia que no lo tiene a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion a IT informando que no lo tienen, todos termina el flujo Imagen 1. Selecciono Falta completar una rama SI / NO , elijo NO: notificat a COMPRAS, Imagen 2. Selecciono ¿La acción para IT va siempre o solo en una rama?, Elijo IT solo si falta CAE Imagen 3. Selecciono Falta cerrar la rama NO, elijo NO: Crear tarea para COMPRAS Imagen 4. selecciono Cuando decís notificar / avisar / informar, elijo Crear tarea Humana Imagen 5. Selecciono Datos dentro del contenido elijo Incluir CAE y proveedor Imagen 6 y 7 . Resolver y revisar plan imagen 8 . Crear worlflow imagen 9 ver las decisiones de la IA . y mando 
+
+
 Resultado funcional esperado, si IT va solo cuando falta CAE:
 
 Inicio
