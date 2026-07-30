@@ -1,0 +1,409 @@
+{
+  "StartNodeId": "nStart",
+  "Nodes": {
+    "nStart": {
+      "Id": "nStart",
+      "Type": "util.start",
+      "Label": "Inicio",
+      "Parameters": {
+        "position": {
+          "x": 720,
+          "y": 40
+        }
+      }
+    },
+    "nLoadFactura": {
+      "Id": "nLoadFactura",
+      "Type": "doc.load",
+      "Label": "Cargar factura de proveedor",
+      "Parameters": {
+        "path": "${input.filePath}",
+        "mode": "auto",
+        "docTipoCodigo": "FACTURA_ELECTRONICA_AR",
+        "connectionStringName": "DefaultConnection",
+        "position": {
+          "x": 720,
+          "y": 160
+        }
+      }
+    },
+    "nIfDatos": {
+      "Id": "nIfDatos",
+      "Type": "control.if",
+      "Label": "¿Factura extraída correctamente?",
+      "Parameters": {
+        "rulesMode": "all",
+        "rules": [
+          {
+            "field": "biz.factura.numero",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.factura.fecha",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.factura.cae",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.factura.total",
+            "op": ">",
+            "value": "0",
+            "transform": ""
+          },
+          {
+            "field": "biz.factura.itemsCount",
+            "op": ">",
+            "value": "0",
+            "transform": ""
+          }
+        ],
+        "position": {
+          "x": 720,
+          "y": 300
+        }
+      }
+    },
+    "nTaskComprasValida": {
+      "Id": "nTaskComprasValida",
+      "Type": "human.task",
+      "Label": "COMPRAS - Validar conformidad comercial",
+      "Parameters": {
+        "titulo": "Validar factura ${biz.factura.numero}",
+        "descripcion": "Proveedor=${biz.factura.emisor.nombre}; CUIT=${biz.factura.emisor.cuit}; factura=${biz.factura.numero}; fecha=${biz.factura.fecha}; total=${biz.factura.total}; CAE=${biz.factura.cae}; ítems=${biz.factura.itemsCount}. Verificar recepción, conformidad comercial y documentación asociada. Completar APTO o NO_APTO.",
+        "rol": "COMPRAS",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de validación comercial",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 420,
+          "y": 460
+        }
+      }
+    },
+    "nIfComprasValida": {
+      "Id": "nIfComprasValida",
+      "Type": "control.if",
+      "Label": "¿Compras aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskComprasValida.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 420,
+          "y": 620
+        }
+      }
+    },
+    "nTaskComprasIncompleta": {
+      "Id": "nTaskComprasIncompleta",
+      "Type": "human.task",
+      "Label": "COMPRAS - Revisar factura incompleta",
+      "Parameters": {
+        "titulo": "Revisar factura incompleta ${input.filename}",
+        "descripcion": "La extracción automática no pudo validar todos los datos obligatorios: número, fecha, CAE, total e ítems. Archivo=${input.filename}; texto extraído=${input.textLen} caracteres. Revisar manualmente el documento y completar APTO para continuar o NO_APTO para rechazarlo.",
+        "rol": "COMPRAS",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de revisión documental",
+        "deadlineMinutes": 480,
+        "position": {
+          "x": 1020,
+          "y": 460
+        }
+      }
+    },
+    "nIfComprasIncompleta": {
+      "Id": "nIfComprasIncompleta",
+      "Type": "control.if",
+      "Label": "¿Compras regularizó la factura?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskComprasIncompleta.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 1020,
+          "y": 620
+        }
+      }
+    },
+    "nTaskAdmFin": {
+      "Id": "nTaskAdmFin",
+      "Type": "human.task",
+      "Label": "ADM_FIN - Validar factura para pago",
+      "Parameters": {
+        "titulo": "Validar para pago ${biz.factura.numero}",
+        "descripcion": "Proveedor=${biz.factura.emisor.nombre}; CUIT=${biz.factura.emisor.cuit}; factura=${biz.factura.numero}; total=${biz.factura.total}; vencimiento=${biz.factura.vencimientoPago}; receptor=${biz.factura.receptor.nombre}. Validar requisitos fiscales, imputación y condiciones de pago. Completar APTO o NO_APTO.",
+        "rol": "ADM_FIN",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de Administración",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 720,
+          "y": 800
+        }
+      }
+    },
+    "nIfAdmFin": {
+      "Id": "nIfAdmFin",
+      "Type": "control.if",
+      "Label": "¿Administración aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskAdmFin.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 720,
+          "y": 960
+        }
+      }
+    },
+    "nIfImporteAlto": {
+      "Id": "nIfImporteAlto",
+      "Type": "control.if",
+      "Label": "¿Total mayor a $200.000?",
+      "Parameters": {
+        "field": "biz.factura.total",
+        "op": ">",
+        "value": "200000",
+        "transform": "",
+        "position": {
+          "x": 520,
+          "y": 1120
+        }
+      }
+    },
+    "nTaskDireccion": {
+      "Id": "nTaskDireccion",
+      "Type": "human.task",
+      "Label": "DIR_GENERAL - Autorizar importe elevado",
+      "Parameters": {
+        "titulo": "Autorizar factura de importe elevado ${biz.factura.numero}",
+        "descripcion": "Proveedor=${biz.factura.emisor.nombre}; CUIT=${biz.factura.emisor.cuit}; factura=${biz.factura.numero}; total=${biz.factura.total}; vencimiento=${biz.factura.vencimientoPago}. Administración ya validó la factura. Completar APTO o NO_APTO.",
+        "rol": "DIR_GENERAL",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de Dirección General",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 300,
+          "y": 1280
+        }
+      }
+    },
+    "nIfDireccion": {
+      "Id": "nIfDireccion",
+      "Type": "control.if",
+      "Label": "¿Dirección aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskDireccion.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 300,
+          "y": 1440
+        }
+      }
+    },
+    "nNotifyAprobada": {
+      "Id": "nNotifyAprobada",
+      "Type": "util.notify",
+      "Label": "Notificar factura aprobada",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "info",
+        "destinoTipo": "rol",
+        "prioridad": "normal",
+        "rolDestino": "ADM_FIN",
+        "destino": "ADM_FIN",
+        "asunto": "Factura aprobada para pago",
+        "mensaje": "Factura ${biz.factura.numero} aprobada. Proveedor=${biz.factura.emisor.nombre}; CUIT=${biz.factura.emisor.cuit}; total=${biz.factura.total}; vencimiento=${biz.factura.vencimientoPago}; instancia=${wf.instanceId}.",
+        "urlAccion": "",
+        "position": {
+          "x": 620,
+          "y": 1600
+        }
+      }
+    },
+    "nNotifyRechazada": {
+      "Id": "nNotifyRechazada",
+      "Type": "util.notify",
+      "Label": "Notificar factura no aprobada",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "warn",
+        "destinoTipo": "rol",
+        "prioridad": "alta",
+        "rolDestino": "COMPRAS",
+        "destino": "COMPRAS",
+        "asunto": "Factura no aprobada",
+        "mensaje": "Factura ${biz.factura.numero} no aprobada. Archivo=${input.filename}; proveedor=${biz.factura.emisor.nombre}; total=${biz.factura.total}; último resultado=${wf.tarea.resultado}; instancia=${wf.instanceId}. Revisar la instancia y la documentación.",
+        "urlAccion": "",
+        "position": {
+          "x": 1080,
+          "y": 1280
+        }
+      }
+    },
+    "nEndAprobada": {
+      "Id": "nEndAprobada",
+      "Type": "util.end",
+      "Label": "Fin - Factura aprobada",
+      "Parameters": {
+        "estadoNegocio": "Factura aprobada para pago",
+        "position": {
+          "x": 620,
+          "y": 1760
+        }
+      }
+    },
+    "nEndRechazada": {
+      "Id": "nEndRechazada",
+      "Type": "util.end",
+      "Label": "Fin - Factura rechazada",
+      "Parameters": {
+        "estadoNegocio": "Factura rechazada",
+        "position": {
+          "x": 1080,
+          "y": 1440
+        }
+      }
+    }
+  },
+  "Edges": [
+    {
+      "Id": "e01",
+      "From": "nStart",
+      "To": "nLoadFactura",
+      "Condition": "always"
+    },
+    {
+      "Id": "e02",
+      "From": "nLoadFactura",
+      "To": "nIfDatos",
+      "Condition": "always"
+    },
+    {
+      "Id": "e03",
+      "From": "nIfDatos",
+      "To": "nTaskComprasValida",
+      "Condition": "true"
+    },
+    {
+      "Id": "e04",
+      "From": "nIfDatos",
+      "To": "nTaskComprasIncompleta",
+      "Condition": "false"
+    },
+    {
+      "Id": "e05",
+      "From": "nTaskComprasValida",
+      "To": "nIfComprasValida",
+      "Condition": "always"
+    },
+    {
+      "Id": "e06",
+      "From": "nIfComprasValida",
+      "To": "nTaskAdmFin",
+      "Condition": "true"
+    },
+    {
+      "Id": "e07",
+      "From": "nIfComprasValida",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e08",
+      "From": "nTaskComprasIncompleta",
+      "To": "nIfComprasIncompleta",
+      "Condition": "always"
+    },
+    {
+      "Id": "e09",
+      "From": "nIfComprasIncompleta",
+      "To": "nTaskAdmFin",
+      "Condition": "true"
+    },
+    {
+      "Id": "e10",
+      "From": "nIfComprasIncompleta",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e11",
+      "From": "nTaskAdmFin",
+      "To": "nIfAdmFin",
+      "Condition": "always"
+    },
+    {
+      "Id": "e12",
+      "From": "nIfAdmFin",
+      "To": "nIfImporteAlto",
+      "Condition": "true"
+    },
+    {
+      "Id": "e13",
+      "From": "nIfAdmFin",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e14",
+      "From": "nIfImporteAlto",
+      "To": "nTaskDireccion",
+      "Condition": "true"
+    },
+    {
+      "Id": "e15",
+      "From": "nIfImporteAlto",
+      "To": "nNotifyAprobada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e16",
+      "From": "nTaskDireccion",
+      "To": "nIfDireccion",
+      "Condition": "always"
+    },
+    {
+      "Id": "e17",
+      "From": "nIfDireccion",
+      "To": "nNotifyAprobada",
+      "Condition": "true"
+    },
+    {
+      "Id": "e18",
+      "From": "nIfDireccion",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e19",
+      "From": "nNotifyAprobada",
+      "To": "nEndAprobada",
+      "Condition": "always"
+    },
+    {
+      "Id": "e20",
+      "From": "nNotifyRechazada",
+      "To": "nEndRechazada",
+      "Condition": "always"
+    }
+  ],
+  "Meta": {
+    "Name": "DEMO.FACTURA_PROVEEDOR.E2E"
+  }
+}

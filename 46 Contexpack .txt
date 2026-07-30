@@ -1,0 +1,925 @@
+CONTEXTPACK — WORKFLOW STUDIO
+CIERRE CONSTRUCTOR IA FIX74B
+PRÓXIMO FOCO: INGRESO DOCUMENTAL AUTOMÁTICO / WATCH FOLDER PRODUCTIVO
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. FORMA OBLIGATORIA DE TRABAJO
+======================================================================
+
+En cada nueva sesión Omar entregará:
+
+1. Este ContextPack.
+2. El Prompt de arranque.
+3. Un ZIP completo actualizado del proyecto.
+4. Algún ZIP adicional puntual, si corresponde.
+
+El asistente debe trabajar así:
+
+Paso 1:
+Confirmar que leyó completo el ContextPack.
+
+Paso 2:
+Esperar el ZIP actualizado antes de proponer cambios de código.
+
+Paso 3:
+Inspeccionar primero los archivos reales del ZIP y recién después
+analizar, proponer o modificar.
+
+Reglas no negociables:
+
+- No inventar tablas, clases, handlers, controles, rutas ni archivos.
+- No asumir que el código actual quedó igual a una conversación anterior.
+- La fuente de verdad es siempre el ZIP completo más reciente.
+- No cambiar arquitectura sin una necesidad real.
+- No reescribir cosas que ya funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- Trabajar con cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME en cada ZIP.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No presentar código de archivos que no fueron inspeccionados.
+- No usar parches con líneas +/-.
+- Si no se entrega ZIP correctivo, usar:
+  DONDE DICE → REEMPLAZAR POR.
+- No mezclar teoría larga con una corrección puntual.
+- Proponer la mejor versión desde el inicio.
+- Evaluar el sentido operativo completo de cada funcionalidad:
+  quién la usa, qué registra, cómo se audita, cómo falla y qué falta
+  para que sea productiva.
+
+Puede trabajarse con:
+
+- ZIP base exacto.
+- Más el último fix generado por el asistente dentro de la misma sesión.
+
+Si Omar hizo cambios manuales adicionales o integró otros fixes,
+se debe pedir nuevamente el ZIP completo actualizado.
+
+======================================================================
+2. ÁREAS QUE NO SE DEBEN TOCAR SIN BUG REAL EXPLÍCITO
+======================================================================
+
+No tocar, salvo necesidad comprobada:
+
+- Motor de ejecución.
+- WorkflowRunner.
+- Handlers runtime.
+- WorkflowUI canvas real.
+- Aristas.
+- Zoom.
+- Minimapa.
+- WF_Instancia_Mapa.
+- WF_Instancias.
+- Queue runtime.
+- SMTP.
+- email.send.
+- HSubFlow.cs.
+- Runtime de subflujos.
+- NC_AR.
+- FACTURA_AR.
+- Extractores documentales.
+
+Excepción ya utilizada:
+
+Se puede modificar el panel del Asistente IA dentro de WorkflowUI.aspx,
+su JavaScript y su CSS cuando el fix trate esa experiencia.
+
+No tocar la mecánica interna estable del canvas si puede resolverse
+mediante una capa visual separada.
+
+======================================================================
+3. BASE FUNCIONAL GENERAL DEL PROYECTO
+======================================================================
+
+Arquitectura existente:
+
+- Definiciones:
+  WF_Definicion.JsonDef
+- Instancias:
+  WF_Instancia
+- Logs:
+  WF_InstanciaLog
+- Estado principal:
+  ContextoEjecucion.Estado
+- Datos técnicos:
+  wf.*
+- Datos de negocio:
+  biz.*
+- Seed:
+  WF_SEED / WorkflowAmbient.Items
+- Estado publicado:
+  WF_CTX_ESTADO
+
+Handlers conocidos:
+
+- HUtilError
+- HUtilNotify
+- HFileRead
+- HFileWrite
+- HDocExtract
+- HControlDelay
+- HEmailSend
+- HDocLoad
+- HControlRetry
+- HSubflow
+- handlers adicionales existentes del proyecto
+
+Nodos funcionales ya validados en etapas anteriores:
+
+- util.start
+- util.end
+- doc.load
+- control.if
+- human.task
+- util.notify
+- util.logger
+- http.request
+- data.sql
+- file.write
+- file.read
+- state.vars
+- queue.publish
+- queue.consume
+- util.subflow
+- control.delay
+- control.retry
+- otros nodos presentes en catálogo o runtime
+
+doc.load:
+
+- Reemplaza conceptualmente lectura + resolución + extracción.
+- Recibe:
+  path
+  mode
+  docTipoCodigo
+  outputPrefix
+- Expone:
+  input.filename
+  input.ext
+  input.text
+  input.textLen
+  input.hasText
+  input.modeUsed
+  input.warning
+  input.error
+  input.sizeBytes
+  wf.docTipoCodigo
+  wf.docTipoId
+  wf.contextPrefix
+  biz.{prefix}.*
+
+Tipos documentales cerrados:
+
+- FACTURA_ELECTRONICA_AR / FACTURA_AR
+- NOTA_CREDITO_ELECTRONICA_AR / NC_AR
+- ORDEN_COMPRA
+- NOTA_PEDIDO
+- RECIBO_PAGO
+
+No reabrir extractores salvo bug nuevo real.
+
+======================================================================
+4. BANCO DE REGRESIÓN IA
+======================================================================
+
+Debe existir:
+
+- WF_AiRegression.aspx
+- App_Data/WF_AI/ai_regression_cases.json
+
+Resultado estable esperado:
+
+- OK = 14
+- FALLA = 0
+- SKIP = 0
+- Semántica fuerte = 14
+
+Casos:
+
+A_NO_SUPERA_CASO_CONTRARIO
+B_NOTIFY_POR_RAMA
+C_IF_COMPUESTO_ANY_CAE_O_COMPROBANTE
+D_NEGACION_CAE_COMPROBANTE_CASO_CONTRARIO
+E_IF_COMPUESTO_ALL_DIRECCION_COMPRAS
+F_MULTIPLES_TAREAS_COMPRAS_ADM_RESULTADOS
+G_HTTP_REQUEST_LOGGER
+H_SQL_SELECT_LOGGER
+I_LOGGER_SIMPLE
+J_FILE_WRITE_LOGGER
+K_FILE_READ_LOGGER
+L_STATE_VARS_LOGGER
+M_QUEUE_PUBLISH_LOGGER
+N_QUEUE_CONSUME_LOGGER
+
+No modificar el banco JSON durante la línea fix72–fix74b.
+
+======================================================================
+5. EVOLUCIÓN DEL CONSTRUCTOR IA
+======================================================================
+
+Base anterior validada hasta fix71f:
+
+- Verificar frase.
+- Fallback asistido.
+- Tarjetas de decisión.
+- Decisiones tomadas.
+- Frase clara consolidada.
+- Resolver acá.
+- Resolver y revisar plan.
+- Plan guiado revisable.
+- Confirmar plan.
+- Aplicar al canvas solo después de confirmación.
+- Bloque técnico colapsado.
+- Copiar frase.
+- Copiar JSON técnico.
+
+Principio:
+
+No entiendo perfecto → pregunto.
+El usuario decide → genero un plan.
+El usuario confirma → aplico.
+
+----------------------------------------------------------------------
+FIX72 — CIERRE DE DESAMBIGUACIÓN
+----------------------------------------------------------------------
+
+Nombre:
+
+fix72_cierre_desambiguacion_constructor_ia
+
+Resultado validado:
+
+- Secuencia visual clara:
+  Verificar frase
+  Resolver dudas
+  Revisar plan
+  Confirmar plan
+  Aplicar al canvas
+- Aplicar bloqueado antes de confirmar.
+- Confirmación ligada al contenido exacto del plan.
+- Editar o regenerar invalida la confirmación anterior.
+- No se mezclan errores viejos, fallback y plan resuelto.
+- Las decisiones sobre ubicación de IT se respetan:
+  siempre
+  solo con CAE
+  solo sin CAE
+
+Estado:
+VALIDADO Y CERRADO.
+
+----------------------------------------------------------------------
+FIX73 — PROPUESTA VISUAL SOBRE EL CANVAS
+----------------------------------------------------------------------
+
+Nombre:
+
+fix73_constructor_ia_propuesta_visual
+
+Objetivo:
+
+Reducir la carga mental del usuario.
+
+Experiencia:
+
+Escribir frase
+→ Dibujar propuesta
+→ Ver borrador visual
+→ Resolver puntos rojos
+→ Crear workflow
+
+Implementación conceptual:
+
+- Borrador visual separado del grafo real.
+- Nodos y conexiones incompletas en rojo.
+- Una duda visible y seleccionable en el Inspector.
+- Contador de dudas.
+- Redibujado tras cada elección.
+- El borrador no se guarda ni se ejecuta.
+- Solo al pulsar Crear workflow se convierte en grafo real.
+- No se modificó la mecánica interna del canvas.
+
+Estado:
+VALIDADO Y CERRADO.
+
+----------------------------------------------------------------------
+FIX73B — RESUMEN DE DECISIONES POSTERIOR
+----------------------------------------------------------------------
+
+Nombre:
+
+fix73b_resumen_decisiones_post_aplicacion_ia
+
+Resultado:
+
+Después de aplicar el workflow aparece:
+
+- Ver decisiones IA
+- Ocultar decisiones
+
+Muestra:
+
+- preguntas resueltas;
+- opciones seleccionadas;
+- cantidad de nodos;
+- frase original;
+- decisiones vigentes.
+
+El resumen continúa disponible al seleccionar nodos y aristas.
+
+Se elimina al limpiar o crear un grafo nuevo.
+
+Estado:
+VALIDADO Y CERRADO.
+
+----------------------------------------------------------------------
+FIX73C — DECISIONES CONTRA GRAFO REAL
+----------------------------------------------------------------------
+
+Nombre:
+
+fix73c_consistencia_decisiones_vs_grafo_ia
+
+Problema detectado:
+
+El resumen registraba “Crear tarea humana”, pero el generador seguía
+creando util.notify de forma fija.
+
+Corrección:
+
+- Crear tarea humana → human.task.
+- Notificación interna → util.notify.
+- Solo registrar log → util.logger.
+- Las decisiones modifican:
+  borrador
+  plan
+  workflow final
+  resumen
+- IT respeta la rama elegida.
+- CAE y proveedor modifican descripciones o mensajes reales.
+
+Estado:
+VALIDADO Y CERRADO.
+
+----------------------------------------------------------------------
+FIX73D — CONFLICTOS ENTRE DECISIONES
+----------------------------------------------------------------------
+
+Nombre:
+
+fix73d_conflictos_entre_decisiones_ia
+
+Problema:
+
+Podían coexistir decisiones contradictorias:
+
+- Notificar a COMPRAS.
+- Crear tarea para COMPRAS.
+- Advertencia como notificación.
+- Crear tarea humana.
+
+Corrección:
+
+- Una decisión específica reemplaza a la general.
+- Se muestran:
+  Decisiones vigentes
+  Elecciones reemplazadas automáticamente
+- Las elecciones reemplazadas no generan nodos.
+- No contaminan el plan.
+- No contaminan la frase consolidada.
+- No aparecen como efectivas en el resumen final.
+
+Estado:
+VALIDADO Y CERRADO.
+
+----------------------------------------------------------------------
+FIX74 — CONTRATO ESTRUCTURADO
+----------------------------------------------------------------------
+
+Nombre:
+
+fix74_contrato_plan_y_validacion_constructor_ia
+
+Objetivo:
+
+La frase deja de ser la fuente directa del grafo.
+
+La fuente pasa a ser un contrato estructurado único que alimenta:
+
+- decisiones;
+- plan;
+- borrador;
+- resumen;
+- JSON final;
+- grafo real.
+
+Validaciones incorporadas:
+
+- exactamente un Inicio;
+- al menos un Fin;
+- nodos alcanzables;
+- todos los caminos llegan a Fin;
+- cada control.if tiene true y false;
+- conexiones válidas;
+- ausencia de duplicados;
+- etiquetas únicas;
+- parámetros obligatorios;
+- coincidencia entre decisión y tipo de nodo;
+- coincidencia entre borrador, plan y grafo.
+
+Si hay divergencia:
+
+Crear workflow queda bloqueado.
+
+Matriz interna:
+
+148/148.
+
+Estado:
+VALIDADO FUNCIONALMENTE.
+
+----------------------------------------------------------------------
+FIX74B — CONTRATO TEXTUAL POR RAMA
+----------------------------------------------------------------------
+
+Nombre:
+
+fix74b_contrato_textual_por_rama
+
+Problema:
+
+La elección general “Incluir CAE y proveedor” podía hacer que el resumen
+anunciara CAE también en la rama NO, aunque el nodo real correctamente
+solo tenía proveedor.
+
+Corrección:
+
+La explicación visible se genera desde los parámetros reales de cada nodo.
+
+Caso validado:
+
+Rama SI:
+- DIR_GENERAL incluye CAE y proveedor.
+
+Rama NO:
+- COMPRAS incluye proveedor.
+- IT incluye proveedor.
+- CAE no se incluye porque la rama representa CAE faltante.
+
+Validación visible:
+
+Contrato estructural y textual validado.
+7 nodos.
+7 conexiones.
+Matriz 150/150.
+
+Se valida también que:
+
+- el texto no anuncie datos inexistentes;
+- una omisión permitida explique su motivo;
+- resumen, mensajes y descripciones coincidan.
+
+Estado:
+VALIDADO Y CERRADO.
+
+======================================================================
+6. FRASE DE PRUEBA PRINCIPAL
+======================================================================
+
+Frase:
+
+"Cargar una NC, si tiene CAE enviar a DIR_General una notificacion
+con el numero de CAE, sino crear una advertencia que no lo tiene
+a COMPRAS, de la NC obtener el Proveedor y mandar una notificacion
+a IT informando que no lo tienen, todos termina el flujo"
+
+En pruebas se seleccionaron variantes diferentes para comprobar
+que las decisiones modifican realmente el grafo.
+
+Variante validada final:
+
+- Acción general:
+  Crear tarea humana.
+- Rama NO:
+  Crear tarea para COMPRAS.
+- IT:
+  Solo si falta CAE.
+- Datos:
+  CAE y proveedor.
+
+Resultado real validado:
+
+Inicio
+→ Cargar nota de crédito
+→ Validar CAE informado
+
+SI / true:
+→ human.task DIR_GENERAL
+→ Fin
+
+NO / false:
+→ human.task COMPRAS
+→ human.task IT
+→ Fin
+
+Datos:
+
+- DIR_GENERAL:
+  CAE y proveedor.
+- COMPRAS:
+  proveedor.
+- IT:
+  proveedor.
+- No se incluye CAE en rama NO porque representa CAE faltante.
+
+JSON validado:
+
+- 7 nodos.
+- 7 conexiones.
+- Un único util.start.
+- Un único util.end.
+- control.if con true y false.
+- Todos los caminos alcanzan Fin.
+
+======================================================================
+7. NUEVO PUNTO PRODUCTIVO DETECTADO
+======================================================================
+
+Problema operativo planteado por Omar:
+
+En producción no se debería cargar manualmente un documento por vez.
+
+La operación esperada es:
+
+- llegan varios documentos a una carpeta;
+- cada documento inicia su propio workflow;
+- cada instancia recibe su archivo;
+- doc.load procesa un documento concreto.
+
+Principio correcto:
+
+Una instancia por documento.
+
+Ejemplo:
+
+Archivo 1 → Instancia 1
+Archivo 2 → Instancia 2
+Archivo 3 → Instancia 3
+
+Cada instancia recibe:
+
+input.filePath
+
+doc.load continúa teniendo una única responsabilidad:
+
+Procesar el archivo concreto de esa instancia.
+
+No convertir doc.load en un enumerador de carpetas.
+
+======================================================================
+8. COMPONENTE WATCH FOLDER YA EXISTENTE
+======================================================================
+
+Durante la revisión del ZIP se encontró un proyecto ya preparado:
+
+Dispatcher.WatchFolder
+
+Archivos o elementos detectados:
+
+- Dispatcher.WatchFolder/
+- Dispatcher.WatchFolder.sln
+- README_WATCHFOLDER.md
+- WatchFolderDispatcher.cs
+- WatchFolderOptions.cs
+- App.config
+- Samples/WatchFolder/Inbox/OC
+- referencias necesarias al runtime de Workflow Studio
+
+Función esperada:
+
+- inspeccionar una carpeta;
+- detectar archivos;
+- verificar que terminaron de copiarse;
+- crear una instancia por archivo;
+- enviar input.filePath;
+- enviar input.fileName;
+- ejecutar una definición;
+- mover el archivo a Processed o Error.
+
+Actualmente estaría configurado o preparado como demostración
+para órdenes de compra, por ejemplo:
+
+- carpeta Inbox de OC;
+- carpeta Processed;
+- carpeta Error;
+- filtro de archivos;
+- definición configurada;
+- polling periódico.
+
+La revisión indicó que el componente no es principalmente una API HTTP.
+
+Es un worker o dispatcher externo que:
+
+- accede a la carpeta;
+- accede a SQL;
+- referencia el ensamblado de Workflow Studio;
+- llama al runtime para crear y ejecutar una instancia.
+
+Esto encaja con la arquitectura deseada:
+
+Watch Folder Dispatcher
+→ una instancia por documento
+→ input.filePath
+→ doc.load
+→ workflow de negocio
+
+No se debe crear otra arquitectura paralela sin revisar primero
+y reutilizar este componente.
+
+======================================================================
+9. PUNTOS CRÍTICOS DETECTADOS EN WATCH FOLDER
+======================================================================
+
+Antes de activar Watch Folder en producción deben revisarse estos puntos
+contra el código real del próximo ZIP.
+
+----------------------------------------------------------------------
+9.1 CONVENCIÓN DE input.filePath
+----------------------------------------------------------------------
+
+El Constructor IA actualmente viene generando:
+
+path = input.filePath
+
+Durante la revisión se detectó la posibilidad de que HDocLoad expanda
+variables mediante una plantilla como:
+
+${input.filePath}
+
+Debe verificarse en el código real:
+
+- qué convención acepta HDocLoad;
+- cómo resuelven variables otros nodos;
+- si path = input.filePath ya se resuelve;
+- o si debe generarse path = ${input.filePath}.
+
+No cambiar HDocLoad sin verificar.
+
+La mejor corrección probablemente será ajustar el generador del
+Constructor IA si la convención actual está mal.
+
+Pero primero se debe inspeccionar el archivo real.
+
+----------------------------------------------------------------------
+9.2 RUTA ESTABLE DEL DOCUMENTO
+----------------------------------------------------------------------
+
+Riesgo:
+
+El dispatcher puede crear una instancia con una ruta dentro de Inbox
+y después mover el archivo a Processed.
+
+La instancia seguiría conservando la ruta antigua.
+
+Esto puede fallar si:
+
+- una tarea humana pausa el workflow;
+- más adelante otro nodo vuelve a leer el archivo;
+- se intenta consultar el documento desde auditoría;
+- el archivo ya no existe en la ruta inicial.
+
+Solución conceptual recomendada:
+
+Inbox
+→ reclamar/mover archivo a Processing o Archive estable
+→ crear instancia usando esa ruta definitiva
+→ conservar esa ruta durante toda la instancia
+
+No definir nombres o carpetas definitivas sin revisar el código real.
+
+----------------------------------------------------------------------
+9.3 SIGNIFICADO DE PROCESSED
+----------------------------------------------------------------------
+
+Si el runtime retorna al llegar a una tarea humana, el dispatcher
+puede mover el archivo a Processed aunque el workflow esté EnCurso.
+
+Entonces Processed puede significar:
+
+- archivo recibido;
+- archivo despachado;
+- instancia iniciada;
+
+y no necesariamente:
+
+- workflow finalizado.
+
+Se debe definir explícitamente esa semántica.
+
+Opciones posibles:
+
+- Accepted
+- Dispatched
+- Processing
+- Archive
+- Processed
+
+No renombrar todavía sin analizar impacto.
+
+----------------------------------------------------------------------
+9.4 DUPLICADOS E IDEMPOTENCIA
+----------------------------------------------------------------------
+
+Mover el archivo fuera de Inbox reduce duplicados, pero no cubre:
+
+- cierre del proceso después de crear instancia y antes de mover;
+- dos dispatchers simultáneos;
+- movimiento fallido;
+- reinicio del worker;
+- archivo copiado nuevamente;
+- mismo contenido con otro nombre.
+
+Debe verificarse si ya existe:
+
+- registro persistente;
+- clave de ingreso;
+- hash;
+- claim atómico;
+- marca de procesamiento;
+- control por ruta o nombre;
+- transacción.
+
+No inventar tabla nueva sin revisar la base.
+
+----------------------------------------------------------------------
+9.5 ESTADO REAL DE LA INSTANCIA
+----------------------------------------------------------------------
+
+El dispatcher podría considerar éxito simplemente porque la llamada
+al runtime retornó sin excepción.
+
+Debe verificarse:
+
+- qué devuelve CrearInstanciaYEjecutarAsync;
+- si retorna Id de instancia;
+- si puede quedar EnCurso;
+- si puede quedar Error sin lanzar excepción;
+- cuándo se mueve a Error;
+- cuándo se mueve a Processed.
+
+La decisión de destino del archivo debe basarse en el resultado real,
+no únicamente en ausencia de excepción.
+
+----------------------------------------------------------------------
+9.6 DOCUMENTACIÓN Y NOMBRES
+----------------------------------------------------------------------
+
+Se detectó una posible inconsistencia entre:
+
+- Workflow.Key
+- WF_Definicion.Key
+- Workflow.Nombre
+- WF_Definicion.Nombre
+
+Debe revisarse:
+
+- qué campo consulta realmente el código;
+- qué valor usa App.config;
+- qué dice README;
+- qué se muestra en la UI.
+
+Corregir documentación o configuración sin cambiar innecesariamente
+el modelo actual.
+
+======================================================================
+10. DECISIÓN DE PRODUCTO
+======================================================================
+
+No avanzar todavía con más nodos del Constructor IA.
+
+La próxima prioridad es:
+
+INGRESO DOCUMENTAL AUTOMÁTICO / WATCH FOLDER PRODUCTIVO
+
+Nombre sugerido:
+
+fix75_watchfolder_ingreso_documental_productivo
+
+Objetivo:
+
+Tomar el componente Dispatcher.WatchFolder ya existente y validar
+si puede convertirse en el mecanismo productivo de ingreso de documentos.
+
+No crear un nuevo servicio ni una nueva arquitectura antes de agotar
+lo que ya existe.
+
+======================================================================
+11. PRÓXIMA SESIÓN — ORDEN DE TRABAJO
+======================================================================
+
+Primero:
+
+1. Recibir ContextPack.
+2. Recibir Prompt.
+3. Recibir ZIP completo actualizado con fix74b incorporado.
+4. Confirmar lectura.
+5. Inspeccionar ZIP real.
+
+Después verificar:
+
+- que fix74b esté integrado;
+- banco IA 14/0/0;
+- matriz 150/150;
+- archivos reales de Dispatcher.WatchFolder;
+- App.config;
+- README;
+- WatchFolderDispatcher.cs;
+- WatchFolderOptions.cs;
+- llamada al runtime;
+- carga de input.filePath;
+- resolución real de path en HDocLoad;
+- comportamiento ante human.task;
+- movimiento entre carpetas;
+- tratamiento de excepciones;
+- control de duplicados;
+- estado real de WF_Instancia.
+
+No modificar código hasta tener ese diagnóstico.
+
+======================================================================
+12. POSIBLE ALCANCE DEL FIX75
+======================================================================
+
+El alcance exacto debe definirse después de inspeccionar el ZIP.
+
+Objetivos probables, no asumir todavía:
+
+- una instancia por archivo;
+- ruta estable durante toda la instancia;
+- input.filePath correcto;
+- no procesar archivos parcialmente copiados;
+- evitar duplicados básicos;
+- registrar Id de instancia;
+- mover correctamente a destino;
+- distinguir ingreso aceptado de ejecución finalizada;
+- errores claros;
+- configuración para PDF de notas de crédito;
+- documentación actualizada;
+- prueba controlada con varios archivos.
+
+No tocar motor ni doc.load salvo que el análisis real demuestre
+un bug que no pueda resolverse en el dispatcher o generador.
+
+======================================================================
+13. PRUEBA OPERATIVA ESPERADA
+======================================================================
+
+Carpeta de entrada de prueba:
+
+contiene tres PDFs diferentes.
+
+Resultado esperado:
+
+- se crean tres instancias independientes;
+- cada instancia recibe su propio input.filePath;
+- doc.load lee el documento correcto;
+- un archivo no bloquea a los demás;
+- un error afecta solo a su instancia;
+- no se crean instancias duplicadas tras reinicio;
+- cada archivo queda en un estado de carpeta entendible;
+- queda registrada la relación:
+  archivo → definición → instancia → estado.
+
+Ejemplo:
+
+NC_001.pdf → Instancia 200001 → EnCurso
+NC_002.pdf → Instancia 200002 → Finalizada
+NC_003.pdf → Instancia 200003 → Error
+
+======================================================================
+14. CRITERIO DE CIERRE
+======================================================================
+
+El ingreso documental automático podrá considerarse productivo cuando:
+
+- no requiera indicar manualmente cada archivo;
+- cree una instancia por documento;
+- la ruta siga siendo válida durante toda la instancia;
+- no procese archivos incompletos;
+- reduzca o impida duplicados;
+- registre el Id de instancia;
+- diferencie ingreso, ejecución y error;
+- no altere el motor estable;
+- no altere extractores cerrados;
+- tenga una prueba repetible;
+- compile en Visual Studio 2022;
+- deje logs comprensibles;
+- mantenga banco IA y Constructor IA sin regresiones.

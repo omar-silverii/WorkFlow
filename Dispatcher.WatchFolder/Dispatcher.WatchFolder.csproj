@@ -190,9 +190,12 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DispatcherDailyLog.cs" />
+    <Compile Include="IngressRouter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="WatchFolderOptions.cs" />
     <Compile Include="WatchFolderDispatcher.cs" />
+    <Compile Include="WatchFolderReceipt.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

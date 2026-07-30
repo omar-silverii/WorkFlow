@@ -662,6 +662,17 @@
             Meta: (window.__WF_META || null)
         };
 
+        // El nombre visible también forma parte del JSON exportado.
+        // Antes solo se agregaba al guardar en SQL mediante captureWorkflow().
+        try {
+            var nameInput = document.getElementById('txtNombreWf');
+            var workflowName = nameInput ? (nameInput.value || '').trim() : '';
+            if (workflowName) {
+                wf.Meta = wf.Meta || {};
+                wf.Meta.Name = workflowName;
+            }
+        } catch (e) { /* noop */ }
+
         nodes.forEach(function (n) {
             // Antes de guardar/exportar, tomar la posición real del DOM.
             // Así el JSON no persiste coordenadas viejas.

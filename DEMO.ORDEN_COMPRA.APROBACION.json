@@ -1,0 +1,407 @@
+{
+  "StartNodeId": "nStart",
+  "Nodes": {
+    "nStart": {
+      "Id": "nStart",
+      "Type": "util.start",
+      "Label": "Inicio",
+      "Parameters": {
+        "position": {
+          "x": 720,
+          "y": 30
+        }
+      }
+    },
+    "nLoadOc": {
+      "Id": "nLoadOc",
+      "Type": "doc.load",
+      "Label": "Cargar orden de compra",
+      "Parameters": {
+        "path": "${input.filePath}",
+        "mode": "auto",
+        "docTipoCodigo": "ORDEN_COMPRA",
+        "connectionStringName": "DefaultConnection",
+        "position": {
+          "x": 720,
+          "y": 160
+        }
+      }
+    },
+    "nIfDatos": {
+      "Id": "nIfDatos",
+      "Type": "control.if",
+      "Label": "Validar datos de la OC",
+      "Parameters": {
+        "rulesMode": "all",
+        "rules": [
+          {
+            "field": "biz.oc.OrdenCompraNumero",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.oc.Fecha",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.oc.ProveedorRazonSocial",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.oc.ProveedorCUIT",
+            "op": "not_empty",
+            "value": "",
+            "transform": ""
+          },
+          {
+            "field": "biz.oc.Total",
+            "op": ">",
+            "value": "0",
+            "transform": ""
+          }
+        ],
+        "position": {
+          "x": 720,
+          "y": 300
+        }
+      }
+    },
+    "nTaskComprasValida": {
+      "Id": "nTaskComprasValida",
+      "Type": "human.task",
+      "Label": "COMPRAS - Validar conformidad de la OC",
+      "Parameters": {
+        "titulo": "Validar orden de compra ${biz.oc.OrdenCompraNumero}",
+        "descripcion": "Proveedor=${biz.oc.ProveedorRazonSocial}; CUIT=${biz.oc.ProveedorCUIT}; OC=${biz.oc.OrdenCompraNumero}; fecha=${biz.oc.Fecha}; total=${biz.oc.Total}; entrega=${biz.oc.Entrega}; pago=${biz.oc.Pago}; autorizado por=${biz.oc.AutorizadoPor}. Revisar necesidad, proveedor, cantidades, precios y condiciones. Completar APTO para continuar o NO_APTO para rechazar.",
+        "rol": "COMPRAS",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de validación de Compras",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 410,
+          "y": 470
+        }
+      }
+    },
+    "nIfComprasValida": {
+      "Id": "nIfComprasValida",
+      "Type": "control.if",
+      "Label": "¿Compras aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskComprasValida.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 410,
+          "y": 640
+        }
+      }
+    },
+    "nTaskComprasManual": {
+      "Id": "nTaskComprasManual",
+      "Type": "human.task",
+      "Label": "COMPRAS - Revisar OC incompleta",
+      "Parameters": {
+        "titulo": "Revisar orden de compra incompleta ${input.filename}",
+        "descripcion": "La extracción automática no encontró todos los datos obligatorios: número, fecha, proveedor, CUIT y total. Archivo=${input.filename}; texto extraído=${input.textLen} caracteres; advertencia=${input.warning}. Revisar visualmente el documento. Completar APTO para continuar con validación manual o NO_APTO para rechazar.",
+        "rol": "COMPRAS",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de revisión documental",
+        "deadlineMinutes": 480,
+        "position": {
+          "x": 1030,
+          "y": 470
+        }
+      }
+    },
+    "nIfComprasManual": {
+      "Id": "nIfComprasManual",
+      "Type": "control.if",
+      "Label": "¿Compras validó manualmente?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskComprasManual.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 1030,
+          "y": 640
+        }
+      }
+    },
+    "nTaskAdmFin": {
+      "Id": "nTaskAdmFin",
+      "Type": "human.task",
+      "Label": "ADM_FIN - Validar presupuesto y condiciones",
+      "Parameters": {
+        "titulo": "Validar presupuesto de OC ${biz.oc.OrdenCompraNumero}",
+        "descripcion": "Proveedor=${biz.oc.ProveedorRazonSocial}; CUIT=${biz.oc.ProveedorCUIT}; OC=${biz.oc.OrdenCompraNumero}; total=${biz.oc.Total}; pago=${biz.oc.Pago}. Compras ya validó la operación. Confirmar disponibilidad presupuestaria, impuestos, imputación y condiciones de pago. Completar APTO o NO_APTO.",
+        "rol": "ADM_FIN",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de Administración",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 720,
+          "y": 820
+        }
+      }
+    },
+    "nIfAdmFin": {
+      "Id": "nIfAdmFin",
+      "Type": "control.if",
+      "Label": "¿Administración aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskAdmFin.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 720,
+          "y": 990
+        }
+      }
+    },
+    "nIfImporteAlto": {
+      "Id": "nIfImporteAlto",
+      "Type": "control.if",
+      "Label": "¿Total mayor a $200.000?",
+      "Parameters": {
+        "field": "biz.oc.Total",
+        "op": ">",
+        "value": "200000",
+        "transform": "",
+        "position": {
+          "x": 520,
+          "y": 1160
+        }
+      }
+    },
+    "nTaskDireccion": {
+      "Id": "nTaskDireccion",
+      "Type": "human.task",
+      "Label": "DIR_GENERAL - Autorizar OC de importe elevado",
+      "Parameters": {
+        "titulo": "Autorizar orden de compra ${biz.oc.OrdenCompraNumero}",
+        "descripcion": "Proveedor=${biz.oc.ProveedorRazonSocial}; CUIT=${biz.oc.ProveedorCUIT}; OC=${biz.oc.OrdenCompraNumero}; total=${biz.oc.Total}; entrega=${biz.oc.Entrega}; pago=${biz.oc.Pago}. Compras y Administración aprobaron la operación. Completar APTO para autorizar o NO_APTO para rechazar.",
+        "rol": "DIR_GENERAL",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de Dirección General",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 290,
+          "y": 1330
+        }
+      }
+    },
+    "nIfDireccion": {
+      "Id": "nIfDireccion",
+      "Type": "control.if",
+      "Label": "¿Dirección aprobó?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskDireccion.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 290,
+          "y": 1500
+        }
+      }
+    },
+    "nNotifyAprobada": {
+      "Id": "nNotifyAprobada",
+      "Type": "util.notify",
+      "Label": "Notificar OC aprobada",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "info",
+        "destinoTipo": "rol",
+        "prioridad": "normal",
+        "rolDestino": "COMPRAS",
+        "destino": "COMPRAS",
+        "asunto": "Orden de compra aprobada",
+        "mensaje": "OC ${biz.oc.OrdenCompraNumero} aprobada. Proveedor=${biz.oc.ProveedorRazonSocial}; CUIT=${biz.oc.ProveedorCUIT}; total=${biz.oc.Total}; entrega=${biz.oc.Entrega}; pago=${biz.oc.Pago}; instancia=${wf.instanceId}.",
+        "urlAccion": "",
+        "position": {
+          "x": 610,
+          "y": 1660
+        }
+      }
+    },
+    "nNotifyRechazada": {
+      "Id": "nNotifyRechazada",
+      "Type": "util.notify",
+      "Label": "Notificar OC rechazada",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "warn",
+        "destinoTipo": "rol",
+        "prioridad": "alta",
+        "rolDestino": "COMPRAS",
+        "destino": "COMPRAS",
+        "asunto": "Orden de compra no aprobada",
+        "mensaje": "OC ${biz.oc.OrdenCompraNumero} no aprobada. Archivo=${input.filename}; proveedor=${biz.oc.ProveedorRazonSocial}; total=${biz.oc.Total}; último resultado=${wf.tarea.resultado}; instancia=${wf.instanceId}. Consultar las tareas y observaciones.",
+        "urlAccion": "",
+        "position": {
+          "x": 1090,
+          "y": 1160
+        }
+      }
+    },
+    "nEndAprobada": {
+      "Id": "nEndAprobada",
+      "Type": "util.end",
+      "Label": "Fin - Orden de compra aprobada",
+      "Parameters": {
+        "position": {
+          "x": 610,
+          "y": 1820
+        }
+      }
+    },
+    "nEndRechazada": {
+      "Id": "nEndRechazada",
+      "Type": "util.end",
+      "Label": "Fin - Orden de compra rechazada",
+      "Parameters": {
+        "position": {
+          "x": 1090,
+          "y": 1330
+        }
+      }
+    }
+  },
+  "Edges": [
+    {
+      "Id": "e01",
+      "From": "nStart",
+      "To": "nLoadOc",
+      "Condition": "always"
+    },
+    {
+      "Id": "e02",
+      "From": "nLoadOc",
+      "To": "nIfDatos",
+      "Condition": "always"
+    },
+    {
+      "Id": "e03",
+      "From": "nIfDatos",
+      "To": "nTaskComprasValida",
+      "Condition": "true"
+    },
+    {
+      "Id": "e04",
+      "From": "nIfDatos",
+      "To": "nTaskComprasManual",
+      "Condition": "false"
+    },
+    {
+      "Id": "e05",
+      "From": "nTaskComprasValida",
+      "To": "nIfComprasValida",
+      "Condition": "always"
+    },
+    {
+      "Id": "e06",
+      "From": "nIfComprasValida",
+      "To": "nTaskAdmFin",
+      "Condition": "true"
+    },
+    {
+      "Id": "e07",
+      "From": "nIfComprasValida",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e08",
+      "From": "nTaskComprasManual",
+      "To": "nIfComprasManual",
+      "Condition": "always"
+    },
+    {
+      "Id": "e09",
+      "From": "nIfComprasManual",
+      "To": "nTaskAdmFin",
+      "Condition": "true"
+    },
+    {
+      "Id": "e10",
+      "From": "nIfComprasManual",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e11",
+      "From": "nTaskAdmFin",
+      "To": "nIfAdmFin",
+      "Condition": "always"
+    },
+    {
+      "Id": "e12",
+      "From": "nIfAdmFin",
+      "To": "nIfImporteAlto",
+      "Condition": "true"
+    },
+    {
+      "Id": "e13",
+      "From": "nIfAdmFin",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e14",
+      "From": "nIfImporteAlto",
+      "To": "nTaskDireccion",
+      "Condition": "true"
+    },
+    {
+      "Id": "e15",
+      "From": "nIfImporteAlto",
+      "To": "nNotifyAprobada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e16",
+      "From": "nTaskDireccion",
+      "To": "nIfDireccion",
+      "Condition": "always"
+    },
+    {
+      "Id": "e17",
+      "From": "nIfDireccion",
+      "To": "nNotifyAprobada",
+      "Condition": "true"
+    },
+    {
+      "Id": "e18",
+      "From": "nIfDireccion",
+      "To": "nNotifyRechazada",
+      "Condition": "false"
+    },
+    {
+      "Id": "e19",
+      "From": "nNotifyAprobada",
+      "To": "nEndAprobada",
+      "Condition": "always"
+    },
+    {
+      "Id": "e20",
+      "From": "nNotifyRechazada",
+      "To": "nEndRechazada",
+      "Condition": "always"
+    }
+  ],
+  "Meta": {
+    "Name": "DEMO.ORDEN_COMPRA.APROBACION"
+  }
+}

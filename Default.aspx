@@ -63,12 +63,14 @@
                             <a class="list-group-item list-group-item-action px-0" href="WF_Entidades.aspx">🧾 Entidades (Casos)</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipo.aspx">📁 Tipos de Documento</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipoReglas.aspx">🧠 Reglas Extract</a>
+                            <a class="list-group-item list-group-item-action px-0" href="WF_Ingreso_Documental.aspx">📥 Ingreso documental</a>
                         </div>
                     </div>
 
                     <div class="ws-kpi p-3 mt-3">
                         <div class="fw-semibold mb-2">Guía rápida</div>
                         <ol class="mb-0 ws-muted" style="padding-left:18px;">
+                            <li>Recibí y enrutá documentos desde <b>Ingreso documental</b>.</li>
                             <li>Definí el <b>DocTipo</b> del documento.</li>
                             <li>Cargá las <b>Reglas</b> de extracción.</li>
                             <li>Diseñá el <b>Workflow</b> en el editor.</li>
@@ -321,22 +323,23 @@
                             </div>
                         </div>
 
-                        <!-- Card 8 (placeholder futuro): Configuración / Catálogos -->
+                        <!-- Card 8: Ingreso documental -->
                         <div class="col-12 col-md-6">
                             <div class="card ws-card h-100">
                                 <div class="card-body">
-                                    <div class="ws-icon">🧩</div>
-                                    <h5 class="mt-2 mb-1">Configuración / Catálogos</h5>
+                                    <div class="ws-icon">📥</div>
+                                    <h5 class="mt-2 mb-1">Ingreso documental</h5>
                                     <div class="ws-muted">
-                                        Espacio para crecer (conexiones, parámetros globales, plantillas, colas, etc.).
+                                        Recibí archivos, resolvé qué workflow corresponde y seguí la relación
+                                        documento → decisión → instancia → estado.
                                     </div>
                                     <div class="d-flex gap-2 mt-3">
-                                        <a class="btn btn-primary" href="WF_Seguridad.aspx" tabindex="-1" aria-disabled="true">Seguridad</a>
+                                        <a class="btn btn-primary" href="WF_Ingreso_Documental.aspx">Abrir bandeja</a>
+                                        <a class="btn btn-outline-secondary" href="WF_DocTipo.aspx">Tipos de documento</a>
                                     </div>
                                 </div>
                             </div>
                         </div>
-
                     </div>
 
                     <!-- Footer mini -->

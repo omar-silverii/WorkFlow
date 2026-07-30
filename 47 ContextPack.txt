@@ -1,0 +1,693 @@
+CONTEXTPACK — WORKFLOW STUDIO
+CIERRE FIX77B — INGRESO DOCUMENTAL OPERATIVO
+PRÓXIMO FOCO: VALIDACIÓN FINAL DE OC MODERNA + PENDIENTES DE PRODUCTO
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. FORMA OBLIGATORIA DE TRABAJO
+======================================================================
+
+En cada nueva sesión Omar entregará:
+
+1. Este ContextPack.
+2. El Prompt de arranque.
+3. Un ZIP completo actualizado del proyecto.
+4. Algún ZIP adicional puntual, si corresponde.
+
+El asistente debe:
+
+1. Confirmar que leyó completo el ContextPack.
+2. Esperar el ZIP actualizado antes de proponer cambios.
+3. Inspeccionar primero los archivos reales del ZIP.
+4. Recién después analizar, proponer o modificar.
+
+Reglas no negociables:
+
+- No inventar tablas, clases, handlers, controles, rutas ni archivos.
+- No asumir que el código quedó igual a lo conversado.
+- La fuente de verdad es el ZIP completo más reciente.
+- No cambiar arquitectura sin necesidad real.
+- No reescribir cosas que ya funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- Cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar parches con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- No presentar código de archivos no inspeccionados.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- Evaluar siempre el funcionamiento productivo completo:
+  quién usa la función, qué ve, qué registra, cómo se audita,
+  cómo falla y qué falta para considerarla productiva.
+
+Puede trabajarse con el ZIP base exacto más el último fix generado por el
+asistente dentro de la misma sesión, siempre que Omar no haya hecho cambios
+manuales adicionales. Si los hizo, pedir nuevamente el ZIP completo.
+
+======================================================================
+2. BASE OFICIAL PARA LA PRÓXIMA SESIÓN
+======================================================================
+
+Omar generará un ZIP completo nuevo que debe incluir:
+
+- Base anterior WorkFlow-main (46).
+- fix75_watchfolder_ingreso_documental_productivo.
+- fix76_ingreso_documental_enrutador_base.
+- fix77_cierre_ingreso_documental_operativo.
+- fix77b_handler_documento_original.
+- Los grafos creados e importados durante esta etapa.
+- Los cambios manuales de configuración y seguridad realizados por Omar.
+
+No asumir que la integración quedó exactamente igual a los ZIP de fix.
+Inspeccionar el ZIP completo nuevo.
+
+======================================================================
+3. ÁREAS CERRADAS
+======================================================================
+
+No tocar salvo bug real explícito:
+
+- Motor de ejecución.
+- WorkflowRunner.
+- Handlers runtime estables.
+- Mecánica interna del canvas.
+- Aristas.
+- Zoom.
+- Minimapa.
+- WF_Instancia_Mapa.
+- WF_Instancias.
+- Queue runtime.
+- SMTP.
+- email.send.
+- HSubFlow.cs.
+- Runtime de subflujos.
+- NC_AR.
+- FACTURA_AR.
+- Extractores documentales cerrados.
+
+No modificar HDocLoad ni doc.load sin evidencia concreta obtenida del ZIP.
+
+======================================================================
+4. ESTADO ANTERIOR CONSERVADO
+======================================================================
+
+Constructor IA:
+
+- fix72 validado.
+- fix73 validado.
+- fix73b validado.
+- fix73c validado.
+- fix73d validado.
+- fix74 validado.
+- fix74b validado.
+- Banco IA esperado: 14 OK / 0 FALLA / 0 SKIP.
+- Matriz esperada: 150/150.
+- No reabrir esta línea salvo regresión real.
+
+======================================================================
+5. FIX75 — WATCH FOLDER PRODUCTIVO
+======================================================================
+
+Objetivo:
+
+Recibir archivos de forma segura y crear una instancia por documento.
+
+Comportamiento incorporado:
+
+- Claim atómico de Input hacia Processing.
+- Ruta estable durante toda la instancia.
+- Recibo .wf.json.
+- IngressId persistente.
+- Recuperación después de reinicio.
+- Evita recrear una instancia ya vinculada al mismo ingreso.
+- Bloqueo exclusivo durante claim/recibo.
+- Archivo permanece en Processing mientras WF_Instancia está EnCurso.
+- Archivo pasa a Processed cuando la instancia finaliza.
+- Archivo pasa a Error ante fallo del ingreso o estado de error.
+- Se conserva relación archivo → IngressId → definición → instancia → estado.
+- No se agregaron tablas en fix75.
+- No se modificó motor ni HDocLoad.
+
+Convención confirmada:
+
+path = ${input.filePath}
+
+fix76/fix75 cargan una ruta física real en input.filePath antes de ejecutar
+el workflow.
+
+======================================================================
+6. FIX76 — ENRUTADOR DE INGRESO DOCUMENTAL
+======================================================================
+
+Se incorporó una capa de enrutamiento previa al workflow.
+
+Componentes:
+
+- WF_Ingreso_Documental.aspx
+- WF_Ingreso_Documental.aspx.cs
+- WF_Ingreso_Documental.aspx.designer.cs
+- WF_IngresoDocumento
+- WF_IngresoRuta
+- IngressRouter.cs
+- Integración con Dispatcher.WatchFolder
+
+Responsabilidades:
+
+- Registrar cada ingreso.
+- Resolver un workflow por reglas determinísticas.
+- Dejar en bandeja los documentos sin ruta única.
+- Permitir decisión humana sin duplicar el ingreso.
+- Conservar el mismo IngressId.
+- Crear una sola instancia.
+- Registrar origen, regla, decisión, confianza, usuario y estado.
+
+Reglas configuradas por Omar:
+
+Canal: GENERAL
+Prioridad: 300
+
+- OC_*.pdf        → workflow de Orden de Compra.
+- FACTURA_*.pdf   → DEMO.FACTURA_PROVEEDOR.E2E.
+- CONTRATO_*.pdf  → DEMO.CONTRATO.APROBACION.
+- RECLAMO_*.pdf   → DEMO.RECLAMO.GESTION.
+
+El VEP quedó intencionalmente sin ruta:
+
+afip_vep_cuit_23175875379_nrovep_1471521448_nropago_169864743962.pdf
+
+Estado esperado:
+
+- PENDIENTE_RUTA.
+- Sin instancia.
+- Permanece en Processing.
+- No asignarlo todavía a un workflow artificial.
+- El workflow de VEP queda para una etapa posterior.
+
+======================================================================
+7. CONFIGURACIÓN DEL DISPATCHER VALIDADA
+======================================================================
+
+Rutas utilizadas:
+
+- Input:
+  C:\WorkflowStudio\Inbox\General
+
+- Processing:
+  C:\WorkflowStudio\Processing\General
+
+- Processed:
+  C:\WorkflowStudio\Processed\General
+
+- Error:
+  C:\WorkflowStudio\Error\General
+
+- Log diario:
+  C:\WorkflowStudio\Logs\Dispatcher
+
+Configuración observada:
+
+- Ingress.Router.Enabled = true
+- Ingress.ChannelCode = GENERAL
+- WatchFolder.Pattern = *.*
+- PollSeconds = 2
+- MoveAfter = true
+
+======================================================================
+8. GRAFOS CREADOS Y PRUEBAS
+======================================================================
+
+----------------------------------------------------------------------
+8.1 DEMO.FACTURA_PROVEEDOR.E2E
+----------------------------------------------------------------------
+
+Tipo documental:
+
+FACTURA_ELECTRONICA_AR / FACTURA_AR
+
+Circuito:
+
+Inicio
+→ doc.load
+→ validar número, fecha, CAE, total e ítems
+→ COMPRAS
+→ ADM_FIN
+→ si total > 200000, DIR_GENERAL
+→ notificación
+→ Fin aprobado o rechazado
+
+Prueba validada:
+
+- Instancia: 170540.
+- Tareas:
+  - 110298 COMPRAS.
+  - 110301 ADM_FIN.
+  - 110302 DIR_GENERAL.
+- Resultados: APTO / APTO / APTO.
+- Comprobante: 00003-00000097.
+- Total: 232050.
+- CAE: 73229835423122.
+- Archivo:
+  FACTURA_001_A.pdf.
+- Archivo y recibo pasaron de Processing a Processed.
+- WF_Ingreso_Documental actualizó activa/finalizada.
+- Instancia quedó Finalizado.
+- Mapa y logs correctos.
+
+Estado:
+
+VALIDADO DE PUNTA A PUNTA.
+
+----------------------------------------------------------------------
+8.2 DEMO.CONTRATO.APROBACION
+----------------------------------------------------------------------
+
+Se agregó tipo documental:
+
+CONTRATO_GENERAL
+
+No tiene reglas inventadas de extracción.
+Permite leer texto genérico y detectar si el documento tiene texto extraíble.
+
+Circuito:
+
+Inicio
+→ doc.load
+→ si tiene texto: validación de OPERACIONES
+→ si no tiene texto: revisión manual de OPERACIONES
+→ LEGALES
+→ ADM_FIN
+→ DIR_GENERAL
+→ notificación
+→ Fin aprobado o rechazado
+
+Rol:
+
+LEGALES fue asignado por Omar a OMARD\OMARD.
+
+Primera prueba:
+
+- Instancia 170539.
+- Archivo Contrato_001.pdf sin texto extraíble.
+- OPERACIONES APTO.
+- LEGALES APTO.
+- ADM_FIN APTO.
+- DIR_GENERAL APTO.
+- Finalizado.
+- Archivo y recibo pasaron a Processed.
+
+Segunda prueba después de fix77/fix77b:
+
+- Instancia 170543.
+- Tareas:
+  - 110307 OPERACIONES.
+  - 110308 LEGALES.
+  - 110309 ADM_FIN.
+  - 110310 DIR_GENERAL.
+- Todas APTO.
+- Finalizado el 30/07/2026 20:30:53.
+- Documento visible desde la tarea.
+- Acceso inline registrado en WF_InstanciaLog.
+- Archivo final movido a Processed con nombre no colisionante:
+  Contrato_001_20260730_203054_400_1.pdf
+
+Estado:
+
+VALIDADO DE PUNTA A PUNTA, INCLUIDA VISUALIZACIÓN DEL DOCUMENTO.
+
+----------------------------------------------------------------------
+8.3 DEMO.RECLAMO.GESTION
+----------------------------------------------------------------------
+
+Se agregó tipo documental:
+
+RECLAMO_GENERAL
+
+Circuito:
+
+Inicio
+→ doc.load
+→ validación de ingreso
+→ investigación de OPERACIONES
+→ resolución directa o escalamiento
+→ notificación
+→ Fin resuelto, no admitido o no resuelto
+
+Prueba validada:
+
+- Instancia 170542.
+- Tareas:
+  - 110300 Validar ingreso.
+  - 110306 Investigar y resolver.
+- Ambas APTO.
+- Final: Reclamo resuelto.
+- Archivo movido a Processed.
+- Instancia Finalizado.
+- Bandeja actualizada.
+
+Estado:
+
+VALIDADO DE PUNTA A PUNTA.
+
+----------------------------------------------------------------------
+8.4 ORDEN DE COMPRA ANTIGUA
+----------------------------------------------------------------------
+
+Workflow histórico:
+
+DEMO.ORDEN_COMPRA.E2E
+
+Prueba:
+
+- Instancia 170541.
+- Archivo OC_001.pdf.
+- Enrutamiento y Watch Folder funcionaron.
+- La instancia finalizó, pero el grafo tuvo errores técnicos.
+
+Problemas confirmados:
+
+- Usaba file.read sobre PDF.
+- No extrajo correctamente número, total ni proveedor.
+- Evaluó mal la condición de importe.
+- util.subflow referenciaba DEMO.SUBFLOW.OC_VALIDAR_SCORE, no disponible.
+- HTTP apuntaba a https://localhost:44350/Api/Score.ashx.
+- El servicio no estaba disponible.
+- El workflow siguió por conexiones always y terminó Finalizado.
+- El archivo fue movido a Processed porque WF_Instancia quedó Finalizado.
+
+Conclusión:
+
+No considerar este workflow como OC productiva.
+Conservarlo únicamente como antecedente técnico.
+
+----------------------------------------------------------------------
+8.5 NUEVA ORDEN DE COMPRA
+----------------------------------------------------------------------
+
+fix77 entregó:
+
+DEMO.ORDEN_COMPRA.APROBACION
+
+Usa:
+
+- doc.load.
+- docTipoCodigo = ORDEN_COMPRA.
+- path = ${input.filePath}.
+- connectionStringName = DefaultConnection.
+- Tareas humanas.
+- Ramas aprobada/rechazada.
+- Sin subflujo de score.
+- Sin HTTP local fijo.
+- Sin file.read sobre PDF.
+- Sin cola ERP obligatoria.
+
+Circuito esperado:
+
+Inicio
+→ cargar OC
+→ validar datos
+→ COMPRAS
+→ ADM_FIN
+→ si total > 200000, DIR_GENERAL
+→ notificación
+→ Fin aprobado o rechazado
+
+Estado:
+
+ENTREGADO EN fix77.
+PENDIENTE DE CONFIRMAR EN EL ZIP NUEVO:
+
+- que fue importado y guardado;
+- que RUTA_OC_PDF apunta al nuevo workflow;
+- que compila;
+- que se prueba de punta a punta con una nueva OC;
+- que el archivo finaliza sin errores técnicos.
+
+======================================================================
+9. FIX77 — CIERRE DE INGRESO DOCUMENTAL OPERATIVO
+======================================================================
+
+fix77 incluyó cuatro correcciones acordadas.
+
+----------------------------------------------------------------------
+9.1 EXPORT JSON CON META.NAME
+----------------------------------------------------------------------
+
+Problema:
+
+Export JSON generaba:
+
+"Meta": null
+
+aunque el nombre estuviera visible en txtNombreWf.
+
+Corrección entregada:
+
+El exportador debe incorporar el nombre actual:
+
+"Meta": {
+  "Name": "NOMBRE_DEL_GRAFO"
+}
+
+Estado:
+
+CORRECCIÓN ENTREGADA.
+PENDIENTE VALIDACIÓN VISUAL EXPLÍCITA EN LA PRÓXIMA SESIÓN.
+
+----------------------------------------------------------------------
+9.2 DOCUMENTO ORIGINAL EN TAREA HUMANA
+----------------------------------------------------------------------
+
+Se agregó a WF_Tarea_Detalle.aspx:
+
+Documento original del expediente
+
+- Nombre del documento.
+- Extensión.
+- Estado del ingreso.
+- Fecha de recepción.
+- IngressId.
+- Ver documento.
+- Descargar.
+- Ver expediente.
+
+Principios:
+
+- No mostrar la ruta física.
+- Resolver el archivo desde WF_IngresoDocumento.RutaActual.
+- Funcionar en Processing y Processed.
+- Validar acceso por tarea/instancia.
+- Registrar visualización o descarga en WF_InstanciaLog.
+- No afectar tareas antiguas sin ingreso documental.
+
+Primer error:
+
+El .ashx solicitaba:
+
+Intranet.WorkflowStudio.WebForms.Api.WF_IngresoDocumento_Get
+
+pero la clase compilada no coincidía con el nombre solicitado.
+
+fix77b corrigió:
+
+Api/WF_IngresoDocumento_Get.ashx
+
+Prueba posterior:
+
+- Panel visible en tarea 110307.
+- Ver documento y Descargar quedaron funcionando.
+- Omar confirmó: “listo quedó bien”.
+- El workflow continuó normalmente y finalizó.
+- Log mostró acceso inline al documento.
+
+Estado:
+
+VALIDADO.
+
+----------------------------------------------------------------------
+9.3 LOG DIARIO DEL DISPATCHER
+----------------------------------------------------------------------
+
+Se agregó DispatcherDailyLog.cs y configuración:
+
+WatchFolder.LogFolder =
+C:\WorkflowStudio\Logs\Dispatcher
+
+Archivo observado:
+
+C:\WorkflowStudio\Logs\Dispatcher\Dispatcher_20260730.log
+
+Registra:
+
+- Inicio.
+- Configuración.
+- Claims.
+- Rutas.
+- IngressId.
+- Instancias.
+- Esperas.
+- Recuperaciones.
+- Movimientos.
+- Errores.
+
+La consola continúa funcionando.
+
+Estado:
+
+VALIDADO VISUALMENTE.
+
+----------------------------------------------------------------------
+9.4 NUEVA OC MODERNA
+----------------------------------------------------------------------
+
+Se entregó DEMO.ORDEN_COMPRA.APROBACION.json.
+
+Estado:
+
+PENDIENTE PRUEBA FINAL.
+
+======================================================================
+10. OBSERVACIONES DE PRODUCTO DETECTADAS
+======================================================================
+
+----------------------------------------------------------------------
+10.1 ESTADO FINAL CON ADVERTENCIAS
+----------------------------------------------------------------------
+
+La OC antigua demostró que una instancia puede alcanzar util.end y quedar
+Finalizado aunque haya nodos técnicos con error.
+
+Actualmente el Dispatcher decide el destino por WF_Instancia.Estado.
+
+Esto puede provocar:
+
+- Finalizado con errores técnicos.
+- Archivo movido a Processed.
+- Apariencia de éxito total.
+
+Pendiente de diseño:
+
+Distinguir conceptualmente:
+
+- Finalizado correctamente.
+- Finalizado con advertencias.
+- Error.
+
+No tocar motor ni cambiar esquema sin inspeccionar el ZIP y diseñar el impacto.
+Primero evaluar si puede resolverse en definición, logs o estado de ingreso.
+
+----------------------------------------------------------------------
+10.2 ACCESO A WF_SEGURIDAD
+----------------------------------------------------------------------
+
+WF_Seguridad.aspx existe y funciona por URL directa.
+
+Omar debió ingresar manualmente porque desapareció el acceso desde
+Default.aspx / navegación visible.
+
+Pendiente:
+
+- Inspeccionar Default.aspx y WsTopbar.ascx reales.
+- Restaurar acceso de Seguridad en el lugar correcto.
+- No duplicar enlaces ni romper RBAC.
+- Hacerlo como fix separado y pequeño.
+
+----------------------------------------------------------------------
+10.3 DOCUMENTO DESDE TAREAS
+----------------------------------------------------------------------
+
+La necesidad productiva quedó validada:
+
+Un usuario de OPERACIONES, LEGALES, ADM_FIN o DIR_GENERAL no puede decidir
+sin ver el documento original.
+
+fix77/fix77b cerraron la primera versión.
+
+Futuro posible, no obligatorio ahora:
+
+- Mostrar además resumen de datos extraídos.
+- Ejemplo en factura:
+  proveedor, comprobante, total, CAE.
+- No implementar sin revisar UX y código real.
+
+----------------------------------------------------------------------
+10.4 VEP
+----------------------------------------------------------------------
+
+El VEP es un comprobante de pago aduanero.
+
+No corresponde enviarlo artificialmente a OC, Factura, Contrato o Reclamo.
+
+Queda pendiente para una etapa posterior:
+
+- Definir tipo documental.
+- Definir si inicia workflow nuevo o se adjunta a uno existente.
+- Diseñar workflow de pagos / comercio exterior.
+- Evaluar clasificación automática futura.
+
+No resolver al comienzo de la próxima sesión salvo decisión explícita de Omar.
+
+======================================================================
+11. PRÓXIMA SESIÓN — ORDEN RECOMENDADO
+======================================================================
+
+1. Recibir este ContextPack.
+2. Recibir el Prompt.
+3. Recibir ZIP completo nuevo generado por Omar.
+4. Confirmar lectura.
+5. Inspeccionar primero el ZIP real.
+6. Confirmar integración de fix75, fix76, fix77 y fix77b.
+7. Compilar conceptualmente/revisar:
+   - Workflow Studio.
+   - Dispatcher.WatchFolder.
+8. Verificar:
+   - DispatcherDailyLog.cs.
+   - App.config.
+   - WF_Tarea_Detalle.aspx y code-behind.
+   - Api/WF_IngresoDocumento_Get.ashx y clase real.
+   - workflow.ui.js / export JSON.
+   - DEMO.ORDEN_COMPRA.APROBACION.
+   - RUTA_OC_PDF.
+9. Probar Export JSON y confirmar Meta.Name.
+10. Probar nueva OC de punta a punta.
+11. Confirmar:
+    - doc.load extrae datos reales;
+    - condición de importe correcta;
+    - tareas correctas;
+    - cero errores técnicos;
+    - archivo pasa de Processing a Processed;
+    - log diario registra todo;
+    - tarea permite ver y descargar documento.
+12. Restaurar acceso visible a WF_Seguridad.aspx como fix separado.
+13. Recién después decidir:
+    - estado “Finalizado con advertencias”;
+    - VEP;
+    - IA de clasificación documental.
+
+======================================================================
+12. CRITERIO DE CIERRE DE LA PRÓXIMA ETAPA
+======================================================================
+
+La etapa podrá considerarse cerrada cuando:
+
+- El ZIP completo compile en Visual Studio 2022.
+- fix75/fix76/fix77/fix77b estén realmente integrados.
+- Export JSON incluya Meta.Name.
+- El log diario se genere y contenga trazabilidad útil.
+- El documento original se pueda ver y descargar desde tareas.
+- El acceso quede auditado.
+- La nueva OC use doc.load.
+- La nueva OC finalice sin subflow/HTTP de demostración.
+- RUTA_OC_PDF apunte al workflow moderno.
+- El archivo de OC se mueva correctamente.
+- No se creen instancias duplicadas.
+- Banco IA continúe 14/0/0.
+- Matriz del Constructor IA continúe 150/150.
+- No se alteren motor, extractores ni áreas cerradas.

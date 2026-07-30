@@ -11,7 +11,7 @@ namespace Intranet.WorkflowStudio.WebForms
 {
 
 
-    public partial class WF_Tarea_Detalle
+    public partial class WF_Ingreso_Documental
     {
 
         /// <summary>
@@ -33,345 +33,336 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::Intranet.WorkflowStudio.WebForms.Controls.WsTopbar Topbar1;
 
         /// <summary>
-        /// Control valSummary.
+        /// Control sm1.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.ValidationSummary valSummary;
+        protected global::System.Web.UI.ScriptManager sm1;
 
         /// <summary>
-        /// Control pnlDatos.
+        /// Control btnRefrescar.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlDatos;
+        protected global::System.Web.UI.WebControls.Button btnRefrescar;
 
         /// <summary>
-        /// Control pnlPedidosPendientes.
+        /// Control litMsg.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlPedidosPendientes;
+        protected global::System.Web.UI.WebControls.Literal litMsg;
 
         /// <summary>
-        /// Control litPedidosPendientes.
+        /// Control pnlSchemaMissing.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litPedidosPendientes;
+        protected global::System.Web.UI.WebControls.Panel pnlSchemaMissing;
 
         /// <summary>
-        /// Control pnlNotificacionesPendientes.
+        /// Control pnlMain.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlNotificacionesPendientes;
+        protected global::System.Web.UI.WebControls.Panel pnlMain;
 
         /// <summary>
-        /// Control litNotificacionesPendientes.
+        /// Control lblPendientes.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litNotificacionesPendientes;
+        protected global::System.Web.UI.WebControls.Label lblPendientes;
 
         /// <summary>
-        /// Control btnMarcarNotificacionesLeidas.
+        /// Control lblResueltos.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Button btnMarcarNotificacionesLeidas;
+        protected global::System.Web.UI.WebControls.Label lblResueltos;
 
         /// <summary>
-        /// Control pnlDocumentoIngreso.
+        /// Control lblEnCurso.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlDocumentoIngreso;
+        protected global::System.Web.UI.WebControls.Label lblEnCurso;
 
         /// <summary>
-        /// Control litDocumentoIngresoNombre.
+        /// Control lblFinalizados.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litDocumentoIngresoNombre;
+        protected global::System.Web.UI.WebControls.Label lblFinalizados;
 
         /// <summary>
-        /// Control litDocumentoIngresoDetalle.
+        /// Control lblErrores.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litDocumentoIngresoDetalle;
+        protected global::System.Web.UI.WebControls.Label lblErrores;
 
         /// <summary>
-        /// Control lnkVerDocumentoIngreso.
+        /// Control txtBuscar.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.HyperLink lnkVerDocumentoIngreso;
+        protected global::System.Web.UI.WebControls.TextBox txtBuscar;
 
         /// <summary>
-        /// Control lnkDescargarDocumentoIngreso.
+        /// Control ddlFiltroEstado.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.HyperLink lnkDescargarDocumentoIngreso;
+        protected global::System.Web.UI.WebControls.DropDownList ddlFiltroEstado;
 
         /// <summary>
-        /// Control lnkVerMapaDocumentoIngreso.
+        /// Control btnBuscar.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.HyperLink lnkVerMapaDocumentoIngreso;
+        protected global::System.Web.UI.WebControls.Button btnBuscar;
 
         /// <summary>
-        /// Control pnlAdjuntos.
+        /// Control btnLimpiar.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlAdjuntos;
+        protected global::System.Web.UI.WebControls.Button btnLimpiar;
 
         /// <summary>
-        /// Control litAdjuntosDestino.
+        /// Control gvIngresos.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litAdjuntosDestino;
+        protected global::System.Web.UI.WebControls.GridView gvIngresos;
 
         /// <summary>
-        /// Control pnlAdjuntosMsg.
+        /// Control pnlResolver.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlAdjuntosMsg;
+        protected global::System.Web.UI.WebControls.Panel pnlResolver;
 
         /// <summary>
-        /// Control fuAdjunto.
+        /// Control hfIngresoId.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.FileUpload fuAdjunto;
+        protected global::System.Web.UI.WebControls.HiddenField hfIngresoId;
 
         /// <summary>
-        /// Control btnAdjuntar.
+        /// Control lblResolverArchivo.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Button btnAdjuntar;
+        protected global::System.Web.UI.WebControls.Label lblResolverArchivo;
 
         /// <summary>
-        /// Control pnlAdjuntosEmpty.
+        /// Control lblResolverCanal.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlAdjuntosEmpty;
+        protected global::System.Web.UI.WebControls.Label lblResolverCanal;
 
         /// <summary>
-        /// Control rptAdjuntos.
+        /// Control lblResolverMotivo.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Repeater rptAdjuntos;
+        protected global::System.Web.UI.WebControls.Label lblResolverMotivo;
 
         /// <summary>
-        /// Control lblId.
+        /// Control ddlResolverWorkflow.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblId;
+        protected global::System.Web.UI.WebControls.DropDownList ddlResolverWorkflow;
 
         /// <summary>
-        /// Control lblInstancia.
+        /// Control txtResolverMotivo.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblInstancia;
+        protected global::System.Web.UI.WebControls.TextBox txtResolverMotivo;
 
         /// <summary>
-        /// Control lblEstado.
+        /// Control btnAsignarWorkflow.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblEstado;
+        protected global::System.Web.UI.WebControls.Button btnAsignarWorkflow;
 
         /// <summary>
-        /// Control lblTipo.
+        /// Control btnCancelarResolver.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblTipo;
+        protected global::System.Web.UI.WebControls.Button btnCancelarResolver;
 
         /// <summary>
-        /// Control txtTitulo.
+        /// Control pnlRulesAdmin.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtTitulo;
+        protected global::System.Web.UI.WebControls.Panel pnlRulesAdmin;
 
         /// <summary>
-        /// Control txtDescripcion.
+        /// Control btnNuevaRuta.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtDescripcion;
+        protected global::System.Web.UI.WebControls.Button btnNuevaRuta;
 
         /// <summary>
-        /// Control txtRol.
+        /// Control hfRutaId.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtRol;
+        protected global::System.Web.UI.WebControls.HiddenField hfRutaId;
 
         /// <summary>
-        /// Control txtUsuario.
+        /// Control txtRutaCodigo.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtUsuario;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaCodigo;
 
         /// <summary>
-        /// Control ddlResultado.
+        /// Control txtRutaNombre.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.DropDownList ddlResultado;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaNombre;
 
         /// <summary>
-        /// Control rfvResultado.
+        /// Control txtRutaCanal.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.RequiredFieldValidator rfvResultado;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaCanal;
 
         /// <summary>
-        /// Control pnlVolverA.
+        /// Control txtRutaPrioridad.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlVolverA;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaPrioridad;
 
         /// <summary>
-        /// Control ddlVolverA.
+        /// Control txtRutaPatron.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.DropDownList ddlVolverA;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaPatron;
 
         /// <summary>
-        /// Control txtObs.
+        /// Control txtRutaExtension.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.TextBox txtObs;
+        protected global::System.Web.UI.WebControls.TextBox txtRutaExtension;
 
         /// <summary>
-        /// Control btnCompletar.
+        /// Control ddlRutaWorkflow.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Button btnCompletar;
+        protected global::System.Web.UI.WebControls.DropDownList ddlRutaWorkflow;
 
         /// <summary>
-        /// Control btnVolver.
+        /// Control chkRutaActiva.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Button btnVolver;
+        protected global::System.Web.UI.WebControls.CheckBox chkRutaActiva;
 
         /// <summary>
-        /// Control lblInfo.
+        /// Control btnGuardarRuta.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Label lblInfo;
+        protected global::System.Web.UI.WebControls.Button btnGuardarRuta;
 
         /// <summary>
-        /// Control pnlError.
+        /// Control gvRutas.
         /// </summary>
         /// <remarks>
         /// Campo generado automáticamente.
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.Panel pnlError;
-
-        /// <summary>
-        /// Control litError.
-        /// </summary>
-        /// <remarks>
-        /// Campo generado automáticamente.
-        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
-        /// </remarks>
-        protected global::System.Web.UI.WebControls.Literal litError;
+        protected global::System.Web.UI.WebControls.GridView gvRutas;
     }
 }

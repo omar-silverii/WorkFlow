@@ -445,6 +445,7 @@
     <Content Include="WF_DocTipoReglas.aspx" />
     <Content Include="WF_Entidades.aspx" />
     <Content Include="WF_Gerente_Tareas.aspx" />
+    <Content Include="WF_Ingreso_Documental.aspx" />
     <Content Include="WF_Instancias.aspx" />
     <Content Include="WF_Instancia_Mapa.aspx" />
     <Content Include="WF_Notificaciones.aspx" />
@@ -474,6 +475,7 @@
     <Content Include="Api\WF_NotificationCounters.ashx" />
     <Content Include="Api\WF_AiCatalog.ashx" />
     <Content Include="App_Data\WF_AI\ai_regression_cases.json" />
+    <Content Include="Api\WF_IngresoDocumento_Get.ashx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -547,6 +549,9 @@
     </Compile>
     <Compile Include="Api\WF_AiCatalog.ashx.cs">
       <DependentUpon>WF_AiCatalog.ashx</DependentUpon>
+    </Compile>
+    <Compile Include="Api\WF_IngresoDocumento_Get.ashx.cs">
+      <DependentUpon>WF_IngresoDocumento_Get.ashx</DependentUpon>
     </Compile>
     <Compile Include="Api\WF_NotificationCounters.ashx.cs">
       <DependentUpon>WF_NotificationCounters.ashx</DependentUpon>
@@ -790,6 +795,13 @@
     </Compile>
     <Compile Include="WF_Gerente_Tareas.aspx.designer.cs">
       <DependentUpon>WF_Gerente_Tareas.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="WF_Ingreso_Documental.aspx.cs">
+      <DependentUpon>WF_Ingreso_Documental.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="WF_Ingreso_Documental.aspx.designer.cs">
+      <DependentUpon>WF_Ingreso_Documental.aspx</DependentUpon>
     </Compile>
     <Compile Include="WF_Instancias.aspx.cs">
       <DependentUpon>WF_Instancias.aspx</DependentUpon>

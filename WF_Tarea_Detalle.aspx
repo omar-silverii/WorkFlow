@@ -67,6 +67,43 @@
                     </div>
                 </asp:Panel>
 
+                <asp:Panel ID="pnlDocumentoIngreso" runat="server" Visible="false" CssClass="card ws-card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-2">
+                            <div>
+                                <div class="fw-bold">Documento original del expediente</div>
+                                <div class="text-muted small">
+                                    Revisá el documento que inició esta instancia antes de tomar una decisión.
+                                </div>
+                            </div>
+                            <span class="ws-pill">Ingreso documental</span>
+                        </div>
+
+                        <div class="border rounded p-3 bg-light">
+                            <div class="fw-semibold mb-1">
+                                <asp:Literal ID="litDocumentoIngresoNombre" runat="server" />
+                            </div>
+                            <div class="text-muted small mb-3">
+                                <asp:Literal ID="litDocumentoIngresoDetalle" runat="server" />
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <asp:HyperLink ID="lnkVerDocumentoIngreso" runat="server"
+                                    CssClass="btn btn-primary btn-sm" Target="_blank">
+                                    Ver documento
+                                </asp:HyperLink>
+                                <asp:HyperLink ID="lnkDescargarDocumentoIngreso" runat="server"
+                                    CssClass="btn btn-outline-primary btn-sm">
+                                    Descargar
+                                </asp:HyperLink>
+                                <asp:HyperLink ID="lnkVerMapaDocumentoIngreso" runat="server"
+                                    CssClass="btn btn-outline-secondary btn-sm" Target="_blank">
+                                    Ver expediente
+                                </asp:HyperLink>
+                            </div>
+                        </div>
+                    </div>
+                </asp:Panel>
+
                 <a id="adjuntos"></a>
 
                 <!-- Adjuntos solicitados por backtrack (Instancia + Tarea) -->

@@ -52,6 +52,7 @@
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_DocTipo.aspx") %>">📁 Tipos de documento</a></li>
                         <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_DocTipoReglas.aspx") %>">🧠 Reglas de extracción</a></li>
+                        <li><a class="dropdown-item" href="<%= ResolveUrl("~/WF_Ingreso_Documental.aspx") %>">📥 Ingreso documental</a></li>
                     </ul>
                 </li>
 

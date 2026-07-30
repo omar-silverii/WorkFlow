@@ -354,10 +354,84 @@ WHERE   t.Id = @Id;", cn))
 
                     CargarPedidosPendientes(id, instanciaId);
                     CargarNotificacionesPendientes(instanciaId);
+                    CargarDocumentoIngreso(id, instanciaId);
                     BindAdjuntos();
                     CargarOpcionesVolverA(id);
                     AplicarConfiguracionAdjuntos(instanciaId);
                 }
+            }
+        }
+
+        private void CargarDocumentoIngreso(long tareaId, long instanciaId)
+        {
+            pnlDocumentoIngreso.Visible = false;
+            litDocumentoIngresoNombre.Text = string.Empty;
+            litDocumentoIngresoDetalle.Text = string.Empty;
+
+            if (tareaId <= 0 || instanciaId <= 0)
+                return;
+
+            try
+            {
+                using (var cn = new SqlConnection(Cnn))
+                using (var cmd = new SqlCommand(@"
+SELECT TOP 1
+    i.ArchivoNombre,
+    i.Extension,
+    i.Estado,
+    i.DocTipoCodigo,
+    i.IngressId,
+    i.FechaIngreso
+FROM dbo.WF_IngresoDocumento i
+WHERE i.WF_InstanciaId = @InstanciaId
+ORDER BY i.Id DESC;", cn))
+                {
+                    cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                    cn.Open();
+
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (!dr.Read())
+                            return;
+
+                        var fileName = Convert.ToString(dr["ArchivoNombre"] ?? "");
+                        var extension = Convert.ToString(dr["Extension"] ?? "");
+                        var estadoIngreso = Convert.ToString(dr["Estado"] ?? "");
+                        var docTipo = Convert.ToString(dr["DocTipoCodigo"] ?? "");
+                        var ingressId = Convert.ToString(dr["IngressId"] ?? "");
+                        var fechaIngreso = dr["FechaIngreso"] == DBNull.Value
+                            ? ""
+                            : Convert.ToDateTime(dr["FechaIngreso"]).ToString("dd/MM/yyyy HH:mm");
+
+                        litDocumentoIngresoNombre.Text = Server.HtmlEncode(
+                            string.IsNullOrWhiteSpace(fileName) ? "Documento de ingreso" : fileName);
+
+                        var details = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(docTipo)) details.Add("Tipo: " + docTipo);
+                        if (!string.IsNullOrWhiteSpace(extension)) details.Add("Extensión: " + extension);
+                        if (!string.IsNullOrWhiteSpace(estadoIngreso)) details.Add("Ingreso: " + estadoIngreso);
+                        if (!string.IsNullOrWhiteSpace(fechaIngreso)) details.Add("Recibido: " + fechaIngreso);
+                        if (!string.IsNullOrWhiteSpace(ingressId)) details.Add("IngressId: " + ingressId);
+
+                        litDocumentoIngresoDetalle.Text = Server.HtmlEncode(string.Join(" · ", details));
+
+                        var baseUrl = ResolveUrl("~/API/WF_IngresoDocumento_Get.ashx")
+                            + "?tarea=" + tareaId;
+
+                        lnkVerDocumentoIngreso.NavigateUrl = baseUrl + "&mode=inline";
+                        lnkDescargarDocumentoIngreso.NavigateUrl = baseUrl + "&mode=download";
+                        lnkVerMapaDocumentoIngreso.NavigateUrl =
+                            ResolveUrl("~/WF_Instancia_Mapa.aspx?id=") + instanciaId;
+
+                        pnlDocumentoIngreso.Visible = true;
+                    }
+                }
+            }
+            catch
+            {
+                // Compatibilidad: las tareas de instancias no originadas por fix76
+                // simplemente no muestran este panel.
+                pnlDocumentoIngreso.Visible = false;
             }
         }
 

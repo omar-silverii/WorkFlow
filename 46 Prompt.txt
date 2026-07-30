@@ -1,0 +1,313 @@
+PROMPT DE ARRANQUE — Workflow Studio
+Ingreso documental automático / Watch Folder productivo
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack actualizado.
+3. El ZIP completo nuevo de Workflow Studio, con todo incorporado
+   hasta fix74b.
+4. Si corresponde, algún ZIP puntual adicional.
+
+Quiero que trabajes así, sin desviarte.
+
+======================================================================
+PASO 1
+======================================================================
+
+Confirmá que leíste completo el ContextPack.
+
+======================================================================
+PASO 2
+======================================================================
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+======================================================================
+PASO 3
+======================================================================
+
+Cuando tengas el ZIP:
+
+- revisá primero los archivos reales;
+- confirmá la estructura del proyecto;
+- verificá que fix74b esté incorporado;
+- recién después proponé cambios.
+
+No asumas que el código quedó igual a lo conversado.
+
+======================================================================
+REGLAS OBLIGATORIAS
+======================================================================
+
+- No inventar nada.
+- No inventar tablas, clases, handlers, APIs ni carpetas.
+- No cambiar arquitectura sin necesidad.
+- No reescribir cosas que ya funcionan.
+- No usar código de versiones anteriores sin revisar el ZIP actual.
+- Trabajar siempre sobre el código real del ZIP.
+- Cambios mínimos y precisos.
+- Entregar correcciones como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No mandar archivos completos que no fueron inspeccionados.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría larga con código puntual.
+- No volver atrás sobre temas ya cerrados.
+- Proponer siempre la mejor versión de entrada.
+- Evaluar el funcionamiento productivo completo.
+
+Puede utilizarse el ZIP completo más el último fix generado por vos
+en la misma sesión, siempre que Omar no haya hecho otros cambios.
+
+======================================================================
+ÁREAS CERRADAS
+======================================================================
+
+No tocar salvo bug real explícito:
+
+- Motor de ejecución.
+- WorkflowRunner.
+- Handlers runtime.
+- Canvas real.
+- Aristas.
+- Zoom.
+- Minimapa.
+- WF_Instancia_Mapa.
+- WF_Instancias.
+- Queue runtime.
+- SMTP.
+- email.send.
+- HSubFlow.cs.
+- Runtime subflow.
+- NC_AR.
+- FACTURA_AR.
+- Extractores documentales.
+
+No modificar doc.load ni HDocLoad sin demostrar primero mediante
+el código real que existe un bug en su contrato.
+
+======================================================================
+BASE ESPERADA
+======================================================================
+
+El ZIP debería contener todo lo validado hasta:
+
+- fix72
+- fix73
+- fix73b
+- fix73c
+- fix73d
+- fix74
+- fix74b
+
+Estado esperado:
+
+Banco IA:
+OK 14 / FALLA 0 / SKIP 0
+
+Contrato del Constructor IA:
+Matriz 150/150
+
+Prueba NC/CAE:
+Contrato estructural y textual validado.
+
+El Constructor IA debe mantener:
+
+- borrador visual;
+- dudas en rojo;
+- decisiones vigentes;
+- elecciones reemplazadas;
+- plan estructurado;
+- bloqueo ante divergencias;
+- resumen por rama;
+- Crear workflow solo con contrato válido.
+
+No reabrir esta línea salvo regresión real.
+
+======================================================================
+PRÓXIMO FOCO
+======================================================================
+
+Trabajar sobre:
+
+fix75_watchfolder_ingreso_documental_productivo
+
+Pero no crear el fix directamente.
+
+Primero revisar el componente existente:
+
+Dispatcher.WatchFolder
+
+Archivos probables a inspeccionar:
+
+- Dispatcher.WatchFolder.sln
+- Dispatcher.WatchFolder.csproj
+- Program.cs
+- WatchFolderDispatcher.cs
+- WatchFolderOptions.cs
+- App.config
+- README_WATCHFOLDER.md
+- Samples/WatchFolder
+- referencias al ensamblado de Workflow Studio
+- llamada a WorkflowRuntime
+- código que crea la instancia
+- código que arma el contexto input.*
+- código que mueve archivos
+- tratamiento de excepciones
+
+También revisar:
+
+- HDocLoad.cs
+- convención real de variables en path;
+- cómo se resuelve input.filePath;
+- CrearInstanciaYEjecutarAsync;
+- estado devuelto por el runtime;
+- WF_Instancia;
+- cualquier registro existente de ingreso o duplicados.
+
+======================================================================
+PREGUNTAS QUE DEBE RESPONDER LA REVISIÓN
+======================================================================
+
+1. ¿El dispatcher crea realmente una instancia por archivo?
+2. ¿Qué valor exacto carga en input.filePath?
+3. ¿HDocLoad acepta input.filePath o necesita ${input.filePath}?
+4. ¿En qué momento mueve el archivo de Inbox?
+5. ¿La ruta sigue existiendo después de una tarea humana?
+6. ¿Qué significa actualmente Processed?
+7. ¿Cómo se detecta que el archivo terminó de copiarse?
+8. ¿Cómo evita procesarlo dos veces?
+9. ¿Qué ocurre si el worker cae después de crear la instancia?
+10. ¿Qué ocurre si hay dos workers simultáneos?
+11. ¿Qué devuelve CrearInstanciaYEjecutarAsync?
+12. ¿Cómo diferencia EnCurso, Finalizada y Error?
+13. ¿Qué campo usa para localizar la definición:
+    Nombre, Key u otro?
+14. ¿La documentación coincide con el código real?
+15. ¿Puede configurarse para PDFs de notas de crédito sin reescribirlo?
+
+======================================================================
+ARQUITECTURA DESEADA
+======================================================================
+
+No modificar doc.load para enumerar carpetas.
+
+La arquitectura esperada es:
+
+Carpeta de entrada
+→ Dispatcher.WatchFolder
+→ una instancia por documento
+→ input.filePath
+→ doc.load
+→ workflow de negocio
+
+Cada documento debe tener:
+
+- instancia propia;
+- auditoría propia;
+- logs propios;
+- errores propios;
+- tareas humanas propias;
+- estado propio.
+
+======================================================================
+PROBLEMAS A VALIDAR
+======================================================================
+
+A. Ruta estable
+
+No pasar al workflow una ruta que desaparecerá inmediatamente
+cuando el archivo se mueva.
+
+Evaluar si debe existir:
+
+Inbox
+→ Processing / Archive estable
+→ crear instancia con esa ruta
+
+No inventar nombres ni carpetas sin revisar configuración actual.
+
+B. Duplicados
+
+Verificar si ya hay:
+
+- hash;
+- marca persistente;
+- registro de ingreso;
+- claim atómico;
+- transacción;
+- control por ruta;
+- control por nombre.
+
+No crear tabla nueva sin revisar la base.
+
+C. Estado de archivo
+
+Definir si Processed significa:
+
+- aceptado;
+- despachado;
+- instancia iniciada;
+- workflow finalizado.
+
+D. Estado de instancia
+
+No considerar éxito solo porque no hubo excepción.
+
+Verificar el estado real de WF_Instancia.
+
+E. Convención del path
+
+Confirmar si el Constructor IA debe generar:
+
+path = input.filePath
+
+o:
+
+path = ${input.filePath}
+
+No asumir.
+
+======================================================================
+PRUEBA PROPUESTA
+======================================================================
+
+Después del diagnóstico y del fix mínimo:
+
+1. Configurar una carpeta de entrada de NC.
+2. Colocar tres PDFs diferentes.
+3. Comprobar tres instancias independientes.
+4. Confirmar input.filePath de cada una.
+5. Confirmar que doc.load leyó cada PDF.
+6. Forzar un error en uno.
+7. Confirmar que los demás continúan.
+8. Reiniciar el dispatcher.
+9. Confirmar que no duplica instancias.
+10. Verificar destino final de cada archivo.
+11. Verificar relación archivo → instancia → estado.
+12. Confirmar compilación.
+13. Confirmar banco IA 14/0/0.
+14. Confirmar que Constructor IA mantiene matriz 150/150.
+
+======================================================================
+ENTREGA
+======================================================================
+
+Cuando se defina el fix:
+
+- entregar ZIP de reemplazo;
+- incluir estructura real;
+- incluir archivos completos modificados;
+- incluir LEEME;
+- explicar brevemente:
+  causa
+  corrección
+  archivos
+  configuración
+  prueba
+  resultado esperado.
+
+No tocar componentes cerrados sin evidencia concreta.

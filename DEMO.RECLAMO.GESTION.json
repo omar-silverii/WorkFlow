@@ -1,0 +1,496 @@
+{
+  "StartNodeId": "nStart",
+  "Nodes": {
+    "nStart": {
+      "Id": "nStart",
+      "Type": "util.start",
+      "Label": "Inicio",
+      "Parameters": {
+        "position": {
+          "x": 760,
+          "y": 40
+        }
+      }
+    },
+    "nLoadReclamo": {
+      "Id": "nLoadReclamo",
+      "Type": "doc.load",
+      "Label": "Cargar documento del reclamo",
+      "Parameters": {
+        "path": "${input.filePath}",
+        "mode": "auto",
+        "docTipoCodigo": "RECLAMO_GENERAL",
+        "connectionStringName": "DefaultConnection",
+        "position": {
+          "x": 760,
+          "y": 160
+        }
+      }
+    },
+    "nIfTexto": {
+      "Id": "nIfTexto",
+      "Type": "control.if",
+      "Label": "¿Documento con texto extraíble?",
+      "Parameters": {
+        "field": "input.hasText",
+        "op": "==",
+        "value": "true",
+        "transform": "",
+        "position": {
+          "x": 760,
+          "y": 300
+        }
+      }
+    },
+    "nTaskIngresoTexto": {
+      "Id": "nTaskIngresoTexto",
+      "Type": "human.task",
+      "Label": "OPERACIONES - Validar admisibilidad",
+      "Parameters": {
+        "titulo": "Validar ingreso del reclamo ${input.filename}",
+        "descripcion": "Archivo=${input.filename}; extensión=${input.ext}; texto extraído=${input.textLen} caracteres. Confirmar que el documento describe un reclamo o solicitud atendible, que es legible y que contiene información suficiente para iniciar la gestión. Completar APTO para admitirlo o NO_APTO para cerrar el ingreso como no admitido.",
+        "rol": "OPERACIONES",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de admisibilidad",
+        "deadlineMinutes": 480,
+        "position": {
+          "x": 400,
+          "y": 470
+        }
+      }
+    },
+    "nIfIngresoTexto": {
+      "Id": "nIfIngresoTexto",
+      "Type": "control.if",
+      "Label": "¿Reclamo admitido?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskIngresoTexto.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 400,
+          "y": 640
+        }
+      }
+    },
+    "nTaskIngresoManual": {
+      "Id": "nTaskIngresoManual",
+      "Type": "human.task",
+      "Label": "OPERACIONES - Revisar documento manualmente",
+      "Parameters": {
+        "titulo": "Revisar reclamo sin texto extraíble ${input.filename}",
+        "descripcion": "El archivo no contiene texto extraíble automáticamente. Archivo=${input.filename}; extensión=${input.ext}; advertencia=${input.warning}. Revisar visualmente el documento, confirmar que corresponde a un reclamo o solicitud atendible y completar APTO para admitirlo o NO_APTO para cerrar el ingreso como no admitido.",
+        "rol": "OPERACIONES",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de revisión documental manual",
+        "deadlineMinutes": 480,
+        "position": {
+          "x": 1120,
+          "y": 470
+        }
+      }
+    },
+    "nIfIngresoManual": {
+      "Id": "nIfIngresoManual",
+      "Type": "control.if",
+      "Label": "¿Reclamo manualmente admitido?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskIngresoManual.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 1120,
+          "y": 640
+        }
+      }
+    },
+    "nTaskResolver": {
+      "Id": "nTaskResolver",
+      "Type": "human.task",
+      "Label": "OPERACIONES - Investigar y resolver",
+      "Parameters": {
+        "titulo": "Investigar y resolver reclamo ${input.filename}",
+        "descripcion": "Analizar el reclamo admitido, identificar causa, área involucrada, impacto y respuesta necesaria. Registrar las observaciones y acciones realizadas. Completar APTO cuando el reclamo haya quedado resuelto; completar NO_APTO cuando no pueda resolverse en Operaciones y necesite escalamiento a Dirección General. Puede usar Rechazar para devolverlo a una etapa humana anterior.",
+        "rol": "OPERACIONES",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Reclamo en investigación",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 760,
+          "y": 840
+        }
+      }
+    },
+    "nIfResuelto": {
+      "Id": "nIfResuelto",
+      "Type": "control.if",
+      "Label": "¿Reclamo resuelto por Operaciones?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskResolver.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 760,
+          "y": 1010
+        }
+      }
+    },
+    "nNotifyResueltoDirecto": {
+      "Id": "nNotifyResueltoDirecto",
+      "Type": "util.notify",
+      "Label": "Notificar resolución operativa",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "info",
+        "destinoTipo": "rol",
+        "prioridad": "normal",
+        "rolDestino": "OPERACIONES",
+        "destino": "OPERACIONES",
+        "asunto": "Reclamo resuelto por Operaciones",
+        "mensaje": "El reclamo asociado a ${input.filename} fue resuelto por Operaciones. Instancia=${wf.instanceId}. Consultar la tarea y sus observaciones para conocer la respuesta y las acciones realizadas.",
+        "urlAccion": "",
+        "position": {
+          "x": 390,
+          "y": 1190
+        }
+      }
+    },
+    "nTaskDireccion": {
+      "Id": "nTaskDireccion",
+      "Type": "human.task",
+      "Label": "DIR_GENERAL - Definir tratamiento",
+      "Parameters": {
+        "titulo": "Definir tratamiento del reclamo escalado ${input.filename}",
+        "descripcion": "Operaciones no pudo resolver el reclamo. Evaluar impacto, criticidad, riesgo, necesidad de compensación y acción correctiva. Completar APTO para autorizar una acción correctiva a ejecutar por Operaciones; completar NO_APTO para cerrar el caso sin acción adicional, dejando el fundamento en observaciones. Puede usar Rechazar para devolverlo a la tarea humana anterior.",
+        "rol": "DIR_GENERAL",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Pendiente de decisión de Dirección General",
+        "deadlineMinutes": 1440,
+        "position": {
+          "x": 1070,
+          "y": 1190
+        }
+      }
+    },
+    "nIfDireccion": {
+      "Id": "nIfDireccion",
+      "Type": "control.if",
+      "Label": "¿Dirección autoriza acción correctiva?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskDireccion.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 1070,
+          "y": 1360
+        }
+      }
+    },
+    "nTaskAccionCorrectiva": {
+      "Id": "nTaskAccionCorrectiva",
+      "Type": "human.task",
+      "Label": "OPERACIONES - Ejecutar acción correctiva",
+      "Parameters": {
+        "titulo": "Ejecutar acción correctiva para ${input.filename}",
+        "descripcion": "Dirección General autorizó una acción correctiva. Ejecutar la medida indicada, documentar responsables, fecha y resultado. Completar APTO cuando el reclamo quede resuelto; completar NO_APTO cuando la acción no haya podido resolverlo. Puede usar Rechazar para devolverlo a la decisión de Dirección General.",
+        "rol": "OPERACIONES",
+        "usuarioAsignado": "",
+        "estadoNegocioPendiente": "Acción correctiva en ejecución",
+        "deadlineMinutes": 2880,
+        "position": {
+          "x": 790,
+          "y": 1540
+        }
+      }
+    },
+    "nIfAccionCorrectiva": {
+      "Id": "nIfAccionCorrectiva",
+      "Type": "control.if",
+      "Label": "¿Acción correctiva resolvió el reclamo?",
+      "Parameters": {
+        "field": "wf.tarea.nTaskAccionCorrectiva.resultado",
+        "op": "==",
+        "value": "apto",
+        "transform": "",
+        "position": {
+          "x": 790,
+          "y": 1710
+        }
+      }
+    },
+    "nNotifyResueltoEscalado": {
+      "Id": "nNotifyResueltoEscalado",
+      "Type": "util.notify",
+      "Label": "Notificar resolución escalada",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "info",
+        "destinoTipo": "rol",
+        "prioridad": "alta",
+        "rolDestino": "DIR_GENERAL",
+        "destino": "DIR_GENERAL",
+        "asunto": "Reclamo escalado resuelto",
+        "mensaje": "La acción correctiva autorizada resolvió el reclamo asociado a ${input.filename}. Instancia=${wf.instanceId}. Consultar las tareas y observaciones para verificar la acción ejecutada.",
+        "urlAccion": "",
+        "position": {
+          "x": 520,
+          "y": 1880
+        }
+      }
+    },
+    "nNotifyCerradoSinAccion": {
+      "Id": "nNotifyCerradoSinAccion",
+      "Type": "util.notify",
+      "Label": "Notificar cierre sin acción adicional",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "warn",
+        "destinoTipo": "rol",
+        "prioridad": "alta",
+        "rolDestino": "OPERACIONES",
+        "destino": "OPERACIONES",
+        "asunto": "Reclamo cerrado sin acción adicional",
+        "mensaje": "Dirección General decidió cerrar sin acción adicional el reclamo asociado a ${input.filename}. Último resultado=${wf.tarea.resultado}; instancia=${wf.instanceId}. Consultar las observaciones de la decisión.",
+        "urlAccion": "",
+        "position": {
+          "x": 1330,
+          "y": 1540
+        }
+      }
+    },
+    "nNotifyNoResuelto": {
+      "Id": "nNotifyNoResuelto",
+      "Type": "util.notify",
+      "Label": "Notificar acción correctiva no resuelta",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "error",
+        "destinoTipo": "rol",
+        "prioridad": "alta",
+        "rolDestino": "DIR_GENERAL",
+        "destino": "DIR_GENERAL",
+        "asunto": "Reclamo no resuelto después de acción correctiva",
+        "mensaje": "La acción correctiva no pudo resolver el reclamo asociado a ${input.filename}. Último resultado=${wf.tarea.resultado}; instancia=${wf.instanceId}. El caso finaliza registrado como no resuelto y requiere seguimiento externo.",
+        "urlAccion": "",
+        "position": {
+          "x": 1060,
+          "y": 1880
+        }
+      }
+    },
+    "nNotifyIngresoRechazado": {
+      "Id": "nNotifyIngresoRechazado",
+      "Type": "util.notify",
+      "Label": "Notificar ingreso no admitido",
+      "Parameters": {
+        "tipo": "sistema",
+        "canal": "sistema",
+        "nivel": "warn",
+        "destinoTipo": "rol",
+        "prioridad": "normal",
+        "rolDestino": "OPERACIONES",
+        "destino": "OPERACIONES",
+        "asunto": "Documento no admitido como reclamo",
+        "mensaje": "El documento ${input.filename} no fue admitido como reclamo. Texto extraído=${input.textLen} caracteres; advertencia=${input.warning}; instancia=${wf.instanceId}. Consultar la tarea de admisibilidad y sus observaciones.",
+        "urlAccion": "",
+        "position": {
+          "x": 1450,
+          "y": 840
+        }
+      }
+    },
+    "nEndResuelto": {
+      "Id": "nEndResuelto",
+      "Type": "util.end",
+      "Label": "Fin - Reclamo resuelto",
+      "Parameters": {
+        "estadoNegocio": "Reclamo resuelto",
+        "position": {
+          "x": 520,
+          "y": 2050
+        }
+      }
+    },
+    "nEndNoAdmitido": {
+      "Id": "nEndNoAdmitido",
+      "Type": "util.end",
+      "Label": "Fin - Reclamo no admitido",
+      "Parameters": {
+        "estadoNegocio": "Reclamo no admitido",
+        "position": {
+          "x": 1450,
+          "y": 1010
+        }
+      }
+    },
+    "nEndNoResuelto": {
+      "Id": "nEndNoResuelto",
+      "Type": "util.end",
+      "Label": "Fin - Reclamo cerrado no resuelto",
+      "Parameters": {
+        "estadoNegocio": "Reclamo cerrado no resuelto",
+        "position": {
+          "x": 1200,
+          "y": 2050
+        }
+      }
+    }
+  },
+  "Edges": [
+    {
+      "Id": "e01",
+      "From": "nStart",
+      "To": "nLoadReclamo",
+      "Condition": "always"
+    },
+    {
+      "Id": "e02",
+      "From": "nLoadReclamo",
+      "To": "nIfTexto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e03",
+      "From": "nIfTexto",
+      "To": "nTaskIngresoTexto",
+      "Condition": "true"
+    },
+    {
+      "Id": "e04",
+      "From": "nIfTexto",
+      "To": "nTaskIngresoManual",
+      "Condition": "false"
+    },
+    {
+      "Id": "e05",
+      "From": "nTaskIngresoTexto",
+      "To": "nIfIngresoTexto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e06",
+      "From": "nIfIngresoTexto",
+      "To": "nTaskResolver",
+      "Condition": "true"
+    },
+    {
+      "Id": "e07",
+      "From": "nIfIngresoTexto",
+      "To": "nNotifyIngresoRechazado",
+      "Condition": "false"
+    },
+    {
+      "Id": "e08",
+      "From": "nTaskIngresoManual",
+      "To": "nIfIngresoManual",
+      "Condition": "always"
+    },
+    {
+      "Id": "e09",
+      "From": "nIfIngresoManual",
+      "To": "nTaskResolver",
+      "Condition": "true"
+    },
+    {
+      "Id": "e10",
+      "From": "nIfIngresoManual",
+      "To": "nNotifyIngresoRechazado",
+      "Condition": "false"
+    },
+    {
+      "Id": "e11",
+      "From": "nNotifyIngresoRechazado",
+      "To": "nEndNoAdmitido",
+      "Condition": "always"
+    },
+    {
+      "Id": "e12",
+      "From": "nTaskResolver",
+      "To": "nIfResuelto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e13",
+      "From": "nIfResuelto",
+      "To": "nNotifyResueltoDirecto",
+      "Condition": "true"
+    },
+    {
+      "Id": "e14",
+      "From": "nIfResuelto",
+      "To": "nTaskDireccion",
+      "Condition": "false"
+    },
+    {
+      "Id": "e15",
+      "From": "nNotifyResueltoDirecto",
+      "To": "nEndResuelto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e16",
+      "From": "nTaskDireccion",
+      "To": "nIfDireccion",
+      "Condition": "always"
+    },
+    {
+      "Id": "e17",
+      "From": "nIfDireccion",
+      "To": "nTaskAccionCorrectiva",
+      "Condition": "true"
+    },
+    {
+      "Id": "e18",
+      "From": "nIfDireccion",
+      "To": "nNotifyCerradoSinAccion",
+      "Condition": "false"
+    },
+    {
+      "Id": "e19",
+      "From": "nNotifyCerradoSinAccion",
+      "To": "nEndNoResuelto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e20",
+      "From": "nTaskAccionCorrectiva",
+      "To": "nIfAccionCorrectiva",
+      "Condition": "always"
+    },
+    {
+      "Id": "e21",
+      "From": "nIfAccionCorrectiva",
+      "To": "nNotifyResueltoEscalado",
+      "Condition": "true"
+    },
+    {
+      "Id": "e22",
+      "From": "nIfAccionCorrectiva",
+      "To": "nNotifyNoResuelto",
+      "Condition": "false"
+    },
+    {
+      "Id": "e23",
+      "From": "nNotifyResueltoEscalado",
+      "To": "nEndResuelto",
+      "Condition": "always"
+    },
+    {
+      "Id": "e24",
+      "From": "nNotifyNoResuelto",
+      "To": "nEndNoResuelto",
+      "Condition": "always"
+    }
+  ],
+  "Meta": {
+    "Name": "DEMO.RECLAMO.GESTION"
+  }
+}
