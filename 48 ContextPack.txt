@@ -1,0 +1,403 @@
+﻿CONTEXTPACK — WORKFLOW STUDIO
+CIERRE DE SESIÓN 31/07/2026
+BASE: WORKFLOW-MAIN (47)
+ÚLTIMOS FIXES ENTREGADOS: FIX78, FIX79, FIX80 Y FIX81
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. FORMA OBLIGATORIA DE TRABAJO
+======================================================================
+
+En la próxima sesión Omar entregará:
+
+1. Este ContextPack.
+2. El Prompt de arranque.
+3. Un ZIP completo nuevo de Workflow Studio.
+4. Ese ZIP debería incorporar WorkFlow-main (47) más los fixes aplicados
+   por Omar durante esta sesión: fix78, fix79, fix80 y fix81.
+5. Algún archivo adicional, si corresponde.
+
+El asistente debe:
+
+1. Confirmar que leyó completo este ContextPack.
+2. Esperar el ZIP actualizado antes de proponer cambios.
+3. Inspeccionar primero los archivos reales del ZIP.
+4. Confirmar qué fixes quedaron realmente integrados.
+5. No asumir que todos los ZIP de fix fueron copiados exactamente.
+6. Recién después analizar, proponer o modificar.
+
+Reglas no negociables:
+
+- No inventar tablas, clases, handlers, controles, rutas ni archivos.
+- No asumir que el código quedó igual a lo conversado.
+- La fuente de verdad es el ZIP completo más reciente.
+- No cambiar arquitectura sin necesidad real.
+- No reescribir cosas que ya funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- Cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar parches con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- No presentar código de archivos no inspeccionados.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- Evaluar siempre el funcionamiento productivo completo.
+- No tocar motor, HDocLoad, extractores cerrados, mapa, queue, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+
+======================================================================
+2. BASE OFICIAL DE ESTA SESIÓN
+======================================================================
+
+La base recibida fue WorkFlow-main (47).zip.
+
+Incluía:
+
+- fix75 Watch Folder productivo.
+- fix76 Enrutador de Ingreso Documental.
+- fix77 cierre operativo.
+- fix77b handler del documento original.
+- WF_Ingreso_Documental.aspx.
+- WF_IngresoDocumento y WF_IngresoRuta.
+- DispatcherDailyLog.cs.
+- Panel de documento original en WF_Tarea_Detalle.aspx.
+- Api/WF_IngresoDocumento_Get.ashx.
+- Export JSON con Meta.Name.
+- DEMO.FACTURA_PROVEEDOR.E2E.
+- DEMO.CONTRATO.APROBACION.
+- DEMO.RECLAMO.GESTION.
+- DEMO.ORDEN_COMPRA.APROBACION.json.
+
+El ZIP fue inspeccionado antes de proponer cambios.
+
+======================================================================
+3. ÁREAS CERRADAS
+======================================================================
+
+No tocar salvo bug real explícito:
+
+- Motor de ejecución y WorkflowRunner.
+- Handlers runtime estables.
+- Canvas, aristas, zoom y minimapa.
+- WF_Instancia_Mapa y WF_Instancias.
+- Queue runtime.
+- SMTP y email.send.
+- HSubFlow.cs y runtime de subflujos.
+- NC_AR y FACTURA_AR.
+- Extractores documentales ya cerrados.
+- HDocLoad y doc.load sin evidencia concreta.
+
+Constructor IA:
+
+- fix72 a fix74b cerrados.
+- Banco esperado: 14 OK / 0 FALLA / 0 SKIP.
+- Matriz esperada: 150/150.
+
+======================================================================
+4. VALIDACIONES REALIZADAS SOBRE EL ZIP 47
+======================================================================
+
+Se confirmó:
+
+- El .ashx del documento original y su clase compilada coinciden.
+- DispatcherDailyLog.cs existe y está incluido en el proyecto.
+- App.config contiene la configuración esperada del Watch Folder.
+- WF_Tarea_Detalle contiene el panel del documento original.
+- workflow.ui.js contiene la corrección de Export JSON.
+- DEMO.ORDEN_COMPRA.APROBACION.json existe.
+- Los archivos declarados como Compile o Content estaban presentes.
+
+RUTA_OC_PDF vive en base de datos y no puede confirmarse sólo desde el ZIP.
+
+======================================================================
+5. EXPORT JSON — VALIDADO Y CERRADO
+======================================================================
+
+Omar validó visualmente que Export JSON genera:
+
+"Meta": {
+  "Name": "DEMO.ORDEN_COMPRA.APROBACION"
+}
+
+No reabrir salvo regresión real.
+
+======================================================================
+6. ORDEN DE COMPRA MODERNA — PRUEBA REAL
+======================================================================
+
+Workflow: DEMO.ORDEN_COMPRA.APROBACION
+Definición observada: defId 10188
+Instancia: 170544
+Archivo: OC_001.pdf
+
+Resultado:
+
+- El Watch Folder tomó el archivo desde Inbox.
+- Se creó una sola instancia.
+- El archivo permaneció en Processing durante la ejecución.
+- Tarea 110311, COMPRAS, nodo nTaskComprasManual, APTO.
+- Tarea 110312, ADM_FIN, nodo nTaskAdmFin, APTO.
+- Total extraído: 153600.
+- Fecha extraída.
+- Número de OC vacío.
+- Razón social del proveedor vacía.
+- CUIT del proveedor vacío.
+- La validación inicial dio False por datos incompletos.
+- El flujo tomó correctamente la revisión manual de COMPRAS.
+- Luego pasó a ADM_FIN.
+- total > 200000 dio False.
+- No correspondió tarea para DIR_GENERAL.
+- Se ejecutaron notificación y util.end.
+- La instancia finalizó correctamente.
+- El archivo pasó a:
+  C:\WorkflowStudio\Processed\General\OC_001_20260731_200959_111_1.pdf
+
+Conclusión:
+
+- Circuito moderno validado operativamente.
+- Watch Folder, enrutamiento, tareas, condición, finalización y movimiento
+  a Processed funcionaron.
+- La extracción de ese modelo de OC fue parcial.
+- No modificar extractor sin revisar PDF, reglas reales y ZIP actual.
+- El workflow respondió correctamente enviando la OC incompleta a revisión manual.
+
+======================================================================
+7. DOCUMENTO ORIGINAL EN TAREA
+======================================================================
+
+fix77/fix77b ya estaban validados:
+
+- Panel visible.
+- Ver documento funciona.
+- Descargar funciona.
+- Acceso auditado en WF_InstanciaLog.
+- Funciona en Processing y Processed.
+- No expone ruta física.
+
+No reabrir salvo regresión.
+
+======================================================================
+8. SEGURIDAD — DECISIÓN FINAL
+======================================================================
+
+Problema inicial:
+
+WF_Seguridad.aspx existía, pero faltaba un acceso visible correcto.
+
+fix78 agregó acceso rápido y modificó la barra superior.
+Omar validó el acceso rápido, pero pidió recuperar también una tarjeta y
+cuestionó correctamente que Seguridad estuviera en la barra superior.
+
+Decisión final de Omar:
+
+- Mantener "Seguridad y permisos" en Accesos rápidos.
+- Agregar una tarjeta principal "Seguridad y permisos" en Default.aspx.
+- No mostrar acceso a Seguridad en la barra superior.
+- No redirigir "Administración" de la barra a Seguridad.
+- Respetar ADMIN o SEGURIDAD_ABM.
+- No tocar base ni RBAC.
+
+fix81 fue entregado con esa intención.
+
+Estado:
+
+ENTREGADO, PENDIENTE DE VALIDAR EN EL NUEVO ZIP Y EN NAVEGADOR.
+
+======================================================================
+9. TAREAS — PROBLEMA ORIGINAL
+======================================================================
+
+Antes de los fixes:
+
+- Inicio mostraba dos cifras equivalentes: Pendientes y En bandeja.
+- El handler devolvía total = pendientes.
+- WF_Tareas.aspx mostraba silenciosamente todas las tareas si el usuario
+  tenía permisos administrativos.
+- El contador era personal, pero la grilla podía ser global.
+
+Se decidió separar:
+
+- Mi bandeja.
+- Vista administrativa explícita.
+- Contadores con significados distintos.
+- Actualización automática sin F5.
+
+======================================================================
+10. FIX79 — BANDEJA Y CONTADORES
+======================================================================
+
+fix79 entregó:
+
+- Indicadores: Total, A mí, Por rol y Reproceso.
+- Actualización automática cada 15 segundos.
+- Actualización al volver a la pestaña.
+- WF_Tareas.aspx abre en Mi bandeja.
+- Vista personal por usuario o roles activos.
+- Opción explícita "Ver todas (administración)".
+- No modifica tablas, motor ni human.task.
+
+Validación posterior:
+
+OMARD\OMARD:
+
+- Inicio: Total 1, A mí 1, Por rol 0, Reproceso 0.
+- WF_Tareas.aspx: Mi bandeja 0 pendientes.
+
+OMARD\USUARIO5:
+
+- Indicador superior: 5.
+- Grilla personal: 4 tareas pendientes de COMPRAS.
+
+Quedó demostrada una diferencia entre contador y grilla.
+
+======================================================================
+11. FIX80 — CONTADORES CONSISTENTES
+======================================================================
+
+Diagnóstico realizado:
+
+- El contador consultaba WF_Tarea directamente.
+- La grilla hacía INNER JOIN con WF_Instancia.
+- Una tarea cuyo WF_InstanciaId ya no existe podía sumar en el contador
+  y no aparecer en la grilla.
+
+Esto explica:
+
+- OMARD\OMARD: contador 1, grilla 0.
+- OMARD\USUARIO5: contador 5, grilla 4.
+
+fix80 entregó:
+
+- Ajuste de Api/WF_TaskCounters.ashx.cs para usar el mismo universo válido.
+- LEEME con consulta SQL de sólo lectura para identificar tareas huérfanas.
+- No borra datos ni cambia tablas.
+
+Estado:
+
+ENTREGADO, PENDIENTE DE VALIDAR EN EL NUEVO ZIP Y EN NAVEGADOR.
+
+Importante:
+
+- No borrar tareas huérfanas sin identificar su origen.
+- Primero hacer consistentes contador y grilla.
+- Después analizar limpieza histórica sólo con diagnóstico real.
+
+======================================================================
+12. FIX81 — PRESENTACIÓN FINAL DE SEGURIDAD
+======================================================================
+
+Resultado solicitado:
+
+- Acceso rápido: sí.
+- Tarjeta principal: sí.
+- Barra superior: sin acceso a Seguridad.
+- Permisos ADMIN / SEGURIDAD_ABM.
+- Sin cambios de tareas, contadores, base ni RBAC.
+
+Estado:
+
+ENTREGADO, NO VALIDADO TODAVÍA.
+
+======================================================================
+13. ARCHIVOS A INSPECCIONAR PRIMERO EN EL PRÓXIMO ZIP
+======================================================================
+
+Seguridad e Inicio:
+
+- Default.aspx.
+- Default.aspx.cs.
+- Default.aspx.designer.cs.
+- Controls/WsTopbar.ascx.
+- Controls/WsTopbar.ascx.cs, si corresponde.
+- Lógica real de permisos usada por Default.aspx y WF_Seguridad.aspx.
+
+Tareas y contadores:
+
+- WF_Tareas.aspx.
+- WF_Tareas.aspx.cs.
+- WF_Tareas.aspx.designer.cs.
+- Api/WF_TaskCounters.ashx.
+- Api/WF_TaskCounters.ashx.cs.
+- Helpers reales de roles/permisos usados por ambas consultas.
+- Consultas SQL reales del contador y de la grilla.
+
+OC moderna:
+
+- DEMO.ORDEN_COMPRA.APROBACION.json.
+- Configuración actual de RUTA_OC_PDF.
+- Reglas reales del tipo documental ORDEN_COMPRA.
+
+======================================================================
+14. VALIDACIONES INMEDIATAS PARA LA PRÓXIMA SESIÓN
+======================================================================
+
+1. Confirmar que el ZIP compila en Visual Studio 2022.
+2. Confirmar que fix78, fix79, fix80 y fix81 quedaron integrados sin pisarse.
+3. Validar Seguridad:
+   - aparece en Accesos rápidos;
+   - aparece como tarjeta principal;
+   - no aparece en la barra superior;
+   - abre WF_Seguridad.aspx;
+   - respeta ADMIN / SEGURIDAD_ABM.
+4. Validar OMARD\OMARD:
+   - contador y Mi bandeja deben coincidir;
+   - si la bandeja tiene 0, el contador debe mostrar 0.
+5. Validar OMARD\USUARIO5:
+   - si la grilla muestra 4 válidas, el contador debe mostrar 4;
+   - confirmar A mí y Por rol por separado.
+6. Validar actualización automática:
+   - crear una tarea real;
+   - esperar hasta 15 segundos;
+   - comprobar cambios sin F5;
+   - completar la tarea;
+   - comprobar que los indicadores bajan.
+7. Confirmar que "Ver todas (administración)" sigue siendo explícito.
+8. Identificar por SQL de sólo lectura cualquier tarea huérfana.
+9. No borrar datos hasta entender su origen.
+10. Mantener cerrados Export JSON y OC moderna salvo regresión.
+
+======================================================================
+15. NO TRABAJAR TODAVÍA
+======================================================================
+
+No avanzar todavía con:
+
+- VEP.
+- IA clasificadora documental.
+- Asociación de documentos a instancias existentes.
+- Nuevos nodos del Constructor IA.
+- Cambios de extractores de OC.
+- Rediseño de base.
+- Cambios de motor.
+- Estado Finalizado con advertencias.
+- Borrado de tareas históricas.
+
+Primero cerrar Seguridad y consistencia de tareas.
+
+======================================================================
+16. CRITERIO DE CIERRE
+======================================================================
+
+La etapa queda cerrada cuando:
+
+- El ZIP completo compile.
+- Seguridad tenga acceso rápido y tarjeta.
+- Seguridad no aparezca en la barra superior.
+- Los permisos de Seguridad sean correctos.
+- Mi bandeja y contadores usen el mismo universo de tareas.
+- OMARD\OMARD no muestre 1 cuando la grilla muestra 0.
+- OMARD\USUARIO5 no muestre 5 cuando la grilla muestra 4.
+- La actualización automática funcione sin F5.
+- La vista administrativa sea explícita.
+- No se hayan borrado datos sin diagnóstico.
+- Export JSON continúe generando Meta.Name.
+- La OC moderna continúe funcionando.
+- No se alteren motor, extractores ni áreas cerradas.

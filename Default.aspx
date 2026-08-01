@@ -64,6 +64,10 @@
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipo.aspx">📁 Tipos de Documento</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_DocTipoReglas.aspx">🧠 Reglas Extract</a>
                             <a class="list-group-item list-group-item-action px-0" href="WF_Ingreso_Documental.aspx">📥 Ingreso documental</a>
+                            <asp:HyperLink ID="lnkSeguridadRapida" runat="server"
+                                CssClass="list-group-item list-group-item-action px-0"
+                                NavigateUrl="WF_Seguridad.aspx"
+                                Visible="false">🔐 Seguridad y permisos</asp:HyperLink>
                         </div>
                     </div>
 
@@ -180,21 +184,30 @@
                                         Bandeja del usuario logueado. Tareas pendientes, resolución y seguimiento del trabajo diario.
                                     </div>
 
-                                    <div class="row text-center mb-3">
-                                        <div class="col-4">
+                                    <div class="row text-center mb-2">
+                                        <div class="col-3">
                                             <div class="fw-bold fs-5" id="wsTaskTotalCount">0</div>
-                                            <div class="ws-muted small">Pendientes</div>
+                                            <div class="ws-muted small">Total</div>
                                         </div>
 
-                                        <div class="col-4">
+                                        <div class="col-3">
+                                            <div class="fw-bold text-primary" id="wsTaskDirectCount">0</div>
+                                            <div class="ws-muted small">A mí</div>
+                                        </div>
+
+                                        <div class="col-3">
+                                            <div class="fw-bold text-success" id="wsTaskRoleCount">0</div>
+                                            <div class="ws-muted small">Por rol</div>
+                                        </div>
+
+                                        <div class="col-3">
                                             <div class="fw-bold text-danger" id="wsTaskBackCount">0</div>
-                                            <div class="ws-muted small">Back</div>
+                                            <div class="ws-muted small">Reproceso</div>
                                         </div>
+                                    </div>
 
-                                        <div class="col-4">
-                                            <div class="fw-bold text-primary" id="wsTaskPendingCount">0</div>
-                                            <div class="ws-muted small">En bandeja</div>
-                                        </div>
+                                    <div class="ws-muted small text-center mb-3">
+                                        Actualización automática cada 15 segundos.
                                     </div>
 
                                     <div class="d-flex gap-2 mt-3">
@@ -340,6 +353,23 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Card 9: Seguridad y permisos -->
+                        <asp:Panel ID="pnlSeguridadCard" runat="server" Visible="false"
+                            CssClass="col-12 col-md-6">
+                            <div class="card ws-card h-100">
+                                <div class="card-body">
+                                    <div class="ws-icon">🔐</div>
+                                    <h5 class="mt-2 mb-1">Seguridad y permisos</h5>
+                                    <div class="ws-muted">
+                                        Administrá usuarios, roles y permisos de acceso a las funciones de Workflow Studio.
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <a class="btn btn-primary" href="WF_Seguridad.aspx">Abrir seguridad</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </asp:Panel>
                     </div>
 
                     <!-- Footer mini -->

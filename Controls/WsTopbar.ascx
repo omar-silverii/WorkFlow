@@ -89,10 +89,6 @@
                     </a>
                 </li>
 
-                <li class="nav-item" runat="server" id="liAdmin">
-                    <asp:HyperLink ID="lnkAdmin" runat="server" CssClass="nav-link" NavigateUrl="~/WF_Definiciones.aspx">Administración</asp:HyperLink>
-                </li>
-
             </ul>
         </div>
     </div>
@@ -128,9 +124,10 @@
 
                     setBadge(data.total || 0);
 
-                    setText('wsTaskPendingCount', data.pendientes || 0);
-                    setText('wsTaskBackCount', data.back || 0);
                     setText('wsTaskTotalCount', data.total || 0);
+                    setText('wsTaskDirectCount', data.directas || 0);
+                    setText('wsTaskRoleCount', data.porRol || 0);
+                    setText('wsTaskBackCount', data.back || 0);
                 })
                 .catch(function () {
                     // silencioso
@@ -165,8 +162,14 @@
         document.addEventListener('DOMContentLoaded', function () {
             refreshTaskCounters();
             refreshNotificationCounters();
-            window.setInterval(refreshTaskCounters, 30000);
+
+            window.setInterval(refreshTaskCounters, 15000);
             window.setInterval(refreshNotificationCounters, 30000);
+
+            window.addEventListener('focus', refreshTaskCounters);
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) refreshTaskCounters();
+            });
         });
     })();
 </script>

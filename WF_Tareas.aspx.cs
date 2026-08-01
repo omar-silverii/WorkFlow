@@ -19,19 +19,26 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            // Topbar activo siempre (postback o no)
+            // Topbar activo siempre (postback o no).
             try
             {
                 Topbar1.ActiveSection = "Tareas";
             }
             catch
             {
-                // si por alguna razón aún no está el control en el aspx, no rompemos la página
+                // Si por alguna razón aún no está el control en el aspx, no rompemos la página.
             }
 
+            var userKey = (User.Identity.Name ?? "").Trim();
+            bool puedeVerTodo = EsAdminOVerTodo(userKey);
+            pnlVistaAdmin.Visible = puedeVerTodo;
+
+            if (!puedeVerTodo)
+                chkVerTodas.Checked = false;
 
             if (!IsPostBack)
             {
+                chkVerTodas.Checked = false;
                 CargarGrid();
             }
         }
@@ -40,8 +47,10 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             var userKey = (User.Identity.Name ?? "").Trim();
 
-            // Si es admin / verTodo => sin restricción adicional
-            bool verTodo = EsAdminOVerTodo(userKey);
+            bool puedeVerTodo = pnlVistaAdmin.Visible;
+
+            // La página abre siempre en la bandeja personal. La vista global requiere una acción explícita.
+            bool verTodo = puedeVerTodo && chkVerTodas.Checked;
 
             string sql = @"
 SELECT
@@ -85,18 +94,15 @@ WHERE 1 = 1
     )";
             }
 
-            // ===== FILTRO POR USUARIO/ROL (si no es verTodo) =====
+            // ===== FILTRO POR USUARIO/ROL (bandeja personal) =====
             if (!verTodo)
             {
-                // - Ver tareas asignadas al usuario
-                // - y/o tareas cuyo RolDestino esté permitido por WF_UserPermiso (Permiso='ROL')
-                // - y/o tasks asignadas explícitas por WF_UserPermiso (Permiso='USER' con ScopeKey=userKey)
                 sql += @"
  AND (
-        -- 1) Asignadas explícitamente al usuario (usuario puntual)
+        -- 1) Asignadas explícitamente al usuario.
         T.AsignadoA = @UserKey
 
-        -- 2) O por rol destino (roles activos del usuario)
+        -- 2) Asignadas a uno de los roles activos del usuario.
      OR EXISTS (
             SELECT 1
             FROM dbo.WF_UsuarioRol UR
@@ -105,7 +111,7 @@ WHERE 1 = 1
               AND UR.RolKey = T.RolDestino
         )
 
-        -- 3) Compatibilidad legacy: si todavía usan UsuarioAsignado como asignación puntual
+        -- 3) Compatibilidad legacy: asignación puntual en UsuarioAsignado.
      OR T.UsuarioAsignado = @UserKey
     )
 ";
@@ -131,6 +137,10 @@ WHERE 1 = 1
 
             gvTareas.DataSource = dt;
             gvTareas.DataBind();
+
+            string alcance = verTodo ? "Vista administrativa" : "Mi bandeja";
+            string tipoConteo = soloPend ? "pendiente(s)" : "tarea(s)";
+            lblVistaActual.Text = alcance + ": " + dt.Rows.Count + " " + tipoConteo + ".";
         }
 
         private bool UsuarioActivo(string userKey)
@@ -312,10 +322,17 @@ WHERE
             CargarGrid();
         }
 
+        protected void chkVerTodas_CheckedChanged(object sender, EventArgs e)
+        {
+            gvTareas.PageIndex = 0;
+            CargarGrid();
+        }
+
         protected void btnLimpiar_Click(object sender, EventArgs e)
         {
             txtFiltro.Text = string.Empty;
             chkSoloPendientes.Checked = true;
+            chkVerTodas.Checked = false;
             gvTareas.PageIndex = 0;
             CargarGrid();
         }

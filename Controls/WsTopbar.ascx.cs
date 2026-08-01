@@ -1,32 +1,22 @@
 ﻿using System;
 using System.Web.UI.HtmlControls;
 using System.Web.UI.WebControls;
+using Intranet.WorkflowStudio.WebForms;
 
 namespace Intranet.WorkflowStudio.WebForms.Controls
 {
     public partial class WsTopbar : System.Web.UI.UserControl
     {
-        // "Inicio", "Workflows", "Documentos", "Tareas", "Ejecuciones", "Administracion"
+        // "Inicio", "Workflows", "Documentos", "Tareas", "Ejecuciones"
         public string ActiveSection { get; set; }
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            //var userKey = (Context?.User?.Identity?.IsAuthenticated == true) ? Context.User.Identity.Name : "";
-
-            //// Ejemplo: mostrar Admin solo si tiene alguno de estos
-            //bool canAdmin = !string.IsNullOrEmpty(userKey) &&
-            //                RbacService.HasAnyPermiso(userKey, "WF_ADMIN", "SEGURIDAD_ABM");
-
-            //lnkAdmin.Visible = canAdmin;
-
             bool auth = (Context?.User?.Identity?.IsAuthenticated == true);
+            string userKey = auth ? (Context.User.Identity.Name ?? "").Trim() : "";
 
-            // Menú usuario + logout SOLO si está autenticado
+            // Menú usuario + logout sólo si está autenticado.
             liUserMenu.Visible = auth;
-
-            // (Opcional) esconder Admin si no está autenticado.
-            // Si querés hacerlo por permiso RBAC, lo vemos después.
-            liAdmin.Visible = auth;
 
             ApplyActive();
         }
@@ -38,7 +28,6 @@ namespace Intranet.WorkflowStudio.WebForms.Controls
             SetActive(lnkDocumentos, ActiveSection == "Documentos");
             SetActive(lnkTareas, ActiveSection == "Tareas");
             SetActive(lnkEjecuciones, ActiveSection == "Ejecuciones");
-            SetActive(lnkAdmin, ActiveSection == "Administracion");
         }
 
         private static void SetActive(HyperLink a, bool active)

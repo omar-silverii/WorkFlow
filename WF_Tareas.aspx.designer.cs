@@ -60,6 +60,24 @@ namespace Intranet.WorkflowStudio.WebForms
         protected global::System.Web.UI.WebControls.CheckBox chkSoloPendientes;
 
         /// <summary>
+        /// Control pnlVistaAdmin.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Panel pnlVistaAdmin;
+
+        /// <summary>
+        /// Control chkVerTodas.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.CheckBox chkVerTodas;
+
+        /// <summary>
         /// Control btnBuscar.
         /// </summary>
         /// <remarks>
@@ -76,6 +94,15 @@ namespace Intranet.WorkflowStudio.WebForms
         /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
         /// </remarks>
         protected global::System.Web.UI.WebControls.Button btnLimpiar;
+
+        /// <summary>
+        /// Control lblVistaActual.
+        /// </summary>
+        /// <remarks>
+        /// Campo generado automáticamente.
+        /// Para modificarlo, mueva la declaración del campo del archivo del diseñador al archivo de código subyacente.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Label lblVistaActual;
 
         /// <summary>
         /// Control gvTareas.

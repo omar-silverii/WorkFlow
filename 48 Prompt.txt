@@ -1,0 +1,238 @@
+﻿PROMPT DE ARRANQUE — WORKFLOW STUDIO
+VALIDACIÓN DEL ZIP POSTERIOR A FIX78 / FIX79 / FIX80 / FIX81
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack actualizado del 31/07/2026.
+3. Un ZIP completo nuevo de Workflow Studio.
+4. Ese ZIP debería incluir WorkFlow-main (47) y los fixes que incorporé:
+   - fix78_acceso_seguridad;
+   - fix79_bandeja_contadores_tareas;
+   - fix80_seguridad_contadores_consistentes;
+   - fix81_seguridad_tarjeta_sin_topbar.
+5. Algún archivo adicional, si corresponde.
+
+Quiero que trabajes así, sin desviarte.
+
+======================================================================
+PASO 1
+======================================================================
+
+Confirmá que leíste completo el ContextPack.
+
+======================================================================
+PASO 2
+======================================================================
+
+Esperá el ZIP actualizado antes de proponer cambios de código.
+
+======================================================================
+PASO 3
+======================================================================
+
+Cuando tengas el ZIP:
+
+- inspeccioná primero los archivos reales;
+- confirmá la estructura;
+- verificá qué fixes quedaron realmente incorporados;
+- comprobá que fix80 y fix81 no se hayan pisado;
+- no asumas que el código quedó igual a los ZIP entregados;
+- recién después analizá o propongas cambios.
+
+======================================================================
+REGLAS OBLIGATORIAS
+======================================================================
+
+- No inventar nada.
+- No inventar tablas, clases, handlers, APIs, controles ni carpetas.
+- No cambiar arquitectura sin necesidad.
+- No reescribir cosas que funcionan.
+- No usar código de versiones anteriores sin revisar el ZIP.
+- Trabajar siempre sobre el código real.
+- Cambios mínimos y precisos.
+- Entregar correcciones como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No mandar archivos completos no inspeccionados.
+- No usar diff con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría larga con una corrección puntual.
+- Evaluar el funcionamiento productivo completo.
+- No tocar motor, HDocLoad, extractores, mapa, queue, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar ni corregir datos de WF_Tarea sin identificar primero su origen.
+
+======================================================================
+ESTADO YA VALIDADO
+======================================================================
+
+Export JSON:
+
+- Ya genera:
+  "Meta": {
+    "Name": "DEMO.ORDEN_COMPRA.APROBACION"
+  }
+- Este punto está cerrado.
+
+OC moderna:
+
+- Workflow: DEMO.ORDEN_COMPRA.APROBACION.
+- defId observado: 10188.
+- Instancia real validada: 170544.
+- Archivo: OC_001.pdf.
+- Tareas:
+  - 110311 COMPRAS, APTO.
+  - 110312 ADM_FIN, APTO.
+- Total extraído: 153600.
+- Fecha extraída.
+- Número, proveedor y CUIT quedaron vacíos.
+- El workflow tomó correctamente la rama de revisión manual.
+- No creó tarea DIR_GENERAL porque total > 200000 fue False.
+- Finalizó correctamente.
+- El archivo pasó a Processed.
+- No reabrir el workflow salvo regresión.
+
+======================================================================
+PRIMER FOCO — INTEGRACIÓN REAL DE FIX80 Y FIX81
+======================================================================
+
+Inspeccionar primero:
+
+- Default.aspx.
+- Default.aspx.cs.
+- Default.aspx.designer.cs.
+- Controls/WsTopbar.ascx.
+- WF_Tareas.aspx.
+- WF_Tareas.aspx.cs.
+- WF_Tareas.aspx.designer.cs.
+- Api/WF_TaskCounters.ashx.
+- Api/WF_TaskCounters.ashx.cs.
+- Helpers reales de seguridad, permisos y roles.
+
+Confirmar que:
+
+- Seguridad y permisos aparece en Accesos rápidos.
+- Seguridad y permisos aparece como tarjeta principal.
+- No existe un acceso a Seguridad en la barra superior.
+- La tarjeta y el acceso rápido respetan ADMIN o SEGURIDAD_ABM.
+- La barra superior no redirige Administración a Seguridad.
+- No hay enlaces duplicados.
+
+======================================================================
+SEGUNDO FOCO — CONTADORES Y MI BANDEJA
+======================================================================
+
+Problema observado antes de fix80:
+
+OMARD\OMARD:
+
+- Inicio mostraba Total 1 / A mí 1.
+- WF_Tareas.aspx mostraba Mi bandeja 0.
+
+OMARD\USUARIO5:
+
+- El indicador mostraba 5.
+- La grilla mostraba 4.
+
+Diagnóstico entregado:
+
+- El contador consultaba WF_Tarea directamente.
+- La grilla hacía INNER JOIN con WF_Instancia.
+- Una tarea huérfana podía sumar en el contador y no aparecer en la grilla.
+
+Validar que el ZIP nuevo haya incorporado una solución consistente.
+
+Resultado esperado:
+
+- Contador y grilla usan el mismo universo de tareas válidas.
+- OMARD\OMARD muestra 0 si su bandeja tiene 0.
+- OMARD\USUARIO5 muestra 4 si su bandeja válida tiene 4.
+- A mí y Por rol son cifras distintas y comprensibles.
+- Reproceso no duplica otro contador.
+- La vista personal abre por defecto.
+- Ver todas (administración) es una opción explícita.
+- Ser administrador no debe convertir silenciosamente Mi bandeja
+  en una lista global.
+
+No borrar tareas huérfanas todavía.
+
+Incluir, si hace falta, una consulta SQL de sólo lectura para identificar:
+
+- WF_Tarea.Id.
+- WF_Tarea.WF_InstanciaId.
+- Estado de la tarea.
+- UsuarioAsignado.
+- RolDestino.
+- Si la WF_Instancia existe.
+- Fecha de creación.
+- Nodo y título.
+
+======================================================================
+TERCER FOCO — ACTUALIZACIÓN AUTOMÁTICA
+======================================================================
+
+Validar en navegador:
+
+1. Abrir Inicio.
+2. Crear una tarea real para el usuario o alguno de sus roles.
+3. No refrescar manualmente.
+4. Esperar hasta 15 segundos.
+5. Confirmar que cambian:
+   - tarjeta Mis tareas;
+   - indicador superior.
+6. Abrir la tarea y completarla.
+7. Volver a Inicio.
+8. Confirmar que el contador baja sin F5.
+9. Confirmar que al regresar a la pestaña se fuerza una actualización.
+
+Si no funciona:
+
+- inspeccionar JavaScript real;
+- inspeccionar URL del handler;
+- inspeccionar caché HTTP;
+- inspeccionar errores de consola;
+- no inventar una solución antes de revisar el código.
+
+======================================================================
+NO TRABAJAR TODAVÍA
+======================================================================
+
+No avanzar todavía con:
+
+- VEP.
+- IA clasificadora documental.
+- Asociación de documentos a instancias existentes.
+- Nuevos nodos del Constructor IA.
+- Cambios de extractores de OC.
+- Rediseño de base.
+- Cambios de motor.
+- Estado Finalizado con advertencias.
+- Borrado de tareas históricas.
+
+Primero cerrar Seguridad y consistencia de tareas.
+
+======================================================================
+ENTREGA
+======================================================================
+
+Cuando corresponda un fix:
+
+- ZIP de reemplazo.
+- Estructura real.
+- Archivos completos.
+- LEEME.
+- Explicación breve:
+  causa,
+  corrección,
+  archivos,
+  configuración,
+  prueba,
+  resultado esperado.
+
+No quiero teoría extensa ni código inventado.
+Quiero diagnóstico sobre el ZIP real y una corrección mínima, profesional
+y comprobable.

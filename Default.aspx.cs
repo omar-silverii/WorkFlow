@@ -22,13 +22,26 @@ namespace Intranet.WorkflowStudio.WebForms
 
         protected void Page_Load(object sender, EventArgs e)
         {
-           
+            ConfigurarAccesos();
 
             if (!IsPostBack)
             {
                 BindActividadDocumental48h();
                 CargarKpiEntidades();
             }
+        }
+
+        private void ConfigurarAccesos()
+        {
+            string userKey = (Context?.User?.Identity?.IsAuthenticated == true)
+                ? (Context.User.Identity.Name ?? "").Trim()
+                : "";
+
+            bool puedeAdministrarSeguridad = userKey.Length > 0
+                && RbacService.HasAnyPermiso(userKey, "ADMIN", "SEGURIDAD_ABM");
+
+            lnkSeguridadRapida.Visible = puedeAdministrarSeguridad;
+            pnlSeguridadCard.Visible = puedeAdministrarSeguridad;
         }
 
         private void CargarKpiEntidades()

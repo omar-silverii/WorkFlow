@@ -50,8 +50,8 @@
             <!-- Encabezado de página -->
             <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
                 <div>
-                    <div class="ws-title" style="font-size:1.25rem;">Tareas humanas</div>
-                    <div class="ws-muted small">Mis tareas y tareas asignadas por rol/usuario.</div>
+                    <div class="ws-title" style="font-size:1.25rem;">Mis tareas</div>
+                    <div class="ws-muted small">Tareas asignadas directamente a tu usuario o a alguno de tus roles activos.</div>
                 </div>
 
                 <div class="d-flex gap-2">
@@ -69,19 +69,27 @@
             <div class="card ws-card mb-3">
                 <div class="card-body">
                     <div class="row g-2 align-items-end">
-                        <div class="col-12 col-lg-6">
+                        <div class="col-12 col-lg-5">
                             <label class="form-label mb-1">Texto a buscar (título / descripción / rol / usuario)</label>
                             <asp:TextBox ID="txtFiltro" runat="server" CssClass="form-control form-control-sm" />
                         </div>
 
-                        <div class="col-12 col-lg-3">
+                        <div class="col-12 col-lg-2">
                             <div class="form-check mt-4">
                                 <asp:CheckBox ID="chkSoloPendientes" runat="server" CssClass="form-check-input" Checked="true" />
                                 <label class="form-check-label" for="chkSoloPendientes">Sólo pendientes</label>
                             </div>
                         </div>
 
-                        <div class="col-12 col-lg-3 d-flex gap-2">
+                        <asp:Panel ID="pnlVistaAdmin" runat="server" CssClass="col-12 col-lg-3" Visible="false">
+                            <div class="form-check mt-4">
+                                <asp:CheckBox ID="chkVerTodas" runat="server" CssClass="form-check-input"
+                                    AutoPostBack="true" OnCheckedChanged="chkVerTodas_CheckedChanged" />
+                                <label class="form-check-label" for="chkVerTodas">Ver todas (administración)</label>
+                            </div>
+                        </asp:Panel>
+
+                        <div class="col-12 col-lg-2 d-flex gap-2">
                             <asp:Button ID="btnBuscar" runat="server" Text="Buscar" CssClass="btn btn-sm btn-primary"
                                 OnClick="btnBuscar_Click" />
                             <asp:Button ID="btnLimpiar" runat="server" Text="Limpiar" CssClass="btn btn-sm btn-outline-secondary"
@@ -95,7 +103,10 @@
             <div class="card ws-card">
                 <div class="card-body">
                     <div class="d-flex align-items-center justify-content-between mb-2">
-                        <div class="ws-title">Listado</div>
+                        <div>
+                            <div class="ws-title">Listado</div>
+                            <asp:Label ID="lblVistaActual" runat="server" CssClass="ws-muted small" />
+                        </div>
                         <div class="ws-muted small">Paginado 20</div>
                     </div>
 
@@ -106,6 +117,7 @@
                             DataKeyNames="Id"
                             AllowPaging="True"
                             PageSize="20"
+                            EmptyDataText="No hay tareas para la vista y los filtros seleccionados."
                             OnRowCommand="gvTareas_RowCommand"
                             OnPageIndexChanging="gvTareas_PageIndexChanging">
                             <Columns>
