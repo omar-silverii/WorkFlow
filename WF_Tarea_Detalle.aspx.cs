@@ -8,6 +8,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Web;
 using System.Web.UI.WebControls;
@@ -68,6 +69,44 @@ namespace Intranet.WorkflowStudio.WebForms
             public string CerradoPor;
             public DateTime? CerradoEn;
             public string Resultado;
+        }
+
+        private sealed class ReprocesoTareaRow
+        {
+            public long TareaId;
+            public string NodoId;
+            public string Titulo;
+            public string RolDestino;
+            public string Estado;
+            public string Resultado;
+            public string Datos;
+            public string CerradoPor;
+            public string Observacion;
+            public string VolverA;
+            public string FrameId;
+            public int Cycle;
+            public DateTime FechaCreacion;
+            public DateTime? FechaCierre;
+        }
+
+        private sealed class ReprocesoCicloRow
+        {
+            public int Numero;
+            public ReprocesoTareaRow Pedido;
+            public List<ReprocesoTareaRow> Respuestas = new List<ReprocesoTareaRow>();
+            public ReprocesoTareaRow Revision;
+            public string Destino;
+            public bool Abierto;
+        }
+
+        private sealed class ReprocesoAdjuntoRow
+        {
+            public long TareaId;
+            public string FileName;
+            public string StoredFileName;
+            public string Tipo;
+            public string Fecha;
+            public string Usuario;
         }
 
         private sealed class NotificacionPendienteRow
@@ -800,6 +839,7 @@ WHERE i.Id = @Id;", cn))
 
                 ShowAdjMsg("Adjunto cargado OK.", isError: false);
                 BindAdjuntos();
+                CargarPedidosPendientes(tareaId, instanciaId);
             }
             catch (Exception ex)
             {
@@ -862,6 +902,7 @@ WHERE i.Id = @Id;", cn))
 
                 ShowAdjMsg("Adjunto eliminado OK.", isError: false);
                 BindAdjuntos();
+                CargarPedidosPendientes(tareaIdActual, instanciaId);
             }
             catch (Exception ex)
             {
@@ -934,7 +975,7 @@ WHERE i.Id = @Id;", cn))
         {
             try
             {
-                string html = RenderObservacionesInstancia(instanciaId, tareaIdActual);
+                string html = RenderCircuitoReproceso(instanciaId, tareaIdActual);
 
                 if (string.IsNullOrWhiteSpace(html))
                 {
@@ -946,11 +987,851 @@ WHERE i.Id = @Id;", cn))
                 litPedidosPendientes.Text = html;
                 pnlPedidosPendientes.Visible = true;
             }
-            catch
+            catch (Exception ex)
             {
-                pnlPedidosPendientes.Visible = false;
-                litPedidosPendientes.Text = "";
+                System.Diagnostics.Trace.TraceError(
+                    "WF_Tarea_Detalle: error al cargar el circuito de reproceso de la instancia {0}, tarea {1}. {2}",
+                    instanciaId,
+                    tareaIdActual,
+                    ex);
+
+                pnlPedidosPendientes.Visible = true;
+                litPedidosPendientes.Text =
+                    "<div class='alert alert-warning mb-0'>" +
+                    "No se pudo reconstruir el circuito de reproceso de esta instancia. " +
+                    "El resto de la tarea continúa disponible." +
+                    "</div>";
             }
+        }
+
+        private string RenderCircuitoReproceso(long instanciaId, long tareaIdActual)
+        {
+            var tareas = ObtenerTareasCircuito(instanciaId);
+            var ciclos = ConstruirCiclosReproceso(tareas);
+
+            // Sin un rechazo real no hay circuito de reproceso que mostrar.
+            if (ciclos.Count == 0)
+                return "";
+
+            var adjuntos = ObtenerAdjuntosCircuito(instanciaId);
+            var ciclosOrdenados = ciclos.OrderByDescending(x => x.Numero).ToList();
+            var tareaActual = tareas.FirstOrDefault(x => x.TareaId == tareaIdActual);
+            var cicloActual = ciclosOrdenados.FirstOrDefault(x =>
+                x.Pedido.TareaId == tareaIdActual ||
+                x.Respuestas.Any(r => r.TareaId == tareaIdActual) ||
+                (x.Revision != null && x.Revision.TareaId == tareaIdActual));
+
+            var sb = new StringBuilder();
+            sb.Append(RenderResumenContextualReproceso(
+                ciclosOrdenados,
+                cicloActual,
+                tareaActual,
+                adjuntos,
+                instanciaId,
+                tareaIdActual));
+
+            if (cicloActual != null)
+            {
+                // La tarea pertenece a un ciclo concreto. Se muestra ese ciclo una sola vez.
+                sb.Append("<details class='ws-reprocess-details'>");
+                sb.Append("<summary class='fw-semibold ws-pointer'>Ver trazabilidad completa de este reproceso</summary>");
+                sb.Append("<div class='mt-3'>");
+                sb.Append(RenderCicloReproceso(cicloActual, adjuntos, instanciaId, tareaIdActual));
+                sb.Append("</div>");
+                sb.Append("</details>");
+
+                var otrosCiclos = ciclosOrdenados
+                    .Where(x => !object.ReferenceEquals(x, cicloActual))
+                    .ToList();
+
+                if (otrosCiclos.Count > 0)
+                {
+                    string cantidadOtros = otrosCiclos.Count + " reproceso" + (otrosCiclos.Count == 1 ? "" : "s");
+                    sb.Append("<details class='ws-reprocess-details mt-3'>");
+                    sb.Append("<summary class='fw-semibold ws-pointer'>Ver otros reprocesos de la instancia " +
+                              "<span class='text-muted fw-normal'>(" + Server.HtmlEncode(cantidadOtros) + ")</span></summary>");
+                    sb.Append("<div class='mt-3'>");
+
+                    foreach (var ciclo in otrosCiclos)
+                        sb.Append(RenderCicloReproceso(ciclo, adjuntos, instanciaId, tareaIdActual));
+
+                    sb.Append("</div>");
+                    sb.Append("</details>");
+                }
+            }
+            else
+            {
+                // La tarea es anterior o posterior al reproceso. El historial queda disponible,
+                // pero no se presenta como si la tarea formara parte del ciclo.
+                string cantidadCiclos = ciclos.Count + " ciclo" + (ciclos.Count == 1 ? "" : "s");
+                sb.Append("<details class='ws-reprocess-details'>");
+                sb.Append("<summary class='fw-semibold ws-pointer'>Ver historial de reprocesos de la instancia " +
+                          "<span class='text-muted fw-normal'>(" + Server.HtmlEncode(cantidadCiclos) + ")</span></summary>");
+                sb.Append("<div class='mt-3'>");
+
+                foreach (var ciclo in ciclosOrdenados)
+                    sb.Append(RenderCicloReproceso(ciclo, adjuntos, instanciaId, tareaIdActual));
+
+                sb.Append("</div>");
+                sb.Append("</details>");
+            }
+
+            // El registro genérico de observaciones no se repite aquí: pedido, respuesta,
+            // documentos y revisión ya están contenidos en la trazabilidad del ciclo.
+            return sb.ToString();
+        }
+
+        private string ObtenerTituloDetalleRelacionado(ReprocesoCicloRow ciclo, long tareaIdActual)
+        {
+            if (ciclo == null)
+                return "Ver detalle relacionado con esta tarea";
+
+            if (ciclo.Pedido != null && ciclo.Pedido.TareaId == tareaIdActual)
+                return "Ver detalle del pedido y su resolución";
+
+            if (ciclo.Respuestas.Any(x => x.TareaId == tareaIdActual))
+                return "Ver detalle de esta respuesta";
+
+            if (ciclo.Revision != null && ciclo.Revision.TareaId == tareaIdActual)
+                return "Ver detalle de esta revisión";
+
+            return "Ver detalle relacionado con esta tarea";
+        }
+
+        private string RenderResumenContextualReproceso(
+            List<ReprocesoCicloRow> ciclosOrdenados,
+            ReprocesoCicloRow cicloActual,
+            ReprocesoTareaRow tareaActual,
+            List<ReprocesoAdjuntoRow> adjuntos,
+            long instanciaId,
+            long tareaIdActual)
+        {
+            var ultimoCiclo = ciclosOrdenados.First();
+            int abiertos = ciclosOrdenados.Count(x => x.Abierto);
+            bool tareaPendiente = tareaActual != null && !EsTareaCerrada(tareaActual.Estado);
+
+            var respuestaActual = cicloActual == null
+                ? null
+                : cicloActual.Respuestas.FirstOrDefault(x => x.TareaId == tareaIdActual);
+
+            bool esPedidoActual = cicloActual != null &&
+                                  cicloActual.Pedido != null &&
+                                  cicloActual.Pedido.TareaId == tareaIdActual;
+
+            bool esRespuestaActual = respuestaActual != null;
+
+            bool esRevisionActual = cicloActual != null &&
+                                    cicloActual.Revision != null &&
+                                    cicloActual.Revision.TareaId == tareaIdActual;
+
+            bool esRespuestaPendiente = cicloActual != null &&
+                                        cicloActual.Abierto &&
+                                        tareaPendiente &&
+                                        esRespuestaActual;
+
+            bool esRevisionPendiente = cicloActual != null &&
+                                        cicloActual.Abierto &&
+                                        tareaPendiente &&
+                                        esRevisionActual;
+
+            var sb = new StringBuilder();
+
+            if (esRespuestaPendiente)
+            {
+                string solicitadoPor = !string.IsNullOrWhiteSpace(cicloActual.Pedido.CerradoPor)
+                    ? cicloActual.Pedido.CerradoPor
+                    : cicloActual.Pedido.RolDestino;
+                DateTime fechaPedido = cicloActual.Pedido.FechaCierre ?? cicloActual.Pedido.FechaCreacion;
+                string pedido = string.IsNullOrWhiteSpace(cicloActual.Pedido.Observacion)
+                    ? "Se solicitó corregir o completar esta etapa."
+                    : cicloActual.Pedido.Observacion;
+
+                sb.Append("<div class='ws-reprocess-summary ws-reprocess-action p-3 mb-3'>");
+                sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+                sb.Append("<div class='flex-grow-1'>");
+                sb.Append("<div class='fw-semibold'>Acción requerida</div>");
+                sb.Append("<div class='mt-2'><b>Pedido:</b> " + HtmlConSaltos(pedido) + "</div>");
+                sb.Append("<div class='small text-muted mt-2'><b>Solicitado por:</b> " +
+                          Server.HtmlEncode(string.IsNullOrWhiteSpace(solicitadoPor) ? "—" : solicitadoPor) +
+                          " · " + Server.HtmlEncode(fechaPedido.ToString("dd/MM/yyyy HH:mm")) + "</div>");
+                sb.Append("<div class='small text-muted'><b>Destino:</b> " + Server.HtmlEncode(cicloActual.Destino) + "</div>");
+                sb.Append("<div class='mt-3 d-flex flex-wrap gap-2'>");
+                sb.Append("<a class='btn btn-sm btn-outline-primary' href='#adjuntos'>Adjuntar documentación</a>");
+                sb.Append("<a class='btn btn-sm btn-primary' href='#resolucion'>Responder y completar la tarea</a>");
+                sb.Append("</div>");
+                sb.Append("</div>");
+                sb.Append("<span class='badge bg-warning text-dark'>Pendiente de respuesta</span>");
+                sb.Append("</div>");
+                sb.Append("</div>");
+                return sb.ToString();
+            }
+
+            if (esRevisionPendiente)
+            {
+                var respuesta = cicloActual.Respuestas
+                    .Where(x => EsTareaCerrada(x.Estado))
+                    .OrderByDescending(x => x.FechaCierre ?? x.FechaCreacion)
+                    .FirstOrDefault();
+
+                string pedido = string.IsNullOrWhiteSpace(cicloActual.Pedido.Observacion)
+                    ? "Corrección solicitada."
+                    : cicloActual.Pedido.Observacion;
+                string textoRespuesta = respuesta == null || string.IsNullOrWhiteSpace(respuesta.Observacion)
+                    ? "La etapa anterior informó que completó la corrección solicitada."
+                    : respuesta.Observacion;
+
+                var idsRespuesta = new HashSet<long>(cicloActual.Respuestas.Select(x => x.TareaId));
+                var docs = adjuntos.Where(x => idsRespuesta.Contains(x.TareaId)).ToList();
+
+                sb.Append("<div class='ws-reprocess-summary ws-reprocess-review p-3 mb-3'>");
+                sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+                sb.Append("<div class='flex-grow-1'>");
+                sb.Append("<div class='fw-semibold'>Respuesta recibida</div>");
+                sb.Append("<div class='small mt-2'><b>Pedido original:</b> " + HtmlConSaltos(pedido) + "</div>");
+                sb.Append("<div class='mt-2'><b>Respuesta:</b> " + HtmlConSaltos(textoRespuesta) + "</div>");
+                sb.Append(RenderAdjuntosResumen(docs, instanciaId, tareaIdActual));
+                sb.Append("<div class='mt-3'>");
+                sb.Append("<a class='btn btn-sm btn-primary' href='#resolucion'>Revisar y resolver la tarea</a>");
+                sb.Append("</div>");
+                sb.Append("</div>");
+                sb.Append("<span class='badge bg-primary'>Pendiente de revisión</span>");
+                sb.Append("</div>");
+                sb.Append("</div>");
+                return sb.ToString();
+            }
+
+            if (esPedidoActual)
+                return RenderResumenPedidoConsultado(cicloActual, adjuntos, instanciaId, tareaIdActual);
+
+            if (esRespuestaActual)
+                return RenderResumenRespuestaConsultada(cicloActual, respuestaActual, adjuntos, instanciaId, tareaIdActual);
+
+            if (esRevisionActual)
+                return RenderResumenRevisionConsultada(cicloActual, adjuntos, instanciaId, tareaIdActual);
+
+            string cantidadCiclos = ciclosOrdenados.Count + " ciclo" + (ciclosOrdenados.Count == 1 ? "" : "s");
+            string estadoGeneral = abiertos > 0 ? "Reproceso en curso" : "Reproceso resuelto";
+            string estadoClase = abiertos > 0 ? "bg-warning text-dark" : "bg-success";
+            DateTime fechaUltimoPedido = ultimoCiclo.Pedido.FechaCierre ?? ultimoCiclo.Pedido.FechaCreacion;
+
+            var primerCiclo = ciclosOrdenados.OrderBy(x => x.Numero).First();
+            bool esAntecedente = tareaActual != null && EsTareaAnteriorA(tareaActual, primerCiclo.Pedido);
+
+            sb.Append("<div class='ws-reprocess-summary p-3 mb-3'>");
+            sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+            sb.Append("<div class='flex-grow-1'>");
+
+            if (esAntecedente)
+            {
+                sb.Append("<div class='fw-semibold'>Antecedente de un reproceso posterior</div>");
+                sb.Append("<div class='small text-muted mt-1'>Esta tarea ocurrió antes del pedido de corrección y no forma parte de la respuesta ni de la revisión.</div>");
+            }
+            else
+            {
+                sb.Append("<div class='fw-semibold'>Reproceso previo de la instancia</div>");
+                sb.Append("<div class='small text-muted mt-1'>Esta etapa no forma parte del ciclo; el reproceso pertenece a tareas anteriores de la misma instancia.</div>");
+            }
+
+            sb.Append("<div class='small text-muted mt-2'>" + Server.HtmlEncode(cantidadCiclos) +
+                      "; último pedido: " + Server.HtmlEncode(NombreEtapa(ultimoCiclo.Pedido)) +
+                      " · " + Server.HtmlEncode(fechaUltimoPedido.ToString("dd/MM/yyyy HH:mm")) + "</div>");
+            sb.Append("</div>");
+            sb.Append("<span class='badge " + estadoClase + "'>" + Server.HtmlEncode(estadoGeneral) + "</span>");
+            sb.Append("</div>");
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private bool EsTareaAnteriorA(ReprocesoTareaRow tarea, ReprocesoTareaRow referencia)
+        {
+            if (tarea == null || referencia == null)
+                return false;
+
+            if (tarea.FechaCreacion < referencia.FechaCreacion)
+                return true;
+
+            if (tarea.FechaCreacion > referencia.FechaCreacion)
+                return false;
+
+            return tarea.TareaId < referencia.TareaId;
+        }
+
+        private string RenderResumenPedidoConsultado(
+            ReprocesoCicloRow ciclo,
+            List<ReprocesoAdjuntoRow> adjuntos,
+            long instanciaId,
+            long tareaIdActual)
+        {
+            string pedido = string.IsNullOrWhiteSpace(ciclo.Pedido.Observacion)
+                ? "Se solicitó corregir o completar una etapa anterior."
+                : ciclo.Pedido.Observacion;
+
+            var respuesta = ciclo.Respuestas
+                .Where(x => EsTareaCerrada(x.Estado))
+                .OrderByDescending(x => x.FechaCierre ?? x.FechaCreacion)
+                .FirstOrDefault();
+
+            var idsRespuesta = new HashSet<long>(ciclo.Respuestas.Select(x => x.TareaId));
+            var docs = adjuntos.Where(x => idsRespuesta.Contains(x.TareaId)).ToList();
+
+            string estadoTexto;
+            string estadoClase;
+            if (ciclo.Abierto)
+            {
+                estadoTexto = ciclo.Revision != null ? "Pendiente de revisión" : "Pendiente de respuesta";
+                estadoClase = "bg-warning text-dark";
+            }
+            else if (ciclo.Revision != null && EsResultadoRechazado(ciclo.Revision.Resultado))
+            {
+                estadoTexto = "Devuelto nuevamente";
+                estadoClase = "bg-danger";
+            }
+            else
+            {
+                estadoTexto = "Resuelto";
+                estadoClase = "bg-success";
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='ws-reprocess-summary p-3 mb-3'>");
+            sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+            sb.Append("<div class='flex-grow-1'>");
+            sb.Append("<div class='fw-semibold'>Pedido de corrección emitido</div>");
+            sb.Append("<div class='mt-2'><b>Pedido:</b> " + HtmlConSaltos(pedido) + "</div>");
+            sb.Append("<div class='small text-muted mt-2'><b>Destino:</b> " + Server.HtmlEncode(ciclo.Destino) + "</div>");
+
+            if (respuesta != null)
+            {
+                string textoRespuesta = string.IsNullOrWhiteSpace(respuesta.Observacion)
+                    ? "La etapa de respuesta fue completada."
+                    : respuesta.Observacion;
+                sb.Append("<div class='mt-2'><b>Respuesta recibida:</b> " + HtmlConSaltos(textoRespuesta) + "</div>");
+                sb.Append(RenderAdjuntosResumen(docs, instanciaId, tareaIdActual));
+            }
+
+            if (ciclo.Revision != null && EsTareaCerrada(ciclo.Revision.Estado))
+            {
+                string decision = !string.IsNullOrWhiteSpace(ciclo.Revision.Resultado)
+                    ? ciclo.Revision.Resultado
+                    : ciclo.Revision.Estado;
+                sb.Append("<div class='small mt-2'><b>Resultado de la revisión:</b> " + Server.HtmlEncode(decision) + "</div>");
+            }
+
+            sb.Append("</div>");
+            sb.Append("<span class='badge " + estadoClase + "'>" + Server.HtmlEncode(estadoTexto) + "</span>");
+            sb.Append("</div>");
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private string RenderResumenRespuestaConsultada(
+            ReprocesoCicloRow ciclo,
+            ReprocesoTareaRow respuestaActual,
+            List<ReprocesoAdjuntoRow> adjuntos,
+            long instanciaId,
+            long tareaIdActual)
+        {
+            string pedido = string.IsNullOrWhiteSpace(ciclo.Pedido.Observacion)
+                ? "Corrección solicitada."
+                : ciclo.Pedido.Observacion;
+            string respuesta = string.IsNullOrWhiteSpace(respuestaActual.Observacion)
+                ? "La tarea fue completada sin observación."
+                : respuestaActual.Observacion;
+
+            var docs = adjuntos.Where(x => x.TareaId == respuestaActual.TareaId).ToList();
+
+            string estadoTexto;
+            string estadoClase;
+            if (ciclo.Revision == null || !EsTareaCerrada(ciclo.Revision.Estado))
+            {
+                estadoTexto = "Pendiente de revisión";
+                estadoClase = "bg-warning text-dark";
+            }
+            else if (EsResultadoRechazado(ciclo.Revision.Resultado))
+            {
+                estadoTexto = "Devuelta nuevamente";
+                estadoClase = "bg-danger";
+            }
+            else
+            {
+                estadoTexto = "Aceptada";
+                estadoClase = "bg-success";
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='ws-reprocess-summary p-3 mb-3'>");
+            sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+            sb.Append("<div class='flex-grow-1'>");
+            sb.Append("<div class='fw-semibold'>Respuesta enviada</div>");
+            sb.Append("<div class='small mt-2'><b>Pedido recibido:</b> " + HtmlConSaltos(pedido) + "</div>");
+            sb.Append("<div class='mt-2'><b>Tu respuesta:</b> " + HtmlConSaltos(respuesta) + "</div>");
+            sb.Append(RenderAdjuntosResumen(docs, instanciaId, tareaIdActual));
+
+            if (ciclo.Revision != null && EsTareaCerrada(ciclo.Revision.Estado))
+            {
+                string decision = !string.IsNullOrWhiteSpace(ciclo.Revision.Resultado)
+                    ? ciclo.Revision.Resultado
+                    : ciclo.Revision.Estado;
+                sb.Append("<div class='small mt-2'><b>Resultado posterior:</b> " + Server.HtmlEncode(decision));
+                if (!string.IsNullOrWhiteSpace(ciclo.Revision.Observacion))
+                    sb.Append(" · " + HtmlConSaltos(ciclo.Revision.Observacion));
+                sb.Append("</div>");
+            }
+
+            sb.Append("</div>");
+            sb.Append("<span class='badge " + estadoClase + "'>" + Server.HtmlEncode(estadoTexto) + "</span>");
+            sb.Append("</div>");
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private string RenderResumenRevisionConsultada(
+            ReprocesoCicloRow ciclo,
+            List<ReprocesoAdjuntoRow> adjuntos,
+            long instanciaId,
+            long tareaIdActual)
+        {
+            var respuesta = ciclo.Respuestas
+                .Where(x => EsTareaCerrada(x.Estado))
+                .OrderByDescending(x => x.FechaCierre ?? x.FechaCreacion)
+                .FirstOrDefault();
+
+            string pedido = string.IsNullOrWhiteSpace(ciclo.Pedido.Observacion)
+                ? "Corrección solicitada."
+                : ciclo.Pedido.Observacion;
+            string textoRespuesta = respuesta == null || string.IsNullOrWhiteSpace(respuesta.Observacion)
+                ? "La etapa anterior informó que completó la corrección solicitada."
+                : respuesta.Observacion;
+
+            var idsRespuesta = new HashSet<long>(ciclo.Respuestas.Select(x => x.TareaId));
+            var docs = adjuntos.Where(x => idsRespuesta.Contains(x.TareaId)).ToList();
+
+            string decision = !string.IsNullOrWhiteSpace(ciclo.Revision.Resultado)
+                ? ciclo.Revision.Resultado
+                : ciclo.Revision.Estado;
+            bool rechazada = EsResultadoRechazado(ciclo.Revision.Resultado);
+            string estadoTexto = rechazada ? "Devuelta nuevamente" : "Aprobada";
+            string estadoClase = rechazada ? "bg-danger" : "bg-success";
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='ws-reprocess-summary p-3 mb-3'>");
+            sb.Append("<div class='d-flex flex-wrap align-items-start justify-content-between gap-2'>");
+            sb.Append("<div class='flex-grow-1'>");
+            sb.Append("<div class='fw-semibold'>Revisión realizada</div>");
+            sb.Append("<div class='small mt-2'><b>Pedido original:</b> " + HtmlConSaltos(pedido) + "</div>");
+            sb.Append("<div class='mt-2'><b>Respuesta revisada:</b> " + HtmlConSaltos(textoRespuesta) + "</div>");
+            sb.Append(RenderAdjuntosResumen(docs, instanciaId, tareaIdActual));
+            sb.Append("<div class='mt-2'><b>Decisión:</b> " + Server.HtmlEncode(decision));
+            if (!string.IsNullOrWhiteSpace(ciclo.Revision.Observacion))
+                sb.Append(" · " + HtmlConSaltos(ciclo.Revision.Observacion));
+            sb.Append("</div>");
+            sb.Append("</div>");
+            sb.Append("<span class='badge " + estadoClase + "'>" + Server.HtmlEncode(estadoTexto) + "</span>");
+            sb.Append("</div>");
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private string RenderAdjuntosResumen(
+            List<ReprocesoAdjuntoRow> docs,
+            long instanciaId,
+            long tareaIdActual)
+        {
+            if (docs == null || docs.Count == 0)
+                return "<div class='small text-muted mt-2'><b>Documentación:</b> sin archivos asociados a la respuesta.</div>";
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='small mt-2'><b>Documentación recibida:</b> ");
+
+            for (int i = 0; i < docs.Count; i++)
+            {
+                var doc = docs[i];
+                string nombre = !string.IsNullOrWhiteSpace(doc.FileName) ? doc.FileName : doc.StoredFileName;
+                string url = ResolveUrl("~/API/WF_Upload_Get.ashx") +
+                             "?inst=" + instanciaId +
+                             "&tarea=" + doc.TareaId +
+                             "&authTarea=" + tareaIdActual +
+                             "&f=" + HttpUtility.UrlEncode(doc.StoredFileName ?? "");
+
+                if (i > 0) sb.Append(" · ");
+                sb.Append("<a href='" + HttpUtility.HtmlAttributeEncode(url) + "' target='_blank'>" +
+                          Server.HtmlEncode(nombre) + "</a>");
+            }
+
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private List<ReprocesoTareaRow> ObtenerTareasCircuito(long instanciaId)
+        {
+            var list = new List<ReprocesoTareaRow>();
+
+            using (var cn = new SqlConnection(Cnn))
+            using (var cmd = new SqlCommand(@"
+SELECT
+    t.Id,
+    t.NodoId,
+    t.Titulo,
+    t.RolDestino,
+    t.Estado,
+    t.Resultado,
+    t.Datos,
+    t.FechaCreacion,
+    t.FechaCierre
+FROM dbo.WF_Tarea t
+WHERE
+    t.WF_InstanciaId = @InstanciaId
+    AND t.NodoTipo = 'human.task'
+ORDER BY
+    t.FechaCreacion ASC,
+    t.Id ASC;", cn))
+            {
+                cmd.Parameters.Add("@InstanciaId", SqlDbType.BigInt).Value = instanciaId;
+                cn.Open();
+
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        string datos = dr["Datos"] as string;
+                        var row = new ReprocesoTareaRow
+                        {
+                            TareaId = Convert.ToInt64(dr["Id"]),
+                            NodoId = dr["NodoId"] == DBNull.Value ? "" : Convert.ToString(dr["NodoId"]),
+                            Titulo = dr["Titulo"] == DBNull.Value ? "" : Convert.ToString(dr["Titulo"]),
+                            RolDestino = dr["RolDestino"] == DBNull.Value ? "" : Convert.ToString(dr["RolDestino"]),
+                            Estado = dr["Estado"] == DBNull.Value ? "" : Convert.ToString(dr["Estado"]),
+                            Resultado = dr["Resultado"] == DBNull.Value ? "" : Convert.ToString(dr["Resultado"]),
+                            Datos = datos,
+                            CerradoPor = ExtraerCerradoPorDesdeDatos(datos),
+                            Observacion = ExtraerObservacionDesdeDatos(datos),
+                            VolverA = ExtraerVolverADesdeDatosVista(datos),
+                            FrameId = ExtraerFrameIdDesdeDatos(datos),
+                            Cycle = ExtraerCycleDesdeDatos(datos),
+                            FechaCreacion = Convert.ToDateTime(dr["FechaCreacion"]),
+                            FechaCierre = dr["FechaCierre"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(dr["FechaCierre"])
+                        };
+
+                        if (!row.FechaCierre.HasValue)
+                            row.FechaCierre = ExtraerCerradoEnDesdeDatos(datos);
+
+                        list.Add(row);
+                    }
+                }
+            }
+
+            return list;
+        }
+
+        private List<ReprocesoCicloRow> ConstruirCiclosReproceso(List<ReprocesoTareaRow> tareas)
+        {
+            var ciclos = new List<ReprocesoCicloRow>();
+            if (tareas == null || tareas.Count == 0) return ciclos;
+
+            int numero = 0;
+
+            for (int i = 0; i < tareas.Count; i++)
+            {
+                var pedido = tareas[i];
+                if (!EsResultadoRechazado(pedido.Resultado))
+                    continue;
+
+                numero++;
+                int revisionIndex = -1;
+
+                for (int j = i + 1; j < tareas.Count; j++)
+                {
+                    if (string.Equals(tareas[j].NodoId, pedido.NodoId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        revisionIndex = j;
+                        break;
+                    }
+                }
+
+                var ciclo = new ReprocesoCicloRow
+                {
+                    Numero = numero,
+                    Pedido = pedido,
+                    Revision = revisionIndex >= 0 ? tareas[revisionIndex] : null
+                };
+
+                int limite = revisionIndex >= 0 ? revisionIndex : tareas.Count;
+                for (int j = i + 1; j < limite; j++)
+                    ciclo.Respuestas.Add(tareas[j]);
+
+                ciclo.Destino = ResolverDestinoCiclo(ciclo);
+                ciclo.Abierto = ciclo.Revision == null || !EsTareaCerrada(ciclo.Revision.Estado);
+                ciclos.Add(ciclo);
+            }
+
+            return ciclos;
+        }
+
+        private string RenderCicloReproceso(ReprocesoCicloRow ciclo, List<ReprocesoAdjuntoRow> adjuntos, long instanciaId, long tareaIdActual)
+        {
+            bool contieneActual = ciclo.Pedido.TareaId == tareaIdActual ||
+                                  ciclo.Respuestas.Any(x => x.TareaId == tareaIdActual) ||
+                                  (ciclo.Revision != null && ciclo.Revision.TareaId == tareaIdActual);
+
+            var respuestaActual = ciclo.Respuestas.FirstOrDefault(x => x.TareaId == tareaIdActual);
+            bool respuestaPendiente = respuestaActual != null && !EsTareaCerrada(respuestaActual.Estado);
+            bool revisionPendiente = ciclo.Revision != null &&
+                                     ciclo.Revision.TareaId == tareaIdActual &&
+                                     !EsTareaCerrada(ciclo.Revision.Estado);
+
+            string estadoTexto;
+            string estadoClase;
+
+            if (ciclo.Abierto)
+            {
+                if (respuestaPendiente)
+                    estadoTexto = "Pendiente de respuesta";
+                else if (revisionPendiente)
+                    estadoTexto = "Pendiente de revisión";
+                else
+                    estadoTexto = "En curso";
+
+                estadoClase = "bg-warning text-dark";
+            }
+            else if (ciclo.Revision != null && EsResultadoRechazado(ciclo.Revision.Resultado))
+            {
+                estadoTexto = "Rechazado nuevamente";
+                estadoClase = "bg-danger";
+            }
+            else
+            {
+                estadoTexto = "Revisado";
+                estadoClase = "bg-success";
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='ws-reprocess-cycle " + (contieneActual ? "ws-reprocess-current" : "") + " mb-3'>");
+            sb.Append("<div class='d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3'>");
+            sb.Append("<div><div class='fw-bold'>Ciclo de reproceso " + ciclo.Numero + "</div>");
+            sb.Append("<div class='small text-muted'>Destino: " + Server.HtmlEncode(ciclo.Destino) + "</div></div>");
+            sb.Append("<span class='badge " + estadoClase + "'>" + Server.HtmlEncode(estadoTexto) + "</span>");
+            sb.Append("</div>");
+
+            sb.Append("<div class='ws-reprocess-step ws-reprocess-request'>");
+            sb.Append("<div class='fw-semibold mb-1'>1. Pedido de corrección</div>");
+            sb.Append(RenderResumenTareaCircuito(ciclo.Pedido, tareaIdActual, true));
+            sb.Append("</div>");
+
+            sb.Append("<div class='ws-reprocess-step'>");
+            sb.Append("<div class='fw-semibold mb-1'>2. Respuesta y documentación</div>");
+
+            if (ciclo.Respuestas.Count == 0)
+            {
+                sb.Append("<div class='text-muted small'>Todavía no se creó o completó la etapa de respuesta.</div>");
+            }
+            else
+            {
+                foreach (var respuesta in ciclo.Respuestas)
+                    sb.Append(RenderResumenTareaCircuito(respuesta, tareaIdActual, false));
+            }
+
+            var idsRespuesta = new HashSet<long>(ciclo.Respuestas.Select(x => x.TareaId));
+            var docs = adjuntos.Where(x => idsRespuesta.Contains(x.TareaId)).ToList();
+            sb.Append(RenderAdjuntosCiclo(docs, instanciaId, tareaIdActual));
+            sb.Append("</div>");
+
+            sb.Append("<div class='ws-reprocess-step mb-0'>");
+            sb.Append("<div class='fw-semibold mb-1'>3. Revisión posterior</div>");
+            if (ciclo.Revision == null)
+                sb.Append("<div class='text-muted small'>Pendiente de volver a la etapa que realizó el pedido.</div>");
+            else
+                sb.Append(RenderResumenTareaCircuito(ciclo.Revision, tareaIdActual, false));
+            sb.Append("</div>");
+
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private string RenderResumenTareaCircuito(ReprocesoTareaRow tarea, long tareaIdActual, bool esPedido)
+        {
+            if (tarea == null) return "";
+
+            string etapa = NombreEtapa(tarea);
+            string usuario = !string.IsNullOrWhiteSpace(tarea.CerradoPor) ? tarea.CerradoPor : tarea.RolDestino;
+            if (string.IsNullOrWhiteSpace(usuario)) usuario = "—";
+
+            DateTime fecha = tarea.FechaCierre ?? tarea.FechaCreacion;
+            string resultado = !string.IsNullOrWhiteSpace(tarea.Resultado) ? tarea.Resultado : tarea.Estado;
+            string obs = tarea.Observacion;
+            bool actual = tarea.TareaId == tareaIdActual;
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='border rounded p-2 mb-2 bg-white'>");
+            sb.Append("<div class='d-flex flex-wrap justify-content-between gap-2'>");
+            sb.Append("<div><b>" + Server.HtmlEncode(etapa) + "</b>");
+            if (actual)
+            {
+                string etiquetaActual = EsTareaCerrada(tarea.Estado) ? "Tarea consultada" : "Tarea pendiente";
+                string claseActual = EsTareaCerrada(tarea.Estado) ? "bg-secondary" : "bg-primary";
+                sb.Append(" <span class='badge " + claseActual + "'>" + Server.HtmlEncode(etiquetaActual) + "</span>");
+            }
+            sb.Append("</div>");
+            sb.Append("<div class='small text-muted'>" + Server.HtmlEncode(fecha.ToString("dd/MM/yyyy HH:mm")) + "</div>");
+            sb.Append("</div>");
+            sb.Append("<div class='small mt-1'><b>Usuario/rol:</b> " + Server.HtmlEncode(usuario) + "</div>");
+            sb.Append("<div class='small'><b>Estado:</b> " + Server.HtmlEncode(resultado) + "</div>");
+
+            if (esPedido && !string.IsNullOrWhiteSpace(tarea.VolverA))
+            {
+                string volver = string.Equals(tarea.VolverA, "__inicio__", StringComparison.OrdinalIgnoreCase)
+                    ? "Inicio"
+                    : tarea.VolverA;
+                sb.Append("<div class='small'><b>Volver a:</b> " + Server.HtmlEncode(volver) + "</div>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(obs))
+                sb.Append("<div class='mt-2'><b>Observación:</b><br/>" + HtmlConSaltos(obs) + "</div>");
+            else if (!EsTareaCerrada(tarea.Estado))
+                sb.Append("<div class='mt-2 text-muted small'>Respuesta pendiente.</div>");
+
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        private List<ReprocesoAdjuntoRow> ObtenerAdjuntosCircuito(long instanciaId)
+        {
+            var list = new List<ReprocesoAdjuntoRow>();
+            string json = GetDatosContexto(instanciaId);
+            if (string.IsNullOrWhiteSpace(json)) return list;
+
+            JObject root;
+            try { root = JObject.Parse(json); }
+            catch { return list; }
+
+            var atts =
+                (root["biz"]?["case"]?["attachments"] as JArray) ??
+                (root["estado"]?["biz"]?["case"]?["attachments"] as JArray);
+
+            if (atts == null) return list;
+
+            foreach (var token in atts)
+            {
+                var jo = token as JObject;
+                if (jo == null) continue;
+
+                bool eliminado;
+                if (bool.TryParse(Convert.ToString(jo["eliminado"] ?? "false"), out eliminado) && eliminado)
+                    continue;
+
+                long tareaId;
+                if (!long.TryParse(Convert.ToString(jo["tareaId"] ?? ""), out tareaId))
+                    continue;
+
+                list.Add(new ReprocesoAdjuntoRow
+                {
+                    TareaId = tareaId,
+                    FileName = Convert.ToString(jo["fileName"] ?? ""),
+                    StoredFileName = Convert.ToString(jo["storedFileName"] ?? ""),
+                    Tipo = Convert.ToString(jo["tipo"] ?? ""),
+                    Fecha = Convert.ToString(jo["fecha"] ?? ""),
+                    Usuario = Convert.ToString(jo["usuario"] ?? "")
+                });
+            }
+
+            return list;
+        }
+
+        private string RenderAdjuntosCiclo(List<ReprocesoAdjuntoRow> docs, long instanciaId, long tareaIdActual)
+        {
+            if (docs == null || docs.Count == 0)
+                return "<div class='small text-muted mt-2'>Sin documentos vinculados a las tareas de respuesta de este ciclo.</div>";
+
+            var sb = new StringBuilder();
+            sb.Append("<div class='mt-2'><b>Documentación de la respuesta</b><ul class='mb-0 mt-1'>");
+
+            foreach (var doc in docs)
+            {
+                string nombre = !string.IsNullOrWhiteSpace(doc.FileName) ? doc.FileName : doc.StoredFileName;
+                string meta = string.Join(" · ", new[] { doc.Tipo, doc.Fecha, doc.Usuario }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                string url = ResolveUrl("~/API/WF_Upload_Get.ashx") +
+                             "?inst=" + instanciaId +
+                             "&tarea=" + doc.TareaId +
+                             "&authTarea=" + tareaIdActual +
+                             "&f=" + HttpUtility.UrlEncode(doc.StoredFileName ?? "");
+
+                sb.Append("<li><a href='" + HttpUtility.HtmlAttributeEncode(url) + "' target='_blank'>" + Server.HtmlEncode(nombre) + "</a>");
+                if (!string.IsNullOrWhiteSpace(meta))
+                    sb.Append(" <span class='small text-muted'>(" + Server.HtmlEncode(meta) + ")</span>");
+                sb.Append("</li>");
+            }
+
+            sb.Append("</ul></div>");
+            return sb.ToString();
+        }
+
+        private string ResolverDestinoCiclo(ReprocesoCicloRow ciclo)
+        {
+            if (ciclo == null || ciclo.Pedido == null) return "—";
+
+            if (string.Equals(ciclo.Pedido.VolverA, "__inicio__", StringComparison.OrdinalIgnoreCase))
+                return "Inicio";
+
+            if (!string.IsNullOrWhiteSpace(ciclo.Pedido.VolverA))
+            {
+                var porNodo = ciclo.Respuestas.FirstOrDefault(x =>
+                    string.Equals(x.NodoId, ciclo.Pedido.VolverA, StringComparison.OrdinalIgnoreCase));
+
+                if (porNodo != null)
+                    return NombreEtapa(porNodo);
+
+                return ciclo.Pedido.VolverA;
+            }
+
+            var primera = ciclo.Respuestas.FirstOrDefault();
+            return primera != null ? NombreEtapa(primera) : "Pendiente de resolver";
+        }
+
+        private string NombreEtapa(ReprocesoTareaRow tarea)
+        {
+            if (tarea == null) return "—";
+            if (!string.IsNullOrWhiteSpace(tarea.Titulo))
+                return tarea.Titulo + (string.IsNullOrWhiteSpace(tarea.NodoId) ? "" : " (" + tarea.NodoId + ")");
+            if (!string.IsNullOrWhiteSpace(tarea.RolDestino))
+                return tarea.RolDestino + (string.IsNullOrWhiteSpace(tarea.NodoId) ? "" : " (" + tarea.NodoId + ")");
+            return !string.IsNullOrWhiteSpace(tarea.NodoId) ? tarea.NodoId : "—";
+        }
+
+        private bool EsResultadoRechazado(string resultado)
+        {
+            var r = (resultado ?? "").Trim().ToLowerInvariant();
+            return r == "rechazado" || r == "rechazada" || r == "reject" || r == "rejected";
+        }
+
+        private bool EsTareaCerrada(string estado)
+        {
+            return string.Equals(estado, "Completada", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(estado, "Cancelada", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string ExtraerVolverADesdeDatosVista(string datosJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(datosJson)) return null;
+                dynamic o = JsonConvert.DeserializeObject(datosJson);
+                if (o == null) return null;
+
+                if (o.volverA != null) return (string)o.volverA;
+                if (o.data != null && o.data.volverA != null) return (string)o.data.volverA;
+                if (o.pedido != null && o.pedido.volverA != null) return (string)o.pedido.volverA;
+                if (o.data != null && o.data.pedido != null && o.data.pedido.volverA != null)
+                    return (string)o.data.pedido.volverA;
+
+                return null;
+            }
+            catch { return null; }
+        }
+
+        private string HtmlConSaltos(string texto)
+        {
+            return Server.HtmlEncode(texto ?? "")
+                .Replace("\r\n", "<br/>")
+                .Replace("\n", "<br/>");
         }
 
         private string ObtenerDatosTarea(long tareaId)
@@ -1222,7 +2103,6 @@ ORDER BY
             html += "</tbody>";
             html += "</table>";
             html += "</div>";
-            html += "<div class='mt-2'><a href='#adjuntos'>Ir a adjuntar documentación</a></div>";
 
             return html;
         }

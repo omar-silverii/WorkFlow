@@ -15,6 +15,17 @@
         .ws-card { border-radius: 12px; box-shadow: 0 8px 22px rgba(0,0,0,.06); }
         .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
         .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
+        .ws-reprocess-cycle { border: 1px solid rgba(0,0,0,.12); border-radius: 12px; padding: 14px; background: #f8f9fa; }
+        .ws-reprocess-current { border-color: rgba(255,193,7,.8); box-shadow: 0 0 0 3px rgba(255,193,7,.12); }
+        .ws-reprocess-step { border-left: 3px solid rgba(13,110,253,.25); padding-left: 12px; margin-bottom: 14px; }
+        .ws-reprocess-request { border-left-color: rgba(220,53,69,.65); }
+        .ws-reprocess-summary { border: 1px solid rgba(0,0,0,.10); border-radius: 10px; background: #f8f9fa; }
+        .ws-reprocess-details { margin-left: 0; }
+        .ws-reprocess-details > summary { list-style-position: inside; padding-left: 0; }
+        .ws-reprocess-details[open] > summary { margin-bottom: 12px; }
+        .ws-reprocess-action { border-left: 4px solid rgba(255,193,7,.9); }
+        .ws-reprocess-review { border-left: 4px solid rgba(13,110,253,.75); }
+        .ws-pointer { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -28,7 +39,7 @@
           <div class="d-flex align-items-center justify-content-between">
               <div>
                   <div class="ws-title">Tarea humana</div>
-                  <div class="ws-muted small">Aceptar o rechazar tares</div>
+                  <div class="ws-muted small">Aceptar o rechazar tareas</div>
               </div>
               
           </div>
@@ -38,10 +49,10 @@
                 CssClass="text-danger" />
 
             <asp:Panel ID="pnlDatos" runat="server">
-                <asp:Panel ID="pnlPedidosPendientes" runat="server" Visible="false" CssClass="alert alert-warning">
-                    <div class="fw-bold mb-1">Observaciones del expediente</div>
-                    <div class="small mb-2">
-                        Acá se muestra el historial completo de observaciones registradas para esta instancia.
+                <asp:Panel ID="pnlPedidosPendientes" runat="server" Visible="false" CssClass="card ws-card mb-3 p-3">
+                    <div class="fw-bold mb-1">Circuito de revisión y reproceso</div>
+                    <div class="small text-muted mb-3">
+                        Pedidos de corrección, respuestas, documentación asociada y revisión de cada ciclo.
                     </div>
                     <asp:Literal ID="litPedidosPendientes" runat="server" />
                 </asp:Panel>
@@ -236,6 +247,7 @@
                     </div>
                 </div>
 
+                <a id="resolucion"></a>
                 <hr />
 
                 <div class="row">
