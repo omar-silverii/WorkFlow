@@ -1166,5 +1166,78 @@
         }
       ]
     }
+  },
+  {
+    "id": "O_QUEUE_ROUNDTRIP_JSON_LOGGER",
+    "name": "Cola publicar + consumir JSON + Logger",
+    "description": "Fix83d: valida una frase natural completa con payload JSON delimitado, publicación, consumo, mensaje de Logger conservado y fin. No ejecuta SQL; valida la generación semántica del plan.",
+    "phrase": "Quiero iniciar un flujo, publicar en la cola banco-fix83 con payload {\"instanceId\":\"${wf.instanceId}\",\"origen\":\"Prueba por frase\"}, luego consumir 1 mensaje de la cola banco-fix83, registrar un log informativo con el mensaje Consumido=${queue.hasMessage}, Id=${queue.messageId}, Payload=${payload}, y finalmente terminar el flujo.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": true,
+      "semanticWarningsEmpty": true,
+      "semanticErrorsEmpty": true,
+      "checkValidation": true,
+      "checkSemanticOk": true,
+      "checkSemanticWarnings": true,
+      "checkSemanticErrors": true,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola banco-fix83",
+          "params": {
+            "broker": "sql",
+            "queue": "banco-fix83",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "queue.consume",
+          "label": "Consumir cola banco-fix83",
+          "params": {
+            "broker": "sql",
+            "queue": "banco-fix83",
+            "take": "1",
+            "prefetch": "1",
+            "connectionStringName": "DefaultConnection",
+            "outputPrefix": "queue.consume"
+          }
+        },
+        {
+          "type": "util.logger",
+          "label": "Registrar evento",
+          "params": {
+            "level": "Info",
+            "message": "Consumido=${queue.hasMessage}, Id=${queue.messageId}, Payload=${payload}"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola banco-fix83"
+        },
+        {
+          "from": "Publicar en cola banco-fix83",
+          "to": "Consumir cola banco-fix83"
+        },
+        {
+          "from": "Consumir cola banco-fix83",
+          "to": "Registrar evento"
+        },
+        {
+          "from": "Registrar evento",
+          "to": "Fin"
+        }
+      ]
+    }
   }
 ]

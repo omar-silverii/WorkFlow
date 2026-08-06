@@ -1,7 +1,12 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Intranet.WorkflowStudio.WebForms
 {
@@ -24,7 +29,7 @@ namespace Intranet.WorkflowStudio.WebForms
             var msgTpl = GetString(p, "message") ?? GetString(p, "mensaje") ?? string.Empty;
 
             var level = NormalizeLevel(ctx.ExpandString(levelTpl));
-            var msg = ctx.ExpandString(msgTpl) ?? string.Empty;
+            var msg = ExpandMessage(ctx, msgTpl);
 
             ContextoEjecucion.SetPath(ctx.Estado, "logger.last.level", level);
             ContextoEjecucion.SetPath(ctx.Estado, "logger.last.message", msg);
@@ -33,6 +38,45 @@ namespace Intranet.WorkflowStudio.WebForms
             ctx.Log($"[Logger] [{level}] {msg}");
 
             return Task.FromResult(new ResultadoEjecucion { Etiqueta = "always" });
+        }
+
+        private static readonly Regex TemplateRegex = new Regex(
+            @"\$\{(?<path>[^}]+)\}", RegexOptions.Compiled);
+
+        private static string ExpandMessage(ContextoEjecucion ctx, string template)
+        {
+            if (string.IsNullOrEmpty(template)) return template ?? string.Empty;
+
+            return TemplateRegex.Replace(template, match =>
+            {
+                var path = match.Groups["path"].Value.Trim();
+                var value = ContextoEjecucion.ResolverPath(ctx.Estado, path);
+                return FormatValue(value);
+            });
+        }
+
+        private static string FormatValue(object value)
+        {
+            if (value == null) return string.Empty;
+
+            try
+            {
+                if (value is JToken token)
+                    return token.ToString(Formatting.None);
+
+                if (value is IDictionary)
+                    return JsonConvert.SerializeObject(value, Formatting.None);
+
+                if (!(value is string) && value is IEnumerable)
+                    return JsonConvert.SerializeObject(value, Formatting.None);
+            }
+            catch
+            {
+                // Compatibilidad defensiva: si un objeto no puede serializarse,
+                // el Logger conserva el comportamiento histórico de Convert.ToString.
+            }
+
+            return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
         private static string GetString(Dictionary<string, object> p, string key)

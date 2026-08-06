@@ -2472,7 +2472,11 @@ namespace Intranet.WorkflowStudio.WebForms
             string t = Normalize(normalizedText);
             if (string.IsNullOrWhiteSpace(t)) return request;
 
-            bool wants = ContainsAny(t, "publicar en cola", "encolar", "queue publish", "mandar a cola", "enviar a cola");
+            bool wants = ContainsAny(t,
+                "publicar en cola", "publicar en la cola",
+                "encolar", "queue publish",
+                "mandar a cola", "mandar a la cola",
+                "enviar a cola", "enviar a la cola");
             if (!wants) return request;
 
             request.WantsQueuePublish = true;
@@ -2492,7 +2496,12 @@ namespace Intranet.WorkflowStudio.WebForms
             string t = Normalize(normalizedText);
             if (string.IsNullOrWhiteSpace(t)) return request;
 
-            bool wants = ContainsAny(t, "consumir de cola", "leer de cola", "tomar mensaje", "queue consume");
+            bool wants = ContainsAny(t,
+                "consumir de cola", "consumir de la cola", "consumir mensaje de cola", "consumir mensaje de la cola",
+                "leer de cola", "leer de la cola",
+                "tomar mensaje", "tomar un mensaje", "tomar mensajes",
+                "queue consume")
+                || Regex.IsMatch(t, @"\bconsumir\s+(?:\d+\s+)?(?:un\s+)?mensajes?\s+de\s+(?:la\s+)?cola\b", RegexOptions.IgnoreCase);
             if (!wants) return request;
 
             request.WantsQueueConsume = true;
@@ -2512,7 +2521,7 @@ namespace Intranet.WorkflowStudio.WebForms
             if (string.IsNullOrWhiteSpace(originalText)) return "";
 
             var m = Regex.Match(originalText,
-                @"\b(?:cola|queue)\s+(?<queue>[A-Za-z0-9_\-\.]+)(?=(?:\s+con\s+payload\b|\s+payload\b|\s+tomando\b|\s+tomar\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                @"\b(?:la\s+)?(?:cola|queue)\s+(?<queue>[A-Za-z0-9_\-\.]+)(?=(?:\s+con\s+payload\b|\s+payload\b|\s+tomando\b|\s+tomar\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (!m.Success) return "";
 
@@ -2523,12 +2532,97 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (string.IsNullOrWhiteSpace(originalText)) return "";
 
-            var m = Regex.Match(originalText,
-                @"\bpayload\s+(?<payload>.+?)(?=(?:\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+            Match publishMarker = Regex.Match(originalText,
+                @"\b(?:publicar\s+en\s+(?:la\s+)?cola|encolar|mandar\s+a\s+(?:la\s+)?cola|enviar\s+a\s+(?:la\s+)?cola|queue\s+publish)\b",
+                RegexOptions.IgnoreCase);
+            if (!publishMarker.Success) return "";
+
+            int publishStart = publishMarker.Index + publishMarker.Length;
+            string publishTail = originalText.Substring(publishStart);
+            Match markerLocal = Regex.Match(publishTail, @"(?<![\$\{])\bpayload\b", RegexOptions.IgnoreCase);
+            if (!markerLocal.Success) return "";
+
+            Match nextAction = Regex.Match(publishTail,
+                @"\b(?:consumir|leer|tomar|registrar|finalizar|terminar)\b",
+                RegexOptions.IgnoreCase);
+            if (nextAction.Success && markerLocal.Index > nextAction.Index) return "";
+
+            int start = publishStart + markerLocal.Index + markerLocal.Length;
+            while (start < originalText.Length && (char.IsWhiteSpace(originalText[start]) || originalText[start] == ':' || originalText[start] == '=')) start++;
+            if (start >= originalText.Length) return "";
+
+            // fix83d: si el payload empieza como objeto o arreglo JSON, se toma exactamente
+            // hasta su cierre balanceado. No se permite que "luego consumir..." quede dentro
+            // del mensaje de negocio.
+            if (originalText[start] == '{' || originalText[start] == '[')
+            {
+                string json = ExtractBalancedJson(originalText, start);
+                if (!string.IsNullOrWhiteSpace(json))
+                    return json.Trim();
+            }
+
+            string tail = originalText.Substring(start);
+            var m = Regex.Match(tail,
+                @"^(?<payload>.+?)(?=(?:\.\s|\s*,?\s*(?:luego|despues|después)\s+(?:consumir|leer|tomar|registrar|finalizar|terminar)\b|\s+registrar\b|\s+finalmente\b|\s+finalizar\b|\s+terminar\b|$))",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (!m.Success) return "";
 
             return CleanExtractedSentence(m.Groups["payload"].Value);
+        }
+
+        private static string ExtractBalancedJson(string text, int start)
+        {
+            if (string.IsNullOrEmpty(text) || start < 0 || start >= text.Length) return "";
+            if (text[start] != '{' && text[start] != '[') return "";
+
+            var stack = new Stack<char>();
+            bool inString = false;
+            bool escaped = false;
+
+            for (int i = start; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                if (inString)
+                {
+                    if (escaped)
+                    {
+                        escaped = false;
+                        continue;
+                    }
+
+                    if (c == '\\')
+                    {
+                        escaped = true;
+                        continue;
+                    }
+
+                    if (c == '"') inString = false;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{' || c == '[')
+                {
+                    stack.Push(c);
+                    continue;
+                }
+
+                if (c == '}' || c == ']')
+                {
+                    if (stack.Count == 0) return "";
+                    char open = stack.Pop();
+                    if ((open == '{' && c != '}') || (open == '[' && c != ']')) return "";
+                    if (stack.Count == 0) return text.Substring(start, i - start + 1);
+                }
+            }
+
+            return "";
         }
 
         private static int ExtractQueueTake(string originalText)
@@ -2536,6 +2630,10 @@ namespace Intranet.WorkflowStudio.WebForms
             if (string.IsNullOrWhiteSpace(originalText)) return 0;
 
             var m = Regex.Match(originalText, @"\b(?:tomando|tomar|take)\s+(?<n>\d+)", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                m = Regex.Match(originalText, @"\bconsumir\s+(?<n>\d+)\s+mensajes?\b", RegexOptions.IgnoreCase);
+            }
             if (!m.Success) return 0;
 
             int n;
@@ -2546,13 +2644,27 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (actions == null || request == null || !request.WantsQueuePublish) return;
 
+            string payload = string.IsNullOrWhiteSpace(request.Payload) ? "Mensaje generado por Asistente IA" : request.Payload;
             actions.Add(AddNode("queue.publish", string.IsNullOrWhiteSpace(request.Label) ? "Publicar en cola" : request.Label, new JObject
             {
                 ["broker"] = string.IsNullOrWhiteSpace(request.Broker) ? "sql" : request.Broker,
                 ["queue"] = string.IsNullOrWhiteSpace(request.Queue) ? "banco-regresion" : request.Queue,
-                ["payload"] = string.IsNullOrWhiteSpace(request.Payload) ? "Mensaje generado por Asistente IA" : request.Payload,
+                ["payload"] = QueuePayloadToToken(payload),
                 ["connectionStringName"] = string.IsNullOrWhiteSpace(request.ConnectionStringName) ? "DefaultConnection" : request.ConnectionStringName
             }));
+        }
+
+        private static JToken QueuePayloadToToken(string payload)
+        {
+            string value = (payload ?? "").Trim();
+            if ((value.StartsWith("{", StringComparison.Ordinal) && value.EndsWith("}", StringComparison.Ordinal))
+                || (value.StartsWith("[", StringComparison.Ordinal) && value.EndsWith("]", StringComparison.Ordinal)))
+            {
+                try { return JToken.Parse(value); }
+                catch { }
+            }
+
+            return new JValue(payload ?? "");
         }
 
         private static void AddQueueConsumeAction(JArray actions, QueueConsumeRequest request)
@@ -2591,9 +2703,17 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (string.IsNullOrWhiteSpace(originalText)) return "";
 
+            // fix83d: soporta tanto "indicando ..." como la forma natural
+            // "registrar un log informativo con mensaje ...".
             var m = Regex.Match(originalText,
-                @"\bindicando(?:\s+que)?\s+(?<msg>.+?)(?=(?:\.\s|\s+y\s+finalizar\b|\s+finalizar\b|$))",
+                @"\b(?:registrar|agregar|crear|dejar\s+constancia)\b.*?(?:\bindicando(?:\s+que)?\b|\bcon\s+(?:el\s+)?mensaje\b)\s+(?<msg>.+?)(?=(?:\.\s|\s*,?\s*y\s+finalmente\b|\s*,?\s*finalmente\b|\s+y\s+finalizar\b|\s+despues\s+finalizar\b|\s+después\s+finalizar\b|\s+finalizar\b|\s+terminar\b|$))",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success)
+            {
+                m = Regex.Match(originalText,
+                    @"\bindicando(?:\s+que)?\s+(?<msg>.+?)(?=(?:\.\s|\s*,?\s*y\s+finalmente\b|\s*,?\s*finalmente\b|\s+y\s+finalizar\b|\s+finalizar\b|\s+terminar\b|$))",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
             if (!m.Success) return "";
 
             string msg = Regex.Replace(m.Groups["msg"].Value ?? "", @"\s+", " ").Trim();
@@ -4168,8 +4288,17 @@ namespace Intranet.WorkflowStudio.WebForms
             bool hasFileWrite = ContainsAny(n, "escribir archivo", "guardar archivo", "crear archivo", "generar archivo", "file write", "archivo escribir");
             bool hasFileRead = ContainsAny(n, "leer archivo", "abrir archivo", "file read", "archivo leer");
             bool hasStateVars = ContainsAny(n, "guardar variable", "setear variable", "definir variable", "crear variable", "asignar variable", "poner variable", "quitar variable", "eliminar variable", "borrar variable", "remover variable");
-            bool hasQueuePublish = ContainsAny(n, "publicar en cola", "encolar", "queue publish", "mandar a cola", "enviar a cola");
-            bool hasQueueConsume = ContainsAny(n, "consumir de cola", "leer de cola", "tomar mensaje", "queue consume");
+            bool hasQueuePublish = ContainsAny(n,
+                "publicar en cola", "publicar en la cola",
+                "encolar", "queue publish",
+                "mandar a cola", "mandar a la cola",
+                "enviar a cola", "enviar a la cola");
+            bool hasQueueConsume = ContainsAny(n,
+                "consumir de cola", "consumir de la cola", "consumir mensaje de cola", "consumir mensaje de la cola",
+                "leer de cola", "leer de la cola",
+                "tomar mensaje", "tomar un mensaje", "tomar mensajes",
+                "queue consume")
+                || Regex.IsMatch(n, @"\bconsumir\s+(?:\d+\s+)?(?:un\s+)?mensajes?\s+de\s+(?:la\s+)?cola\b", RegexOptions.IgnoreCase);
 
             // fix65: diagnóstico semántico explícito para nodos operativos simples.
             // Estas cláusulas no son ramas humanas; se auditan contra actions para asegurar
@@ -5030,7 +5159,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (p == null) continue;
                 if (!string.Equals(Convert.ToString(p["broker"]), expectedBroker, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!string.Equals(Convert.ToString(p["queue"]), expectedQueue, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(NormalizeSemanticText(Convert.ToString(p["payload"])), NormalizeSemanticText(expectedPayload), StringComparison.OrdinalIgnoreCase)) continue;
+                if (!QueuePayloadSemanticEquals(p["payload"], expectedPayload)) continue;
                 if (!string.Equals(Convert.ToString(p["connectionStringName"]), expectedConnection, StringComparison.OrdinalIgnoreCase)) continue;
                 return action;
             }
@@ -5211,6 +5340,52 @@ namespace Intranet.WorkflowStudio.WebForms
         private static string NormalizeSemanticText(string value)
         {
             return Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+        }
+
+
+        private static bool QueuePayloadSemanticEquals(JToken actual, string expected)
+        {
+            if (actual == null) return string.IsNullOrWhiteSpace(expected);
+
+            string expectedText = (expected ?? "").Trim();
+            JToken expectedToken;
+            if (TryParseJsonToken(expectedText, out expectedToken))
+            {
+                JToken actualToken = actual;
+                if (actual.Type == JTokenType.String)
+                {
+                    JToken parsedActual;
+                    if (TryParseJsonToken(Convert.ToString(actual), out parsedActual))
+                        actualToken = parsedActual;
+                }
+
+                return JToken.DeepEquals(actualToken, expectedToken);
+            }
+
+            string actualText = actual.Type == JTokenType.String
+                ? Convert.ToString(actual)
+                : actual.ToString(Newtonsoft.Json.Formatting.None);
+            return string.Equals(NormalizeSemanticText(actualText), NormalizeSemanticText(expectedText), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryParseJsonToken(string value, out JToken token)
+        {
+            token = null;
+            string text = (value ?? "").Trim();
+            if (!((text.StartsWith("{", StringComparison.Ordinal) && text.EndsWith("}", StringComparison.Ordinal))
+                || (text.StartsWith("[", StringComparison.Ordinal) && text.EndsWith("]", StringComparison.Ordinal))))
+                return false;
+
+            try
+            {
+                token = JToken.Parse(text);
+                return true;
+            }
+            catch
+            {
+                token = null;
+                return false;
+            }
         }
 
         private static void CheckSemanticCompositeCondition(PhraseClauseDiagnostic clause, JArray actions, JObject branchPlan, JArray checks, JArray warnings, JArray errors)

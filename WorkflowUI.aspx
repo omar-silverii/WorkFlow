@@ -18,6 +18,14 @@
      .ws-muted { color: rgba(0,0,0,.65); }
      .ws-topbar { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,.06); }
      .ws-pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(13,110,253,.10); color: #0d6efd; border: 1px solid rgba(13,110,253,.20); }
+     .wf-ai-queue-fields { display:flex; flex-direction:column; gap:8px; margin:8px 0; }
+     .wf-ai-queue-field-row { border:1px solid rgba(15,23,42,.12); border-radius:10px; padding:9px; background:#fff; display:flex; flex-direction:column; gap:5px; }
+     .wf-ai-queue-field-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+     .wf-ai-queue-mini-label { margin:0; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.02em; }
+     .wf-ai-queue-remove { padding:3px 8px; font-size:12px; }
+     .wf-ai-queue-add { margin:2px 0 8px; }
+     .wf-ai-queue-preview-title { font-size:12px; font-weight:700; color:#334155; margin-top:3px; }
+     .wf-ai-queue-preview { margin:4px 0 8px; padding:9px; max-height:150px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; border:1px solid rgba(15,23,42,.12); border-radius:8px; background:#f8fafc; font-size:12px; }
  </style>
 
 </head>
@@ -185,7 +193,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix74b"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix83c"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>

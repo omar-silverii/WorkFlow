@@ -18,6 +18,8 @@
 // fix73d: elimina preguntas redundantes, prioriza decisiones específicas y muestra qué elección fue reemplazada.
 // fix74: consolida un contrato determinístico de plan, valida borrador/proyección/canvas y bloquea cualquier divergencia.
 // fix74b: genera y valida la explicación textual desde los parámetros reales de cada nodo y rama.
+// fix83b: payload guiado para colas, campos navegables después de consumir y soporte de objetos en Logger.
+// fix83c: genera el contrato fix74b antes de Crear workflow desde Verificar frase y amplía frases naturales de colas.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -114,6 +116,7 @@
     var guideSteps = [];
     var guideSeq = 1;
     var editingStepIndex = -1;
+    var queuePayloadLastValueInput = null;
 
     // fix39b: destino visual activo del Constructor IA.
     // Permite hacer clic en SI/NO o APTO/NO APTO para que los próximos pasos
@@ -452,6 +455,8 @@
         if (step.type === 'sql_query') return 'Consulta SQL: ' + sqlShortText(step.query || '');
         if (step.type === 'file_read') return 'Archivo: Leer ' + (step.path || '(sin ruta)');
         if (step.type === 'file_write') return 'Archivo: Escribir ' + (step.path || '(sin ruta)');
+        if (step.type === 'queue_publish') return 'Cola: Publicar en ' + (step.queue || '(sin cola)');
+        if (step.type === 'queue_consume') return 'Cola: Consumir de ' + (step.queue || '(sin cola)');
         if (step.type === 'subflow') return 'Ejecutar workflow: ' + subflowDisplayName(step);
         if (step.type === 'state_set') return stateSetTitle(step);
         if (step.type === 'state_remove') return 'Quitar variable: ' + (step.key || '');
@@ -530,6 +535,35 @@
                 addAvailableField(fields, source, 'file.write.lastEntryName', 'Entrada ZIP escrita', 'texto');
                 addAvailableField(fields, source, 'file.write.skipped', 'Escritura omitida', 'sí/no');
                 addAvailableField(fields, source, 'file.write.lastError', 'Último error de escritura', 'texto');
+            } else if (step.type === 'queue_publish') {
+                addAvailableField(fields, source, 'queue.last.id', 'ID del mensaje publicado', 'número');
+                addAvailableField(fields, source, 'queue.last.queue', 'Cola utilizada', 'texto');
+                addAvailableField(fields, source, 'queue.last.correlationId', 'Correlation ID', 'texto');
+                addAvailableField(fields, source, 'queue.last.payload', 'Payload publicado', 'texto');
+                queuePayloadAvailablePaths(step).forEach(function (field) {
+                    addAvailableField(fields, source, 'queue.last.payload.' + field.path, 'Campo publicado: ' + field.label, field.type);
+                });
+                addAvailableField(fields, source, 'queue.error', 'Último error de cola', 'texto');
+            } else if (step.type === 'queue_consume') {
+                addAvailableField(fields, source, 'queue.hasMessage', 'La cola devolvió mensajes', 'sí/no');
+                addAvailableField(fields, source, 'queue.messageId', 'ID del primer mensaje consumido', 'número');
+                addAvailableField(fields, source, 'queue.message', 'Primer mensaje consumido', 'texto');
+                addAvailableField(fields, source, 'queue.messages', 'Mensajes consumidos', 'texto');
+                addAvailableField(fields, source, 'payload', 'Payload del primer mensaje', 'texto');
+                var matchingPublish = null;
+                for (var qp = idx - 1; qp >= 0; qp--) {
+                    if (guideSteps[qp] && guideSteps[qp].type === 'queue_publish' &&
+                        normalizeKey(guideSteps[qp].queue) === normalizeKey(step.queue)) {
+                        matchingPublish = guideSteps[qp];
+                        break;
+                    }
+                }
+                if (matchingPublish) {
+                    queuePayloadAvailablePaths(matchingPublish).forEach(function (field) {
+                        addAvailableField(fields, source, 'payload.' + field.path, 'Campo del payload: ' + field.label, field.type);
+                    });
+                }
+                addAvailableField(fields, source, 'queue.error', 'Último error de cola', 'texto');
             } else if (step.type === 'subflow') {
                 addAvailableField(fields, source, 'subflow.instanceId', 'Instancia hija creada', 'número');
                 addAvailableField(fields, source, 'subflow.childState', 'Estado de la instancia hija', 'texto');
@@ -705,6 +739,197 @@
         });
         if (lastSource !== null) html += '</optgroup>';
         return html;
+    }
+
+    function defaultQueuePayloadFields() {
+        return [{ name: 'instanceId', value: '${wf.instanceId}' }];
+    }
+
+    function normalizeQueuePayloadFields(fields) {
+        var result = [];
+        (fields || []).forEach(function (field) {
+            if (!field) return;
+            var name = String(field.name || '').trim();
+            var value = field.value == null ? '' : String(field.value);
+            if (!name && !value) return;
+            result.push({ name: name, value: value });
+        });
+        return result;
+    }
+
+    function queuePayloadFieldNameIsValid(name) {
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(name || '').trim());
+    }
+
+    function queuePayloadFieldsFromObject(obj) {
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+        var fields = [];
+        var keys = Object.keys(obj);
+        for (var i = 0; i < keys.length; i++) {
+            var value = obj[keys[i]];
+            if (value !== null && typeof value === 'object') return [];
+            fields.push({ name: keys[i], value: value == null ? '' : String(value) });
+        }
+        return fields;
+    }
+
+    function queuePayloadFieldsForStep(step) {
+        if (!step) return [];
+        var direct = normalizeQueuePayloadFields(step.payloadFields || []);
+        if (direct.length) return direct;
+        var raw = String(step.payloadText || '').trim();
+        if (!raw) return [];
+        try {
+            return queuePayloadFieldsFromObject(JSON.parse(raw));
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function queuePayloadObjectFromFields(fields) {
+        var payload = {};
+        normalizeQueuePayloadFields(fields).forEach(function (field) {
+            if (field.name) payload[field.name] = field.value;
+        });
+        return payload;
+    }
+
+    function queuePayloadValueFromStep(step) {
+        if (!step) return '';
+        var mode = String(step.payloadMode || '').toLowerCase();
+        var guidedFields = normalizeQueuePayloadFields(step.payloadFields || []);
+        if (mode === 'fields' || guidedFields.length) return queuePayloadObjectFromFields(guidedFields);
+
+        var raw = String(step.payloadText || '').trim();
+        if (!raw) return '';
+        try { return JSON.parse(raw); }
+        catch (e) { return raw; }
+    }
+
+    function queuePayloadTextForStep(step) {
+        var value = queuePayloadValueFromStep(step);
+        if (typeof value === 'string') return value;
+        try { return JSON.stringify(value); }
+        catch (e) { return String(value || ''); }
+    }
+
+    function queuePayloadTypeForValue(path, value) {
+        if (typeof value === 'number') return 'número';
+        if (typeof value === 'boolean') return 'sí/no';
+        return inferFieldType(path, path);
+    }
+
+    function queuePayloadAvailablePaths(step) {
+        var value = queuePayloadValueFromStep(step);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+        var result = [];
+
+        function walk(current, prefix, depth) {
+            if (!current || typeof current !== 'object' || Array.isArray(current) || depth > 4) return;
+            Object.keys(current).forEach(function (key) {
+                var child = current[key];
+                var path = prefix ? prefix + '.' + key : key;
+                if (child && typeof child === 'object' && !Array.isArray(child)) {
+                    walk(child, path, depth + 1);
+                } else if (!Array.isArray(child)) {
+                    result.push({ path: path, label: key, type: queuePayloadTypeForValue(path, child) });
+                }
+            });
+        }
+
+        walk(value, '', 0);
+        return result;
+    }
+
+    function collectQueuePayloadFieldsFromForm() {
+        var fields = [];
+        var box = $('wfAiQueuePayloadFields');
+        if (!box) return fields;
+        Array.prototype.forEach.call(box.querySelectorAll('[data-queue-payload-row]'), function (row) {
+            var name = row.querySelector('[data-queue-payload-name]');
+            var value = row.querySelector('[data-queue-payload-value]');
+            fields.push({
+                name: name ? String(name.value || '').trim() : '',
+                value: value ? String(value.value || '') : ''
+            });
+        });
+        return fields;
+    }
+
+    function updateQueuePayloadPreview() {
+        var preview = $('wfAiQueuePayloadPreview');
+        if (!preview) return;
+        var payload = queuePayloadObjectFromFields(collectQueuePayloadFieldsFromForm());
+        preview.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function bindQueuePayloadRow(row) {
+        if (!row) return;
+        var name = row.querySelector('[data-queue-payload-name]');
+        var value = row.querySelector('[data-queue-payload-value]');
+        var source = row.querySelector('[data-queue-payload-source]');
+        var remove = row.querySelector('[data-queue-payload-remove]');
+
+        if (name) name.addEventListener('input', updateQueuePayloadPreview);
+        if (value) {
+            value.addEventListener('input', updateQueuePayloadPreview);
+            value.addEventListener('focus', function () { queuePayloadLastValueInput = value; });
+        }
+        if (source) source.addEventListener('change', function () {
+            var path = String(source.value || '').trim();
+            if (path && value) {
+                value.value = '${' + path + '}';
+                queuePayloadLastValueInput = value;
+                updateQueuePayloadPreview();
+            }
+        });
+        if (remove) remove.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            if (queuePayloadLastValueInput && row.contains(queuePayloadLastValueInput)) queuePayloadLastValueInput = null;
+            row.parentNode.removeChild(row);
+            updateQueuePayloadPreview();
+        });
+    }
+
+    function addQueuePayloadFieldRow(field) {
+        var box = $('wfAiQueuePayloadFields');
+        if (!box) return;
+        field = field || { name: '', value: '' };
+        var row = document.createElement('div');
+        row.className = 'wf-ai-queue-field-row';
+        row.setAttribute('data-queue-payload-row', '1');
+        row.innerHTML = '' +
+            '<div class="wf-ai-queue-field-head"><strong>Campo del mensaje</strong><button type="button" class="btn wf-ai-queue-remove" data-queue-payload-remove="1">Quitar</button></div>' +
+            '<label class="wf-ai-queue-mini-label">Nombre</label>' +
+            '<input class="wf-ai-input" data-queue-payload-name="1" value="' + htmlEncode(field.name || '') + '" placeholder="Ej.: origen, documentoId, importe" />' +
+            '<label class="wf-ai-queue-mini-label">Valor</label>' +
+            '<input class="wf-ai-input" data-queue-payload-value="1" value="' + htmlEncode(field.value == null ? '' : field.value) + '" placeholder="Texto fijo o ${dato.disponible}" />' +
+            '<select class="wf-ai-select" data-queue-payload-source="1">' + availableFieldOptionsWithBlank('', '— elegir un dato disponible —') + '</select>';
+        box.appendChild(row);
+        bindQueuePayloadRow(row);
+        updateQueuePayloadPreview();
+    }
+
+    function renderQueuePayloadRows(fields) {
+        var box = $('wfAiQueuePayloadFields');
+        if (!box) return;
+        box.innerHTML = '';
+        queuePayloadLastValueInput = null;
+        var normalized = normalizeQueuePayloadFields(fields || []);
+        if (!normalized.length) normalized = defaultQueuePayloadFields();
+        normalized.forEach(addQueuePayloadFieldRow);
+        updateQueuePayloadPreview();
+    }
+
+    function syncQueuePayloadModeFields() {
+        var mode = $('wfAiStepQueuePayloadMode');
+        var guided = $('wfAiQueuePayloadGuidedBox');
+        var advanced = $('wfAiQueuePayloadAdvancedBox');
+        if (!mode || !guided || !advanced) return;
+        var isAdvanced = mode.value === 'advanced';
+        guided.style.display = isAdvanced ? 'none' : '';
+        advanced.style.display = isAdvanced ? '' : 'none';
+        if (!isAdvanced) updateQueuePayloadPreview();
     }
 
     function isValidStatePath(path) {
@@ -1293,6 +1518,21 @@
             return;
         }
 
+        if (type === 'queue_publish' && (selectedText('wfAiStepQueuePayloadMode') || 'fields') === 'fields') {
+            var queueTarget = queuePayloadLastValueInput;
+            if (!queueTarget || !document.body.contains(queueTarget)) {
+                var queueRows = $('wfAiQueuePayloadFields');
+                queueTarget = queueRows && queueRows.querySelector('[data-queue-payload-value]');
+            }
+            if (queueTarget) {
+                queueTarget.value = token;
+                queuePayloadLastValueInput = queueTarget;
+                updateQueuePayloadPreview();
+                setStatus('Dato cargado como valor del campo del mensaje: ' + token, 'ok');
+                return;
+            }
+        }
+
         var active = document.activeElement;
         if (active && $('wfAiStepFields') && $('wfAiStepFields').contains(active) &&
             (active.tagName || '').toLowerCase().match(/^(input|textarea)$/)) {
@@ -1406,6 +1646,8 @@
         if (step.type === 'sql_query') return 'Consulta SQL: ' + sqlShortText(step.query || '');
         if (step.type === 'file_read') return 'Archivo: Leer ' + (step.path || '(sin ruta)');
         if (step.type === 'file_write') return 'Archivo: Escribir ' + (step.path || '(sin ruta)');
+        if (step.type === 'queue_publish') return 'Cola: Publicar en ' + (step.queue || '(sin cola)');
+        if (step.type === 'queue_consume') return 'Cola: Consumir de ' + (step.queue || '(sin cola)');
         if (step.type === 'subflow') return 'Ejecutar workflow: ' + subflowDisplayName(step);
         if (step.type === 'state_set') return stateSetTitle(step);
         if (step.type === 'state_remove') return 'Quitar variable: ' + (step.key || '');
@@ -1466,6 +1708,15 @@
         }
         if (step.type === 'file_write') {
             return 'escribir archivo ' + (step.path || 'C:\\Temp\\salida.txt');
+        }
+        if (step.type === 'queue_publish') {
+            var queuePayloadPhrase = String(queuePayloadTextForStep(step) || '').replace(/\s+/g, ' ').trim();
+            return 'publicar en cola ' + (step.queue || 'default') + ' con payload ' + (queuePayloadPhrase || 'Mensaje generado por Constructor IA');
+        }
+        if (step.type === 'queue_consume') {
+            var queueTakePhrase = parseInt(step.take || '1', 10);
+            if (isNaN(queueTakePhrase) || queueTakePhrase < 1) queueTakePhrase = 1;
+            return 'consumir de cola ' + (step.queue || 'default') + ' tomando ' + queueTakePhrase + (queueTakePhrase === 1 ? ' mensaje' : ' mensajes');
         }
         if (step.type === 'subflow') {
             var txt = 'ejecutar otro workflow ' + (step.ref || '(sin workflow)');
@@ -1795,6 +2046,34 @@
                 }
             }
 
+            if (step.type === 'queue_publish') {
+                if (!String(step.queue || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la cola donde publicar.');
+                else if (String(step.queue || '').length > 100) pushUnique(result.warnings, stepShortName(step, idx) + ': el nombre de cola supera 100 caracteres.');
+                var queuePayloadValue = queuePayloadValueFromStep(step);
+                if (queuePayloadValue === '' || queuePayloadValue == null ||
+                    (typeof queuePayloadValue === 'object' && !Array.isArray(queuePayloadValue) && !Object.keys(queuePayloadValue).length)) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el payload a publicar.');
+                }
+                if (String(step.payloadMode || '') === 'fields') {
+                    var queueFieldNames = {};
+                    normalizeQueuePayloadFields(step.payloadFields || []).forEach(function (field) {
+                        var normalizedName = normalizeKey(field.name);
+                        if (!queuePayloadFieldNameIsValid(field.name)) pushUnique(result.warnings, stepShortName(step, idx) + ': el campo "' + field.name + '" tiene formato inválido.');
+                        if (normalizedName && queueFieldNames[normalizedName]) pushUnique(result.warnings, stepShortName(step, idx) + ': el campo "' + field.name + '" está repetido.');
+                        queueFieldNames[normalizedName] = true;
+                    });
+                }
+                if (!String(step.connectionStringName || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la conexión SQL.');
+            }
+
+            if (step.type === 'queue_consume') {
+                if (!String(step.queue || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la cola a consumir.');
+                else if (String(step.queue || '').length > 100) pushUnique(result.warnings, stepShortName(step, idx) + ': el nombre de cola supera 100 caracteres.');
+                var queueTake = parseInt(step.take || '1', 10);
+                if (isNaN(queueTake) || queueTake < 1 || queueTake > 100) pushUnique(result.warnings, stepShortName(step, idx) + ': la cantidad a tomar debe estar entre 1 y 100.');
+                if (!String(step.connectionStringName || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la conexión SQL.');
+            }
+
             if (step.type === 'subflow') {
                 if (!String(step.ref || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta seleccionar el workflow a ejecutar.');
                 var sj = parseJsonObjectOrEmpty(step.inputJson || '{}');
@@ -1848,11 +2127,11 @@
                 if (!nextRetryStep) {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar debe ubicarse antes del nodo que querés reintentar. Ahora no tiene un paso siguiente.');
                 } else if (nextRetryStep.type === 'end') {
-                    pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar antes de Finalizar flujo no aporta valor. Ubicalo antes de HTTP, SQL, correo, documento o archivo.');
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': Reintentar antes de Finalizar flujo no aporta valor. Ubicalo antes de HTTP, SQL, correo, documento, archivo o cola.');
                 } else if (nextRetryStep.type === 'human_task') {
                     pushUnique(result.warnings, stepShortName(step, idx) + ': no conviene reintentar una tarea humana porque podría crear tareas duplicadas.');
-                } else if (['http_request', 'sql_query', 'email_send', 'doc_load', 'file_read', 'file_write', 'subflow'].indexOf(nextRetryStep.type) < 0) {
-                    pushUnique(result.warnings, stepShortName(step, idx) + ': el siguiente paso normalmente no requiere reintento. Usalo principalmente antes de HTTP, SQL, correo, documento o archivo.');
+                } else if (['http_request', 'sql_query', 'email_send', 'doc_load', 'file_read', 'file_write', 'queue_publish', 'queue_consume', 'subflow'].indexOf(nextRetryStep.type) < 0) {
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': el siguiente paso normalmente no requiere reintento. Usalo principalmente antes de HTTP, SQL, correo, documento, archivo o cola.');
                 }
             }
 
@@ -2035,6 +2314,35 @@
                 '<div class="wf-ai-guide-row"><label>Entrada ZIP</label><input id="wfAiStepFileWriteEntry" class="wf-ai-input" placeholder="Opcional. Ej.: salida.txt" /></div>' +
                 '<div class="wf-ai-guide-note">Usa el handler real file.write. Si elegís variable de DatosContexto, el sistema escribe el valor de esa variable; si es objeto, lo serializa como JSON.</div>';
         }
+        if (type === 'queue_publish') {
+            return '' +
+                guideBranchRowHtml('then') +
+                '<div class="wf-ai-guide-row"><label>Broker</label><input id="wfAiStepQueueBroker" class="wf-ai-input" value="sql" readonly /></div>' +
+                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="default" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Cómo armar el mensaje</label><select id="wfAiStepQueuePayloadMode" class="wf-ai-select"><option value="fields">Campos guiados</option><option value="advanced">Texto o JSON avanzado</option></select></div>' +
+                '<div id="wfAiQueuePayloadGuidedBox">' +
+                '  <div class="wf-ai-guide-note">Cada nombre lo define quien diseña el mensaje: por ejemplo origen, documentoId o importe. No son propiedades fijas del nodo. El valor puede ser texto o un dato disponible.</div>' +
+                '  <div id="wfAiQueuePayloadFields" class="wf-ai-queue-fields"></div>' +
+                '  <button type="button" class="btn wf-ai-queue-add" id="wfAiAddQueuePayloadField">Agregar campo</button>' +
+                '  <div class="wf-ai-queue-preview-title">Vista previa del payload</div>' +
+                '  <pre id="wfAiQueuePayloadPreview" class="wf-ai-queue-preview"></pre>' +
+                '</div>' +
+                '<div id="wfAiQueuePayloadAdvancedBox" style="display:none">' +
+                '  <div class="wf-ai-guide-row"><label>Payload avanzado</label><textarea id="wfAiStepQueuePayload" class="wf-ai-input wf-ai-textarea" placeholder="Texto libre o JSON. Ej.: {&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}">{&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}</textarea></div>' +
+                '</div>' +
+                '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
+                '<div class="wf-ai-guide-note">Publica en WF_Queue mediante queue.publish. Después deja disponibles queue.last.* y, para los campos definidos, queue.last.payload.*.</div>';
+        }
+        if (type === 'queue_consume') {
+            return '' +
+                guideBranchRowHtml('then') +
+                '<div class="wf-ai-guide-row"><label>Broker</label><input id="wfAiStepQueueBroker" class="wf-ai-input" value="sql" readonly /></div>' +
+                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="default" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Cantidad a tomar</label><input id="wfAiStepQueueTake" class="wf-ai-input" type="number" min="1" max="100" value="1" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Logs de diagnóstico</label><select id="wfAiStepQueueDebug" class="wf-ai-select"><option value="false">No</option><option value="true">Sí</option></select></div>' +
+                '<div class="wf-ai-guide-note">Consume mensajes pendientes de WF_Queue mediante queue.consume. Prefetch y outputPrefix se mantienen con los valores compatibles del nodo actual. Después deja disponibles queue.hasMessage, queue.messageId, queue.message, queue.messages, payload y queue.error.</div>';
+        }
         if (type === 'subflow') {
             return '' +
                 guideBranchRowHtml('then') +
@@ -2145,6 +2453,7 @@
 
         syncFileWriteModeFields();
         syncStateSetModeFields();
+        syncQueuePayloadModeFields();
     }
 
     function setControlValue(id, value) {
@@ -2256,6 +2565,24 @@
             setControlValue('wfAiStepFileWriteEncoding', step.encoding || 'utf-8');
             setControlValue('wfAiStepFileWriteZipMode', step.zipMode || 'none');
             setControlValue('wfAiStepFileWriteEntry', step.entryName || '');
+        } else if (step.type === 'queue_publish') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepQueueBroker', step.broker || 'sql');
+            setControlValue('wfAiStepQueueName', step.queue || 'default');
+            var queueMode = String(step.payloadMode || '').toLowerCase();
+            var queueFields = queuePayloadFieldsForStep(step);
+            if (!queueMode) queueMode = queueFields.length ? 'fields' : 'advanced';
+            setControlValue('wfAiStepQueuePayloadMode', queueMode);
+            if (queueMode === 'fields') renderQueuePayloadRows(queueFields);
+            else setControlValue('wfAiStepQueuePayload', step.payloadText || '{\n  "instanceId": "${wf.instanceId}"\n}');
+            setControlValue('wfAiStepQueueConnection', step.connectionStringName || 'DefaultConnection');
+        } else if (step.type === 'queue_consume') {
+            setControlValue('wfAiStepBranch', step.branch || 'then');
+            setControlValue('wfAiStepQueueBroker', step.broker || 'sql');
+            setControlValue('wfAiStepQueueName', step.queue || 'default');
+            setControlValue('wfAiStepQueueTake', step.take || '1');
+            setControlValue('wfAiStepQueueConnection', step.connectionStringName || 'DefaultConnection');
+            setControlValue('wfAiStepQueueDebug', step.debug ? 'true' : 'false');
         } else if (step.type === 'subflow') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepSubflowRef', step.ref || '');
@@ -2325,6 +2652,7 @@
         var box = $('wfAiStepFields');
         if (!box) return;
         box.innerHTML = fieldHtmlForType(type);
+        if (type === 'queue_publish') renderQueuePayloadRows(defaultQueuePayloadFields());
 
         var condition = $('wfAiStepCondition');
         if (condition) condition.addEventListener('change', syncDynamicStepFields);
@@ -2360,6 +2688,18 @@
 
         var fileWriteMode = $('wfAiStepFileWriteSourceMode');
         if (fileWriteMode) fileWriteMode.addEventListener('change', syncDynamicStepFields);
+
+        var queuePayloadMode = $('wfAiStepQueuePayloadMode');
+        if (queuePayloadMode) queuePayloadMode.addEventListener('change', syncDynamicStepFields);
+
+        var addQueuePayloadField = $('wfAiAddQueuePayloadField');
+        if (addQueuePayloadField) addQueuePayloadField.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            addQueuePayloadFieldRow({ name: '', value: '' });
+            var rows = $('wfAiQueuePayloadFields');
+            var lastName = rows && rows.querySelector('[data-queue-payload-row]:last-child [data-queue-payload-name]');
+            if (lastName && lastName.focus) lastName.focus();
+        });
 
         syncDynamicStepFields();
         renderActiveTargetBox();
@@ -2446,6 +2786,70 @@
                 var fwc = $('wfAiStepFileWriteContent');
                 if (fwc && fwc.focus) fwc.focus();
                 return 'Indicá el contenido a escribir o cambiá el origen a Variable de DatosContexto.';
+            }
+        }
+
+        if (type === 'queue_publish' || type === 'queue_consume') {
+            var queueName = selectedText('wfAiStepQueueName');
+            if (!queueName) {
+                var qnf = $('wfAiStepQueueName');
+                if (qnf && qnf.focus) qnf.focus();
+                return 'Indicá el nombre de la cola.';
+            }
+            if (queueName.length > 100) {
+                var qnl = $('wfAiStepQueueName');
+                if (qnl && qnl.focus) qnl.focus();
+                return 'El nombre de la cola no puede superar 100 caracteres.';
+            }
+            if (!selectedText('wfAiStepQueueConnection')) {
+                var qcf = $('wfAiStepQueueConnection');
+                if (qcf && qcf.focus) qcf.focus();
+                return 'Indicá el nombre de la conexión SQL.';
+            }
+        }
+
+        if (type === 'queue_publish') {
+            var queuePayloadMode = selectedText('wfAiStepQueuePayloadMode') || 'fields';
+            if (queuePayloadMode === 'fields') {
+                var queueFields = collectQueuePayloadFieldsFromForm();
+                if (!queueFields.length) return 'Agregá al menos un campo al mensaje.';
+                var queueNames = {};
+                for (var qfi = 0; qfi < queueFields.length; qfi++) {
+                    var queueField = queueFields[qfi];
+                    if (!queuePayloadFieldNameIsValid(queueField.name)) {
+                        var invalidName = $('wfAiQueuePayloadFields') && $('wfAiQueuePayloadFields').querySelectorAll('[data-queue-payload-name]')[qfi];
+                        if (invalidName && invalidName.focus) invalidName.focus();
+                        return 'El nombre del campo debe comenzar con letra o _ y usar sólo letras, números o _. Ejemplo: origen o documentoId.';
+                    }
+                    var queueNameKey = normalizeKey(queueField.name);
+                    if (queueNames[queueNameKey]) return 'El campo "' + queueField.name + '" está repetido.';
+                    queueNames[queueNameKey] = true;
+                }
+            } else {
+                var advancedPayload = selectedText('wfAiStepQueuePayload');
+                if (!advancedPayload) {
+                    var qpf = $('wfAiStepQueuePayload');
+                    if (qpf && qpf.focus) qpf.focus();
+                    return 'Indicá el texto o JSON avanzado que querés publicar.';
+                }
+                var advancedTrim = advancedPayload.trim();
+                if ((advancedTrim.charAt(0) === '{' || advancedTrim.charAt(0) === '[')) {
+                    try { JSON.parse(advancedTrim); }
+                    catch (queueJsonError) {
+                        var qpj = $('wfAiStepQueuePayload');
+                        if (qpj && qpj.focus) qpj.focus();
+                        return 'El payload parece JSON pero no es válido. Corregilo o usá Campos guiados.';
+                    }
+                }
+            }
+        }
+
+        if (type === 'queue_consume') {
+            var qt = parseInt(selectedText('wfAiStepQueueTake') || '1', 10);
+            if (isNaN(qt) || qt < 1 || qt > 100) {
+                var qtf = $('wfAiStepQueueTake');
+                if (qtf && qtf.focus) qtf.focus();
+                return 'Cantidad a tomar debe ser un número entre 1 y 100.';
             }
         }
 
@@ -2610,6 +3014,28 @@
             step.encoding = selectedText('wfAiStepFileWriteEncoding') || 'utf-8';
             step.zipMode = selectedText('wfAiStepFileWriteZipMode') || 'none';
             step.entryName = selectedText('wfAiStepFileWriteEntry') || '';
+        } else if (type === 'queue_publish') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.broker = 'sql';
+            step.queue = selectedText('wfAiStepQueueName') || 'default';
+            step.payloadMode = selectedText('wfAiStepQueuePayloadMode') || 'fields';
+            if (step.payloadMode === 'fields') {
+                step.payloadFields = collectQueuePayloadFieldsFromForm();
+                step.payloadText = JSON.stringify(queuePayloadObjectFromFields(step.payloadFields), null, 2);
+            } else {
+                step.payloadFields = [];
+                step.payloadText = selectedText('wfAiStepQueuePayload') || 'Mensaje generado por Constructor IA';
+            }
+            step.connectionStringName = selectedText('wfAiStepQueueConnection') || 'DefaultConnection';
+        } else if (type === 'queue_consume') {
+            step.branch = selectedText('wfAiStepBranch') || 'then';
+            step.broker = 'sql';
+            step.queue = selectedText('wfAiStepQueueName') || 'default';
+            step.take = selectedText('wfAiStepQueueTake') || '1';
+            step.prefetch = step.take;
+            step.connectionStringName = selectedText('wfAiStepQueueConnection') || 'DefaultConnection';
+            step.outputPrefix = 'queue.consume';
+            step.debug = selectedText('wfAiStepQueueDebug') === 'true';
         } else if (type === 'subflow') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.ref = selectedText('wfAiStepSubflowRef') || '';
@@ -2997,6 +3423,8 @@
             '          <option value="subflow">Ejecutar otro workflow</option>' +
             '          <option value="file_read">Archivo: Leer</option>' +
             '          <option value="file_write">Archivo: Escribir</option>' +
+            '          <option value="queue_publish">Cola: Publicar</option>' +
+            '          <option value="queue_consume">Cola: Consumir</option>' +
             '          <option value="email_send">Enviar correo</option>' +
             '          <option value="notify">Notificación interna</option>' +
             '          <option value="state_set">Guardar variable</option>' +
@@ -4363,7 +4791,9 @@
             'human.task': 'Tarea humana',
             'util.logger': 'Registro',
             'control.delay': 'Espera',
-            'control.retry': 'Reintento'
+            'control.retry': 'Reintento',
+            'queue.publish': 'Cola: Publicar',
+            'queue.consume': 'Cola: Consumir'
         };
         return map[String(type || '')] || String(type || 'Paso');
     }
@@ -4884,11 +5314,45 @@
         }
     }
 
+    function prepareVerifiedPlanContract(res, userText) {
+        if (!res || !res.ok) return;
+        var plan = res.plan || {};
+        var actions = plan.actions || [];
+        if (!actions.length) return;
+
+        var validation = res.validation || (res.validation = {});
+        validation.errors = validation.errors || [];
+        validation.warnings = validation.warnings || [];
+
+        // Los planes del proveedor ML.NET llegan sin el contrato cliente fix74b.
+        // Debe existir y validarse antes de habilitar "Crear workflow".
+        if (!plan.contract) plan.contract = buildFix74PlanContract(plan, userText || '');
+
+        var contractErrors = validateFix74PlanContract(plan, userText || '', true);
+        contractErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        var selfTest = runFix74ContractSelfTest();
+        if (!selfTest.ok) pushUnique(validation.errors, 'La matriz interna del contrato fix74b no pasó completa.');
+
+        validation.contract = {
+            ok: contractErrors.length === 0 && selfTest.ok,
+            fingerprint: plan.contract && plan.contract.fingerprint || '',
+            graphFingerprint: plan.contract && plan.contract.graphFingerprint || '',
+            matrixPassed: selfTest.passed,
+            matrixTotal: selfTest.total
+        };
+        validation.ok = validation.errors.length === 0;
+    }
+
     function renderPhraseVerification(res, userText) {
         var out = $('wfAiResult');
         if (!out) return;
         lastPlan = null;
         lastAssistantResult = res || null;
+
+        // Al cambiar la frase no deben sobrevivir decisiones de un fallback anterior.
+        syncFallbackSession(userText || '');
+        prepareVerifiedPlanContract(res, userText || '');
 
         var status = verificationStatus(res, userText);
         var plan = (res && res.plan) || {};
@@ -4976,6 +5440,7 @@
 
         var createVerified = $('wfAiCreateVerifiedWorkflow');
         if (createVerified) createVerified.addEventListener('click', function () {
+            prepareVerifiedPlanContract(res, userText || '');
             lastPlan = plan;
             lastAssistantResult = res || null;
             confirmGuidedPlan(lastPlan);
@@ -5521,6 +5986,32 @@
             if (step.sourceMode === 'context') params.origen = step.origen || 'archivo';
             else params.content = step.content || '';
             return makePlanAction('file.write', labelFor('Archivo: Escribir'), params);
+        }
+
+        if (step.type === 'queue_publish') {
+            var payloadValue = queuePayloadValueFromStep(step);
+            if (payloadValue === '' || payloadValue == null) payloadValue = 'Mensaje generado por Constructor IA';
+            return makePlanAction('queue.publish', labelFor('Publicar en cola ' + (step.queue || 'default')), {
+                broker: 'sql',
+                queue: step.queue || 'default',
+                payload: payloadValue,
+                connectionStringName: step.connectionStringName || 'DefaultConnection'
+            });
+        }
+
+        if (step.type === 'queue_consume') {
+            var queueTake = parseInt(step.take || '1', 10);
+            if (isNaN(queueTake) || queueTake < 1) queueTake = 1;
+            queueTake = Math.min(queueTake, 100);
+            return makePlanAction('queue.consume', labelFor('Consumir cola ' + (step.queue || 'default')), {
+                broker: 'sql',
+                queue: step.queue || 'default',
+                take: queueTake,
+                prefetch: queueTake,
+                connectionStringName: step.connectionStringName || 'DefaultConnection',
+                outputPrefix: 'queue.consume',
+                debug: !!step.debug
+            });
         }
 
         if (step.type === 'subflow') {

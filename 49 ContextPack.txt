@@ -1,0 +1,522 @@
+CONTEXTPACK — WORKFLOW STUDIO
+CIERRE DE SESIÓN 03/08/2026
+BASE RECIBIDA: WORKFLOW-MAIN (48)
+ÚLTIMO ESTADO VALIDADO: FIX82F — REPROCESO SIN INFORMACIÓN DUPLICADA
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. FORMA OBLIGATORIA DE TRABAJO
+======================================================================
+
+En la próxima sesión Omar entregará:
+
+1. Este ContextPack.
+2. El Prompt de arranque.
+3. Un ZIP completo nuevo de Workflow Studio, armado por Omar.
+4. Ese ZIP debería incorporar WorkFlow-main (48) más la línea final de
+   fix82 a fix82f.
+5. Algún archivo adicional, si corresponde.
+
+El asistente debe:
+
+1. Confirmar que leyó completo este ContextPack.
+2. Esperar el ZIP completo antes de proponer cambios de código.
+3. Inspeccionar primero los archivos reales del ZIP.
+4. Confirmar qué fixes quedaron realmente integrados.
+5. No asumir que el ZIP fue armado exactamente igual a los ZIP parciales.
+6. Recién después analizar, proponer o modificar.
+
+Reglas no negociables:
+
+- No inventar tablas, clases, handlers, controles, rutas ni archivos.
+- No asumir que el código quedó igual a lo conversado.
+- La fuente de verdad es el ZIP completo más reciente.
+- No cambiar arquitectura sin necesidad real.
+- No reescribir cosas que ya funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- Cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar parches con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- No presentar código de archivos no inspeccionados.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- Evaluar siempre el funcionamiento productivo completo.
+- No tocar motor, HDocLoad, extractores cerrados, mapa, queue, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar datos de WF_Tarea sin identificar primero su origen.
+- No convertir recuerdos antiguos o hipótesis en requisitos.
+- Si una memoria anterior no coincide con el ZIP o con lo que Omar recuerda,
+  prevalecen el ZIP actual, este ContextPack y la validación real.
+
+======================================================================
+2. BASE REAL INSPECCIONADA EN ESTA SESIÓN
+======================================================================
+
+La base recibida fue:
+
+- WorkFlow-main (48).zip
+
+También se recibieron:
+
+- 48 ContextPack.txt
+- 48 Prompt.txt
+
+El ZIP 48 fue inspeccionado antes de avanzar.
+
+Se confirmó estáticamente:
+
+- fix80 y fix81 estaban integrados sin pisarse.
+- Seguridad y permisos estaba en Accesos rápidos.
+- Seguridad y permisos estaba incorporada como tarjeta principal en Default.
+- No había acceso a Seguridad en WsTopbar.
+- Los accesos respetaban ADMIN o SEGURIDAD_ABM.
+- WF_TaskCounters y WF_Tareas usaban el mismo universo válido mediante
+  relación con WF_Instancia.
+- Mi bandeja abría como vista personal.
+- Ver todas (administración) continuaba siendo una acción explícita.
+- La actualización automática de contadores estaba incorporada cada 15
+  segundos y al recuperar foco/visibilidad.
+- No se encontraron archivos faltantes en las referencias revisadas del
+  proyecto.
+- Prompt y ContextPack incluidos en el ZIP coincidían con los entregados.
+
+Validación operativa adicional durante esta sesión:
+
+- En una tarea devuelta, OMARD mostró Total 1, Por rol 1 y Reproceso 1.
+- Después de finalizar la instancia de prueba, OMARD mostró Total 0,
+  A mí 0, Por rol 0 y Reproceso 0.
+- La actualización se observó sin necesidad de modificar el handler.
+- No se repitió específicamente la prueba histórica de OMARD\USUARIO5
+  que antes comparaba 5 en contador contra 4 en grilla.
+
+======================================================================
+3. DECISIÓN DE ESTA SESIÓN
+======================================================================
+
+Omar preguntó por pendientes anteriores.
+
+Se decidió retomar exclusivamente:
+
+CIRCUITO PROFESIONAL DE RECHAZO, RETROCESO Y REPROCESO.
+
+Precaución acordada:
+
+- No tratar como hechos otros pendientes antiguos que Omar no recuerde.
+- Reconstruir siempre el estado desde el ZIP real.
+- No rehacer el motor de retroceso si ya funciona.
+- Concentrar el trabajo en la utilidad operativa y visual de
+  WF_Tarea_Detalle.
+
+======================================================================
+4. ESTADO PREVIO DEL BACKTRACK
+======================================================================
+
+El mecanismo de retroceso ya existía antes de fix82.
+
+Capacidades existentes:
+
+- human.task puede terminar como rechazado.
+- Se puede elegir una etapa humana anterior en “Volver a”.
+- Existe la opción de volver a Inicio.
+- Puede haber varios rechazos y retornos.
+- Se conserva trazabilidad mediante wfBack / wf.back.stack.
+- Los adjuntos conservan tareaId.
+- El motor y HHumanTask ya resolvían el retorno.
+
+Importante:
+
+- En esta sesión no se modificó motor, WorkflowRunner, HHumanTask ni wfBack.
+- La opción Volver a Inicio no fue repetida en la prueba nueva de esta sesión.
+- No reabrir runtime sin un bug real demostrado.
+
+======================================================================
+5. PROBLEMA REAL ENCONTRADO
+======================================================================
+
+WF_Tarea_Detalle mostraba información genérica, pero no explicaba
+profesionalmente el ciclo:
+
+1. Quién pidió una corrección.
+2. Qué observación dejó.
+3. A qué etapa volvió.
+4. Quién respondió.
+5. Qué documentación agregó.
+6. Quién revisó la respuesta.
+7. Si el reproceso quedó pendiente o resuelto.
+
+Los adjuntos ya estaban asociados a una tarea, pero la interfaz no los
+presentaba dentro del pedido y la respuesta correspondientes.
+
+La primera versión funcional mostró demasiada información abierta y luego
+se detectó que el mismo circuito se repetía en todas las tareas de la
+instancia sin explicar el papel de la tarea consultada.
+
+======================================================================
+6. LÍNEA DE FIXES 82
+======================================================================
+
+FIX82 — circuito_reproceso_profesional
+
+- Agregó presentación estructurada:
+  1. Pedido de corrección.
+  2. Respuesta y documentación.
+  3. Revisión posterior.
+- Reconstruyó ciclos históricos y nuevos.
+- Relacionó documentos mediante tareaId.
+- Modificó:
+  - WF_Tarea_Detalle.aspx
+  - WF_Tarea_Detalle.aspx.cs
+- No modificó motor ni base.
+
+FIX82B — circuito_reproceso_visible
+
+- Corrigió un error de generación en HtmlConSaltos.
+- Evitó que un error opcional ocultara silenciosamente el panel.
+- Agregó aviso visible y Trace.TraceError ante incompatibilidad.
+- Modificó los mismos dos archivos.
+
+FIX82C — visual_reproceso_colapsable
+
+- Redujo la carga visual.
+- Dejó resumen compacto.
+- Puso los ciclos bajo un detalle colapsable.
+- Mantuvo el historial general colapsado.
+- Modificó los mismos dos archivos.
+
+FIX82D — reproceso_contextual_operativo
+
+- Para tarea devuelta:
+  - Acción requerida.
+  - Pendiente de respuesta.
+  - Pedido, solicitante, fecha y destino.
+- Para tarea revisora:
+  - Respuesta recibida.
+  - Pendiente de revisión.
+  - Respuesta y documentación.
+- No mostraba panel antes del primer rechazo.
+- Corrigió alineación de desplegables.
+- Modificó:
+  - WF_Tarea_Detalle.aspx
+  - WF_Tarea_Detalle.aspx.cs
+
+FIX82E — reproceso_contextual_por_tarea
+
+- Diferenció el papel de la tarea consultada:
+  - antecedente;
+  - tarea que emitió el rechazo;
+  - tarea que respondió;
+  - tarea revisora;
+  - etapa posterior ajena al ciclo.
+- Reemplazó “Tarea actual” por “Tarea consultada” o “Tarea pendiente”.
+- Modificó:
+  - WF_Tarea_Detalle.aspx.cs
+
+FIX82F — reproceso_sin_informacion_duplicada
+
+- Eliminó la repetición del mismo ciclo.
+- Mantiene un resumen contextual visible.
+- Si la tarea pertenece al ciclo, muestra un solo desplegable:
+  “Ver trazabilidad completa de este reproceso”.
+- Si existen otros ciclos, quedan separados bajo:
+  “Ver otros reprocesos de la instancia”.
+- Para tareas anteriores o posteriores, deja un solo desplegable:
+  “Ver historial de reprocesos de la instancia”.
+- Eliminó del bloque el registro genérico de observaciones que repetía
+  la misma información.
+- Modificó:
+  - WF_Tarea_Detalle.aspx.cs
+
+Estado final esperado en el próximo ZIP:
+
+- WF_Tarea_Detalle.aspx debe contener el estado final incorporado hasta fix82d.
+- WF_Tarea_Detalle.aspx.cs debe contener el estado final de fix82f.
+- No aplicar automáticamente los fixes parciales: primero inspeccionar el ZIP.
+
+======================================================================
+7. PRUEBA REAL DE PUNTA A PUNTA
+======================================================================
+
+Definición:
+
+- Id: 7126
+- Nombre: Backtrack
+- Código observado: WF-20260306-072452
+
+Instancia nueva:
+
+- Instancia: 180544
+- Inicio: 03/08/2026 11:38:35
+- Fin: 03/08/2026 12:00:36
+- Estado final: Finalizado
+- Tareas: 5
+- Logs observados al cierre: 29
+
+Secuencia validada:
+
+TAREA 120311 — n2
+
+- Título: Dirección General - Preparar documentación
+- Usuario/rol: OMARD\OMARD / DIR_GENERAL
+- Estado final: Completada
+- Resultado: apto
+- Observación: Envío documentación inicial
+- Documento inicial: Contrato_001.pdf
+
+TAREA 120312 — n3
+
+- Título: Operaciones - Revisar documentación
+- Usuario: OMARD\USUARIO2
+- Estado final: Completada
+- Resultado: rechazado
+- Observación: Falta constancia de recepción
+- Volver a: n2
+
+TAREA 120313 — n2
+
+- Título: Dirección General - Preparar documentación
+- Usuario: OMARD\OMARD
+- Estado final: Completada
+- Resultado: apto
+- Observación: Adjunto la constancia solicitada
+- Documento de la respuesta: Constancia de recepcion.pdf
+
+TAREA 120314 — n3
+
+- Título: Operaciones - Revisar documentación
+- Usuario: OMARD\USUARIO2
+- Estado final: Completada
+- Resultado: apto
+- Observación: Listo
+
+TAREA 120315 — n4
+
+- Título: Compras - Validación final
+- Usuario: OMARD\USUARIO1
+- Estado final: Completada
+- Resultado: apto
+- Observación: Terminada
+
+Luego se ejecutó n5 Fin y la instancia quedó Finalizada.
+
+======================================================================
+8. VALIDACIONES FUNCIONALES OBTENIDAS
+======================================================================
+
+Se validó:
+
+- El rechazo desde n3 volvió correctamente a n2.
+- La nueva tarea n2 se marcó como reproceso.
+- El contador Reproceso subió a 1.
+- La respuesta quedó asociada al pedido correcto.
+- “Constancia de recepcion.pdf” apareció dentro de
+  Documentación de la respuesta.
+- “Contrato_001.pdf” continuó como documento general de la instancia,
+  pero no se mezcló como documento específico de la respuesta.
+- La nueva tarea n3 mostró la respuesta y el archivo para revisar.
+- Al aprobar n3, el flujo continuó a Compras.
+- Compras aprobó y la instancia finalizó.
+- El contador Reproceso volvió a 0.
+- El mapa continuó funcionando sin modificación.
+- Las tareas cerradas permiten Ver documentos.
+- En tareas cerradas no se permite adjuntar ni eliminar.
+- Los controles de carga pueden seguir visibles, pero quedan deshabilitados.
+- No se requirió SQL ni cambio de configuración.
+
+======================================================================
+9. PRESENTACIÓN FINAL VALIDADA CON FIX82F
+======================================================================
+
+Tarea 120311:
+
+- Muestra “Antecedente de un reproceso posterior”.
+- Aclara que ocurrió antes del pedido.
+- Ofrece un único:
+  “Ver historial de reprocesos de la instancia”.
+
+Tarea 120312:
+
+- Muestra “Pedido de corrección emitido”.
+- Resume:
+  - pedido;
+  - destino;
+  - respuesta recibida;
+  - documento;
+  - resultado de revisión.
+- Ofrece un único:
+  “Ver trazabilidad completa de este reproceso”.
+
+Tarea 120313:
+
+- Muestra “Respuesta enviada”.
+- Resume:
+  - pedido recibido;
+  - respuesta;
+  - documento;
+  - resultado posterior.
+- Ofrece un único:
+  “Ver trazabilidad completa de este reproceso”.
+
+Tarea 120314:
+
+- Muestra “Revisión realizada”.
+- Resume:
+  - pedido original;
+  - respuesta revisada;
+  - documento;
+  - decisión.
+- Ofrece un único:
+  “Ver trazabilidad completa de este reproceso”.
+
+Tarea 120315:
+
+- Muestra “Reproceso previo de la instancia”.
+- Aclara que Compras no formó parte del ciclo.
+- Ofrece un único:
+  “Ver historial de reprocesos de la instancia”.
+
+Validación visual final:
+
+- La información contextual cambia según la tarea.
+- Ya no aparece dos veces el mismo Ciclo de reproceso.
+- No aparece el registro genérico de observaciones dentro del bloque.
+- Los desplegables comienzan cerrados.
+- Esto fue confirmado con Ctrl + F5 en la tarea 120315.
+- Al abrir el desplegable, la trazabilidad completa sigue disponible.
+
+Conclusión:
+
+FIX82F VALIDADO.
+
+======================================================================
+10. ARCHIVOS AFECTADOS POR LA LÍNEA FINAL
+======================================================================
+
+Archivos que deben inspeccionarse primero en el próximo ZIP:
+
+- WF_Tarea_Detalle.aspx
+- WF_Tarea_Detalle.aspx.cs
+- WF_Tarea_Detalle.aspx.designer.cs, sólo para confirmar que no fue alterado
+  innecesariamente.
+- App_Code/Handlers/HHumanTask.cs, sólo para confirmar que continúa intacto.
+- Archivos reales donde vive wfBack / wf.back.stack, sólo para comparación,
+  no para modificarlos.
+- Proyecto .csproj para confirmar inclusión y compilación.
+
+No hubo cambios en:
+
+- Motor / WorkflowRunner.
+- HHumanTask.
+- wfBack.
+- Base de datos.
+- WF_Tarea.
+- WF_Instancia.
+- Estructura de adjuntos.
+- Mapa.
+- Canvas.
+- Contadores.
+- Seguridad.
+- Extractores.
+- HDocLoad.
+- Queue.
+- SMTP.
+- Subflow runtime.
+
+======================================================================
+11. PRIMERAS VALIDACIONES DE LA PRÓXIMA SESIÓN
+======================================================================
+
+Cuando Omar entregue el ZIP completo nuevo:
+
+1. Confirmar estructura real.
+2. Inspeccionar WF_Tarea_Detalle.aspx y WF_Tarea_Detalle.aspx.cs.
+3. Verificar que fix82f quedó realmente incorporado.
+4. Confirmar que no se mezclaron versiones intermedias.
+5. Comprobar que no aparezcan dos veces los ciclos.
+6. Confirmar las cinco cabeceras contextuales:
+   - Antecedente de un reproceso posterior.
+   - Pedido de corrección emitido.
+   - Respuesta enviada.
+   - Revisión realizada.
+   - Reproceso previo de la instancia.
+7. Confirmar que los detalles no tengan atributo open por defecto.
+8. Confirmar que una tarea sin rechazo no muestre el panel.
+9. Confirmar que una tarea cerrada no permita adjuntar ni eliminar.
+10. Confirmar que documentos específicos de respuesta se filtren por tareaId.
+11. Compilar en Visual Studio 2022.
+12. Si la base conserva la instancia 180544, hacer una regresión visual rápida
+    con tareas 120311 a 120315.
+13. Confirmar que Seguridad, contadores y Mi bandeja continúan como en ZIP 48.
+14. No generar otro fix si el ZIP ya contiene correctamente el estado validado.
+
+======================================================================
+12. ÁREAS CERRADAS
+======================================================================
+
+No reabrir salvo regresión real:
+
+- Motor de ejecución y WorkflowRunner.
+- Handlers runtime estables.
+- Canvas, aristas, zoom y minimapa.
+- WF_Instancia_Mapa y WF_Instancias.
+- Queue runtime.
+- SMTP y email.send.
+- HSubFlow.cs y runtime de subflujos.
+- NC_AR y FACTURA_AR.
+- Extractores documentales cerrados.
+- HDocLoad y doc.load.
+- Constructor IA fix72 a fix74b.
+- Export JSON con Meta.Name.
+- OC moderna validada.
+- Documento original en tarea.
+- Seguridad fix81, salvo regresión.
+- Consistencia de contadores fix80, salvo regresión.
+- Circuito profesional de rechazo, respuesta, revisión y trazabilidad
+  hasta fix82f.
+
+======================================================================
+13. TEMAS QUE SIGUEN APARCADOS
+======================================================================
+
+No avanzar automáticamente con estos temas:
+
+- VEP.
+- IA clasificadora documental.
+- Asociación de documentos a instancias existentes.
+- Nuevos nodos del Constructor IA.
+- Cambios de extractores de OC.
+- Rediseño de base.
+- Cambios de motor.
+- Estado Finalizado con advertencias.
+- Borrado de tareas históricas.
+
+Después de validar el ZIP completo, Omar decidirá cuál retomar.
+
+No usar memorias antiguas no confirmadas para seleccionar el próximo tema.
+
+======================================================================
+14. CRITERIO DE CIERRE DEL ZIP NUEVO
+======================================================================
+
+La integración queda cerrada cuando:
+
+- El ZIP completo compile.
+- fix82f esté integrado sin mezclar versiones intermedias.
+- Cada tarea muestre su papel real dentro o fuera del reproceso.
+- No se duplique el mismo ciclo.
+- Los desplegables inicien cerrados.
+- La trazabilidad completa siga disponible.
+- Los documentos de respuesta estén asociados al ciclo correcto.
+- Las tareas cerradas sean de solo lectura documental.
+- Los contadores vuelvan a cero al finalizar.
+- El mapa continúe sin regresión.
+- Seguridad y Mi bandeja sigan funcionando.
+- No se hayan modificado motor, base ni áreas cerradas.
