@@ -123,6 +123,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 var validation = new WfAiPlanValidator().Validate(plan, catalog);
                 EvaluateValidation(run, item, validation);
+                EvaluateFix84A(run, item, plan, catalog);
+                EvaluateFix84BDialogue(run, item, plan, catalog);
                 EvaluateSemantic(run, item, plan);
                 EvaluateNodes(run, item, plan);
                 EvaluateConnections(run, item, plan);
@@ -153,6 +155,162 @@ namespace Intranet.WorkflowStudio.WebForms
                 run.Checks.Add(AiRegressionCheck.Pass("Validador funcional OK = " + actual));
             else
                 run.Checks.Add(AiRegressionCheck.Fail("Validador funcional esperado " + expected + " pero fue " + actual + ". Errores: " + JoinList(validation == null ? null : validation.Errors)));
+        }
+
+        // fix84a: prueba directa de la capa contractual sin cambiar las expectativas legacy del caso.
+        // Un caso completo que ya no tiene missingData tampoco debe adquirir dudas bloqueantes nuevas
+        // por valores genéricos o por una definición contractual inconsistente.
+        private static void EvaluateFix84A(AiRegressionRunResult run, AiRegressionCase item, JObject plan, WfAiCatalog catalog)
+        {
+            try
+            {
+                var draft = new WfAiInterpretationDraftBuilder().Build(item == null ? "" : item.Phrase, plan, catalog);
+
+                if (draft.RegistryErrors != null && draft.RegistryErrors.Count > 0)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84a contrato inválido: " + string.Join("; ", draft.RegistryErrors.ToArray())));
+                    return;
+                }
+
+                int coveredActions = 0;
+                var actions = plan == null ? null : plan["actions"] as JArray;
+                if (actions != null)
+                {
+                    foreach (JToken token in actions)
+                    {
+                        JObject action = token as JObject;
+                        if (action == null) continue;
+                        string nodeType = Convert.ToString(action["nodeType"] ?? "").Trim();
+                        if (WfAiConstructionContractRegistry.Find(nodeType) != null) coveredActions++;
+                    }
+                }
+
+                if (coveredActions == 0)
+                {
+                    run.Checks.Add(AiRegressionCheck.Skip("fix84a: el caso no contiene nodos de la muestra contractual inicial."));
+                    return;
+                }
+
+                if (draft.Nodes.Count != coveredActions)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84a interpretó " + draft.Nodes.Count + " de " + coveredActions + " nodo(s) cubierto(s)."));
+                    return;
+                }
+
+                var legacyMissing = plan == null ? null : plan["missingData"] as JArray;
+                bool legacyPlanComplete = legacyMissing == null || legacyMissing.Count == 0;
+                if (legacyPlanComplete && draft.BlockingClarificationCount > 0)
+                {
+                    if (item != null && item.Dialogue != null && item.Dialogue.Enabled)
+                    {
+                        run.Checks.Add(AiRegressionCheck.Pass("fix84b detectó " + draft.BlockingClarificationCount + " aclaración(es) bloqueante(s) prevista(s) para el diálogo."));
+                        return;
+                    }
+
+                    var questions = new List<string>();
+                    foreach (WfAiClarification clarification in draft.Clarifications)
+                    {
+                        if (clarification != null && clarification.Blocking && !string.IsNullOrWhiteSpace(clarification.Question))
+                            questions.Add(clarification.Question);
+                    }
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84a agregó aclaraciones bloqueantes a un plan legacy completo: " + string.Join(" | ", questions.ToArray())));
+                    return;
+                }
+
+                run.Checks.Add(AiRegressionCheck.Pass("fix84a contrato OK: " + coveredActions + " nodo(s) cubierto(s), aclaraciones bloqueantes=" + draft.BlockingClarificationCount + "."));
+            }
+            catch (Exception ex)
+            {
+                run.Checks.Add(AiRegressionCheck.Fail("fix84a lanzó una excepción: " + ex.Message));
+            }
+        }
+
+        // fix84b: valida una conversación contractual completa sin reescribir la frase original.
+        // El caso declara la duda esperada y una respuesta estructurada; el servidor debe aplicar
+        // la decisión sobre una copia del plan y regenerar un borrador sin aclaraciones bloqueantes.
+        private static void EvaluateFix84BDialogue(AiRegressionRunResult run, AiRegressionCase item, JObject plan, WfAiCatalog catalog)
+        {
+            if (item == null || item.Dialogue == null || !item.Dialogue.Enabled)
+                return;
+
+            try
+            {
+                var builder = new WfAiInterpretationDraftBuilder();
+                var initialDraft = builder.Build(item.Phrase, plan, catalog);
+
+                if (string.IsNullOrWhiteSpace(initialDraft.Fingerprint))
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b no generó fingerprint para el borrador inicial."));
+                    return;
+                }
+
+                if (initialDraft.BlockingClarificationCount != item.Dialogue.ExpectedInitialBlocking)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b esperaba " + item.Dialogue.ExpectedInitialBlocking + " aclaración(es) inicial(es), pero obtuvo " + initialDraft.BlockingClarificationCount + "."));
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.Dialogue.ExpectedQuestionContains))
+                {
+                    bool found = initialDraft.Clarifications.Any(x => x != null
+                        && x.Blocking
+                        && (x.Question ?? "").IndexOf(item.Dialogue.ExpectedQuestionContains, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (!found)
+                    {
+                        run.Checks.Add(AiRegressionCheck.Fail("fix84b no generó la pregunta esperada que contiene: " + item.Dialogue.ExpectedQuestionContains));
+                        return;
+                    }
+                }
+
+                var resolution = new WfAiClarificationResolver().Resolve(plan, initialDraft, item.Dialogue.Answers, catalog);
+                if (resolution.Errors != null && resolution.Errors.Count > 0)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b no pudo aplicar la respuesta estructurada: " + string.Join(" | ", resolution.Errors.ToArray())));
+                    return;
+                }
+
+                var finalDraft = builder.Build(
+                    item.Phrase,
+                    resolution.Plan,
+                    catalog,
+                    resolution.AcceptedAnswerIds,
+                    initialDraft.Fingerprint);
+
+                if (finalDraft.BlockingClarificationCount != item.Dialogue.ExpectedFinalBlocking)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b esperaba " + item.Dialogue.ExpectedFinalBlocking + " aclaración(es) finales, pero obtuvo " + finalDraft.BlockingClarificationCount + "."));
+                    return;
+                }
+
+                if (!string.Equals(initialDraft.SourceText, item.Phrase, StringComparison.Ordinal)
+                    || !string.Equals(finalDraft.SourceText, item.Phrase, StringComparison.Ordinal))
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b alteró la frase original durante la aclaración."));
+                    return;
+                }
+
+                if (!string.Equals(initialDraft.Fingerprint, finalDraft.Fingerprint, StringComparison.Ordinal))
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b cambió el fingerprint del borrador base durante la misma conversación."));
+                    return;
+                }
+
+                var finalValidation = new WfAiPlanValidator().Validate(resolution.Plan, catalog);
+                if (finalValidation == null || !finalValidation.Ok)
+                {
+                    run.Checks.Add(AiRegressionCheck.Fail("fix84b dejó un plan inválido después de resolver el diálogo. Errores: " + JoinList(finalValidation == null ? null : finalValidation.Errors)));
+                    return;
+                }
+
+                run.Checks.Add(AiRegressionCheck.Pass(
+                    "fix84b diálogo OK: " + initialDraft.BlockingClarificationCount
+                    + " duda(s) inicial(es) -> " + finalDraft.BlockingClarificationCount
+                    + ", respuesta estructurada aplicada sin reescribir la frase."));
+            }
+            catch (Exception ex)
+            {
+                run.Checks.Add(AiRegressionCheck.Fail("fix84b diálogo lanzó una excepción: " + ex.Message));
+            }
         }
 
         private static void EvaluateSemantic(AiRegressionRunResult run, AiRegressionCase item, JObject plan)
@@ -653,6 +811,7 @@ namespace Intranet.WorkflowStudio.WebForms
             public string Description { get; set; }
             public string Phrase { get; set; }
             public bool Enabled { get; set; }
+            public AiRegressionDialogue Dialogue { get; set; }
             public AiRegressionExpectation Expected { get; set; }
 
             public void EnsureDefaults()
@@ -661,8 +820,24 @@ namespace Intranet.WorkflowStudio.WebForms
                 Name = Name ?? "";
                 Description = Description ?? "";
                 Phrase = Phrase ?? "";
+                if (Dialogue != null) Dialogue.EnsureDefaults();
                 if (Expected == null) Expected = new AiRegressionExpectation();
                 Expected.EnsureDefaults();
+            }
+        }
+
+        private class AiRegressionDialogue
+        {
+            public bool Enabled { get; set; }
+            public int ExpectedInitialBlocking { get; set; }
+            public int ExpectedFinalBlocking { get; set; }
+            public string ExpectedQuestionContains { get; set; }
+            public JObject Answers { get; set; }
+
+            public void EnsureDefaults()
+            {
+                ExpectedQuestionContains = ExpectedQuestionContains ?? "";
+                if (Answers == null) Answers = new JObject();
             }
         }
 

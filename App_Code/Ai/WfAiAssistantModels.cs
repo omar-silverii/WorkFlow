@@ -8,6 +8,8 @@ namespace Intranet.WorkflowStudio.WebForms
         public string UserText { get; set; }
         public string WorkflowJson { get; set; }
         public string ConversationId { get; set; }
+        public string InterpretationFingerprint { get; set; }
+        public JObject ClarificationAnswers { get; set; }
     }
 
     public class WfAiCatalog

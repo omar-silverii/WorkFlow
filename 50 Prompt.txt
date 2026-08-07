@@ -1,0 +1,261 @@
+PROMPT DE ARRANQUE — WORKFLOW STUDIO
+PRÓXIMA SESIÓN: VALIDAR ZIP COMPLETO Y DISEÑAR FIX84
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack de cierre del 06/08/2026.
+3. Un ZIP completo nuevo de Workflow Studio armado por mí.
+4. Ese ZIP debería incluir:
+   - WorkFlow-main (49);
+   - fix83_colas_constructor_paso_a_paso;
+   - fix83b_payload_guiado_colas_logger_objetos;
+   - fix83c_frases_colas_contrato_verificacion;
+   - fix83d_payload_json_y_mensaje_logger_por_frase.
+5. Algún archivo adicional, si corresponde.
+
+======================================================================
+PASO 1
+======================================================================
+
+Confirmá que leíste completo el ContextPack.
+
+======================================================================
+PASO 2
+======================================================================
+
+Esperá el ZIP completo antes de proponer cambios de código.
+
+======================================================================
+PASO 3
+======================================================================
+
+Cuando tengas el ZIP:
+
+- inspeccioná primero los archivos reales;
+- confirmá la estructura;
+- verificá qué fixes quedaron realmente incorporados;
+- comprobá que no se mezclaron versiones intermedias;
+- no asumas que el código quedó igual a los ZIP parciales;
+- recién después analizá o propongas cambios.
+
+Inspeccionar primero:
+
+- WorkflowUI.aspx
+- Scripts/workflow.ai.assistant.js
+- App_Code/Handlers/HLogger.cs
+- App_Code/Ai/WfAiMlnetProvider.cs
+- App_Data/WF_AI/ai_regression_cases.json
+- proyecto .csproj
+
+Estado esperado:
+
+- WorkflowUI.aspx y JavaScript con fix83 + fix83b + fix83c.
+- HLogger.cs con fix83b.
+- WfAiMlnetProvider.cs con fix83c + fix83d.
+- ai_regression_cases.json con el caso:
+  O_QUEUE_ROUNDTRIP_JSON_LOGGER.
+
+======================================================================
+MÉTODO PERMANENTE DE TRABAJO
+======================================================================
+
+No quiero tener que diseñar yo aquello que desconozco del sistema.
+
+Puedo darte una idea mínima, una necesidad o una duda.
+
+Quiero que actúes como ingeniero del sistema:
+
+- estudiá el producto real;
+- inspeccioná el código;
+- investigá productos similares o información actual cuando sirva;
+- detectá qué debería hacer profesionalmente el sistema;
+- proponé alternativas;
+- recomendá una;
+- explicá implicaciones operativas;
+- conversala conmigo;
+- incorporá mi experiencia como usuario;
+- y recién después implementá.
+
+No necesito fichas obligatorias ni una especificación técnica completa.
+
+No seas complaciente.
+
+Si ves un camino mejor, decímelo e insistí con argumentos.
+
+La conversación previa al código es parte del método.
+
+La fuente de verdad siempre es el ZIP completo más reciente.
+
+======================================================================
+DECISIÓN DE PRODUCTO OBLIGATORIA
+======================================================================
+
+Para todos los nodos actuales y futuros, el Constructor IA debe evolucionar a:
+
+INTERPRETACIÓN NATURAL CON DIÁLOGO DE ACLARACIÓN.
+
+El usuario no debe tener que conocer:
+
+- JSON;
+- ${...};
+- variables internas;
+- nombres técnicos exactos de nodos;
+- ni una gramática artificial.
+
+La frase puede ser humana, incompleta o ambigua.
+
+El sistema debe:
+
+1. Mostrar qué entendió.
+2. Diferenciar:
+   - resuelto;
+   - inferido;
+   - ambiguo;
+   - faltante;
+   - no reconocido.
+3. Preguntar solamente lo necesario.
+4. Resolver las dudas con controles guiados y editables.
+5. Regenerar el plan.
+6. Mostrar un resumen final.
+7. Exigir confirmación real.
+8. Aplicar al canvas solamente cuando el plan esté resuelto.
+
+No seguir ampliando indefinidamente expresiones regulares o frases canónicas
+como solución principal.
+
+El modo paso a paso debe continuar como camino determinista.
+
+Paso a paso, frase, diálogo, Datos disponibles, validación y regresión deben
+compartir un contrato universal de construcción asistida por nodo.
+
+Esta decisión debe aplicarse también a cada nodo nuevo que se agregue.
+
+======================================================================
+PRIMER TRABAJO DE LA SESIÓN
+======================================================================
+
+Después de validar el ZIP completo, no empieces agregando nodos.
+
+Primero analizá la arquitectura real y proponé:
+
+FIX84 — BASE UNIVERSAL DE INTERPRETACIÓN Y ACLARACIÓN.
+
+La propuesta debe explicar:
+
+- qué componentes actuales se reutilizan;
+- dónde debe vivir el contrato universal;
+- cómo representa resuelto/inferido/ambiguo/faltante/no reconocido;
+- cómo el panel genera preguntas y controles;
+- cómo se regenerará el plan;
+- cómo se confirma antes de aplicar;
+- cómo se conecta con el Constructor paso a paso;
+- cómo se prueba en WF_AiRegression;
+- cómo se incorporarán nodos futuros sin otro parser artesanal.
+
+Muestra inicial recomendada:
+
+- queue.publish
+- queue.consume
+- util.logger
+- human.task
+- control.if
+
+No implementes fix84 hasta que hayamos conversado y acordado la propuesta.
+
+======================================================================
+REGLAS OBLIGATORIAS
+======================================================================
+
+- No inventar nada.
+- No inventar tablas, clases, handlers, APIs, controles ni carpetas.
+- No cambiar arquitectura sin necesidad.
+- No reescribir cosas que funcionan.
+- No usar código anterior sin revisar el ZIP.
+- Trabajar siempre sobre código real.
+- Cambios mínimos y precisos.
+- Entregar correcciones como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar diff con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría larga con una corrección puntual.
+- Evaluar el funcionamiento productivo completo.
+- No tocar motor, HDocLoad, extractores, mapa, queue runtime, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar tareas históricas.
+- No convertir recuerdos antiguos en requisitos.
+- Si una memoria no coincide con el ZIP, prevalece el ZIP y la validación real.
+
+======================================================================
+ESTADO VALIDADO QUE NO DEBE REHACERSE
+======================================================================
+
+- fix82f integrado en ZIP 49.
+- queue.publish y queue.consume paso a paso.
+- payload guiado.
+- campos conocidos del payload en Datos disponibles.
+- HLogger serializa objetos como JSON.
+- frases de colas crean los cinco nodos.
+- contrato permite Crear workflow.
+- payload JSON se corta correctamente.
+- mensaje Logger se conserva.
+- instancia final validada: 180548.
+- payload:
+  instanceId = 180548
+  origen = Prueba por frase
+- caso O_QUEUE_ROUNDTRIP_JSON_LOGGER:
+  OK 12 / FALLA 0 / SKIP 0.
+
+No quedó documentada una ejecución completa de los 15 casos posterior a fix83d.
+Puede hacerse como regresión inicial después de confirmar el ZIP.
+
+======================================================================
+NO TRABAJAR AUTOMÁTICAMENTE
+======================================================================
+
+No avanzar todavía con:
+
+- nuevos nodos;
+- VEP;
+- IA clasificadora documental;
+- asociación de documentos a instancias existentes;
+- extractores de OC;
+- rediseño de base;
+- cambios de motor;
+- estado Finalizado con advertencias;
+- borrado de tareas históricas.
+
+Primero validar el ZIP y diseñar fix84.
+
+======================================================================
+ENTREGA
+======================================================================
+
+Si el ZIP ya contiene correctamente fix83 a fix83d:
+
+- indicarlo;
+- no generar un fix innecesario;
+- dar una validación breve y comprobable;
+- luego presentar la propuesta de arquitectura para fix84.
+
+Después de que Omar apruebe la propuesta:
+
+- generar ZIP de reemplazo;
+- estructura real;
+- archivos completos;
+- LEEME;
+- causa;
+- corrección;
+- archivos;
+- configuración;
+- prueba;
+- resultado esperado.
+
+No quiero una colección de frases técnicas.
+
+Quiero un asistente local que interprete una intención humana, pregunte lo
+necesario y construya un plan confirmado para todos los nodos actuales y futuros.

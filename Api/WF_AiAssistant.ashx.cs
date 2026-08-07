@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Web;
@@ -55,22 +56,87 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                     return;
                 }
 
-                var validation = new WfAiPlanValidator().Validate(model.Plan, catalog);
+                // FIX84B mantiene al proveedor legacy como generador del plan base y aplica las
+                // respuestas estructuradas encima de una copia. Cada POST reconstruye todo desde cero.
+                var builder = new WfAiInterpretationDraftBuilder();
+                JObject basePlan = model.Plan == null ? new JObject() : model.Plan;
+                WfAiInterpretationDraft baseDraft = builder.Build(req.UserText, basePlan, catalog);
+
+                bool hasAnswers = req.ClarificationAnswers != null && req.ClarificationAnswers.HasValues;
+                bool stale = hasAnswers
+                    && (string.IsNullOrWhiteSpace(req.InterpretationFingerprint)
+                        || !string.Equals(req.InterpretationFingerprint, baseDraft.Fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                var resolution = new WfAiClarificationResolutionResult
+                {
+                    Plan = (JObject)basePlan.DeepClone()
+                };
+
+                if (!stale && hasAnswers)
+                    resolution = new WfAiClarificationResolver().Resolve(basePlan, baseDraft, req.ClarificationAnswers, catalog);
+
+                JObject effectivePlan = resolution.Plan ?? (JObject)basePlan.DeepClone();
+                WfAiInterpretationDraft interpretationDraft = builder.Build(
+                    req.UserText,
+                    effectivePlan,
+                    catalog,
+                    resolution.AcceptedAnswerIds,
+                    baseDraft.Fingerprint);
+
+                var validation = new WfAiPlanValidator().Validate(effectivePlan, catalog);
+                if (validation == null) validation = new WfAiValidationResult();
+                if (stale)
+                {
+                    validation.Ok = false;
+                    validation.Errors.Add("La propuesta cambió desde la última aclaración. Volvé a verificar la frase antes de continuar.");
+                }
+                foreach (string error in resolution.Errors)
+                {
+                    validation.Ok = false;
+                    validation.Errors.Add(error);
+                }
+
+                bool dialogueReady = !stale
+                    && resolution.Errors.Count == 0
+                    && interpretationDraft.RegistryErrors.Count == 0
+                    && interpretationDraft.BlockingClarificationCount == 0;
 
                 WriteJson(context, new
                 {
                     ok = true,
                     provider = model.Provider,
                     model = model.Model,
-                    plan = model.Plan,
+                    plan = effectivePlan,
                     validation = new
                     {
                         ok = validation.Ok,
                         errors = validation.Errors,
                         warnings = validation.Warnings
                     },
+                    // Se conserva fix84a por compatibilidad diagnóstica con lo ya validado.
+                    fix84a = new
+                    {
+                        active = true,
+                        contractVersion = WfAiConstructionContractRegistry.Version,
+                        coveredNodeTypes = WfAiConstructionContractRegistry.CoveredNodeTypes(),
+                        interpretationDraft = interpretationDraft,
+                        error = ""
+                    },
+                    fix84b = new
+                    {
+                        active = true,
+                        version = "fix84b-dialog-v1",
+                        fingerprint = baseDraft.Fingerprint,
+                        stale = stale,
+                        ready = dialogueReady,
+                        interpretationDraft = interpretationDraft,
+                        acceptedAnswerIds = resolution.AcceptedAnswerIds,
+                        appliedAnswers = resolution.AppliedAnswers,
+                        errors = resolution.Errors,
+                        warnings = resolution.Warnings
+                    },
                     catalogWarnings = catalog.Warnings,
-                    messageToUser = Convert.ToString(model.Plan["messageToUser"] ?? "Propuesta recibida del modelo local.")
+                    messageToUser = Convert.ToString(effectivePlan["messageToUser"] ?? "Propuesta recibida del modelo local.")
                 });
             }
             catch (Exception ex)

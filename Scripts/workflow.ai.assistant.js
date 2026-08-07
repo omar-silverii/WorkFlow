@@ -20,6 +20,7 @@
 // fix74b: genera y valida la explicación textual desde los parámetros reales de cada nodo y rama.
 // fix83b: payload guiado para colas, campos navegables después de consumir y soporte de objetos en Logger.
 // fix83c: genera el contrato fix74b antes de Crear workflow desde Verificar frase y amplía frases naturales de colas.
+// fix84b: diálogo contractual genérico; las respuestas se envían estructuradas sin reescribir la frase original.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -38,6 +39,9 @@
     var aiAppliedDecisionSummary = null;
     var aiFix74SelfTestResult = null;
     var aiFix74LastContractCheck = null;
+    var aiFix84bAnswers = {};
+    var aiFix84bFingerprint = '';
+    var aiFix84bBasePhraseKey = '';
 
     function $(id) { return document.getElementById(id); }
 
@@ -4839,6 +4843,10 @@
     function visualDraftRelevantNode(nodes, question) {
         var key = String((question && question.key) || '');
         var i;
+        if (question && question.nodeType) {
+            var contractual = visualDraftFindNode(nodes, question.nodeLabel || '', question.nodeType || '');
+            if (contractual) return contractual;
+        }
         if (key === 'branch-no' || key === 'missing-branch-no-action' || key === 'it-scope') {
             for (i = 0; i < nodes.length; i++) if (nodes[i].nodeType === 'control.if') return nodes[i];
         }
@@ -5273,8 +5281,361 @@
         });
     }
 
+    // ------------------------------------------------------------
+    // FIX84B: diálogo contractual universal (primera muestra)
+    // ------------------------------------------------------------
+    function fix84bPhraseKey(userText) {
+        return normalizePhraseForSearch(cleanGuidePhraseText(userText || ''));
+    }
+
+    function resetFix84bDialogue() {
+        aiFix84bAnswers = {};
+        aiFix84bFingerprint = '';
+        aiFix84bBasePhraseKey = '';
+    }
+
+    function syncFix84bSession(userText) {
+        var key = fix84bPhraseKey(userText);
+        if (!aiFix84bBasePhraseKey) {
+            aiFix84bBasePhraseKey = key;
+            return;
+        }
+        if (key !== aiFix84bBasePhraseKey) {
+            aiFix84bAnswers = {};
+            aiFix84bFingerprint = '';
+            aiFix84bBasePhraseKey = key;
+            aiVisualDraftSelectedIssueKey = '';
+        }
+    }
+
+    function fix84bInfo(res) {
+        return res && res.fix84b && res.fix84b.active ? res.fix84b : null;
+    }
+
+    function fix84bDraft(res) {
+        var info = fix84bInfo(res);
+        return info && info.interpretationDraft || null;
+    }
+
+    function fix84bBlockingClarifications(res) {
+        var draft = fix84bDraft(res);
+        return ((draft && draft.clarifications) || []).filter(function (c) { return c && c.blocking; });
+    }
+
+    function fix84bCanResolveClarification(c) {
+        if (!c) return false;
+        var source = String(c.source || '');
+        var kind = String(c.controlKind || 'text');
+        if (source !== 'contract_parameter' && source !== 'contract_requirement' && source !== 'contract_ambiguity') return false;
+        return ['text', 'number', 'select', 'boolean', 'role_or_user', 'available_data', 'payload_editor', 'condition_builder'].indexOf(kind) >= 0;
+    }
+
+    function fix84bOwnsDialogue(res) {
+        var blocking = fix84bBlockingClarifications(res);
+        if (!blocking.length) return false;
+        return blocking.every(fix84bCanResolveClarification);
+    }
+
+    function fix84bHasErrors(res) {
+        var info = fix84bInfo(res);
+        return !!(info && info.errors && info.errors.length);
+    }
+
+    function captureFix84bState(res, userText) {
+        var info = fix84bInfo(res);
+        if (!info) return;
+        syncFix84bSession(userText || '');
+        if (info.stale) {
+            aiFix84bAnswers = {};
+            aiFix84bFingerprint = info.fingerprint ? String(info.fingerprint) : '';
+            return;
+        }
+        if (info.fingerprint) aiFix84bFingerprint = String(info.fingerprint);
+    }
+
+    function fix84bStatusLabel(status) {
+        var map = {
+            resolved: 'Resuelto',
+            inferred: 'Inferido',
+            ambiguous: 'Ambiguo',
+            missing: 'Falta dato',
+            unrecognized: 'No reconocido'
+        };
+        return map[String(status || '')] || String(status || '');
+    }
+
+    function fix84bVisualQuestions(res) {
+        return fix84bBlockingClarifications(res).filter(fix84bCanResolveClarification).map(function (c) {
+            return {
+                key: String(c.id || ''),
+                title: String(c.question || 'Necesito confirmar un dato'),
+                detail: (c.nodeLabel ? String(c.nodeLabel) + ' · ' : '') + fix84bStatusLabel(c.status),
+                nodeType: String(c.nodeType || ''),
+                nodeLabel: String(c.nodeLabel || ''),
+                actionIndex: typeof c.actionIndex === 'number' ? c.actionIndex : -1,
+                options: []
+            };
+        });
+    }
+
+    function fix84bRoleUserOptionsHtml() {
+        var html = '<option value="">— elegí destino —</option>';
+        if (guideCatalog.roles && guideCatalog.roles.length) {
+            html += '<optgroup label="Roles">';
+            guideCatalog.roles.forEach(function (r) {
+                var key = roleKey(r);
+                if (key) html += '<option value="role::' + htmlEncode(key) + '">' + htmlEncode(roleLabel(r)) + '</option>';
+            });
+            html += '</optgroup>';
+        }
+        if (guideCatalog.users && guideCatalog.users.length) {
+            html += '<optgroup label="Usuarios">';
+            guideCatalog.users.forEach(function (u) {
+                var key = userKey(u);
+                if (key) html += '<option value="user::' + htmlEncode(key) + '">' + htmlEncode(userLabel(u)) + '</option>';
+            });
+            html += '</optgroup>';
+        }
+        return html;
+    }
+
+    function fix84bPayloadRowsHtml(currentValue) {
+        var rows = [];
+        if (currentValue && typeof currentValue === 'object' && !Array.isArray(currentValue)) {
+            Object.keys(currentValue).forEach(function (k) { rows.push({ name: k, value: currentValue[k] }); });
+        }
+        if (!rows.length) rows.push({ name: '', value: '' });
+        return rows.map(function (row) {
+            return '<div class="wf-ai-queue-field-row" data-fix84b-payload-row="1">' +
+                '<div class="wf-ai-queue-field-head"><strong>Campo del mensaje</strong><button type="button" class="btn wf-ai-queue-remove" data-fix84b-payload-remove="1">Quitar</button></div>' +
+                '<label class="wf-ai-queue-mini-label">Nombre</label>' +
+                '<input class="wf-ai-input" data-fix84b-payload-name="1" value="' + htmlEncode(row.name || '') + '" placeholder="Ej.: origen, instanceId" />' +
+                '<label class="wf-ai-queue-mini-label">Valor</label>' +
+                '<input class="wf-ai-input" data-fix84b-payload-value="1" value="' + htmlEncode(row.value == null ? '' : row.value) + '" placeholder="Texto fijo o dato disponible" />' +
+                '<select class="wf-ai-select" data-fix84b-payload-source="1">' + availableFieldOptionsWithBlank('', '— elegir un dato disponible —') + '</select>' +
+                '</div>';
+        }).join('');
+    }
+
+    function fix84bControlHtml(c) {
+        c = c || {};
+        var id = String(c.id || '');
+        var kind = String(c.controlKind || 'text');
+        var current = c.currentValue == null ? '' : c.currentValue;
+        var html = '<div class="wf-ai-fix84b-control" data-fix84b-control="' + htmlEncode(kind) + '" data-fix84b-id="' + htmlEncode(id) + '">';
+
+        if (kind === 'select' && c.options && c.options.length) {
+            html += '<div class="wf-ai-fix84b-choice-list">';
+            c.options.forEach(function (opt, idx) {
+                html += '<button type="button" class="btn wf-ai-fix84b-choice' + (idx === 0 ? ' primary' : '') + '" data-fix84b-option="' + htmlEncode(opt) + '">' + htmlEncode(opt) + '</button>';
+            });
+            html += '</div></div>';
+            return html;
+        }
+
+        if (kind === 'role_or_user') {
+            html += '<label class="wf-ai-fix84b-label">Destino real</label><select class="wf-ai-select" data-fix84b-role-user="1">' + fix84bRoleUserOptionsHtml() + '</select>';
+        } else if (kind === 'available_data') {
+            html += '<label class="wf-ai-fix84b-label">Dato disponible</label><select class="wf-ai-select" data-fix84b-available="1">' + availableFieldOptionsWithBlank('', '— elegir dato —') + '</select>';
+            html += '<div class="wf-ai-fix84b-or">o escribirlo</div><input class="wf-ai-input" data-fix84b-manual="1" value="' + htmlEncode(current || '') + '" placeholder="Nombre del dato" />';
+        } else if (kind === 'payload_editor') {
+            html += '<label class="wf-ai-fix84b-label">Mensaje simple</label><input class="wf-ai-input" data-fix84b-payload-text="1" value="" placeholder="Ej.: Solicitud recibida" />';
+            html += '<div class="wf-ai-fix84b-or">o armá campos sin escribir JSON</div>';
+            html += '<div class="wf-ai-queue-fields" data-fix84b-payload-rows="1">' + fix84bPayloadRowsHtml(current) + '</div>';
+            html += '<button type="button" class="btn wf-ai-queue-add" data-fix84b-payload-add="1">Agregar campo</button>';
+        } else if (kind === 'condition_builder') {
+            html += '<label class="wf-ai-fix84b-label">Dato a evaluar</label><select class="wf-ai-select" data-fix84b-condition-field="1">' + availableFieldOptions(defaultConditionField()) + '</select>';
+            html += '<label class="wf-ai-fix84b-label">Comparación</label><select class="wf-ai-select" data-fix84b-condition-op="1">' +
+                '<option value="=">igual a</option><option value="!=">distinto de</option><option value=">">mayor que</option><option value=">=">mayor o igual</option><option value="<">menor que</option><option value="<=">menor o igual</option><option value="contains">contiene</option><option value="not_contains">no contiene</option><option value="not_empty">no está vacío</option><option value="empty">está vacío</option></select>';
+            html += '<label class="wf-ai-fix84b-label">Valor</label><input class="wf-ai-input" data-fix84b-condition-value="1" placeholder="Valor de comparación" />';
+        } else if (kind === 'boolean') {
+            html += '<select class="wf-ai-select" data-fix84b-value="1"><option value="true">Sí</option><option value="false">No</option></select>';
+        } else if (kind === 'number') {
+            html += '<input type="number" class="wf-ai-input" data-fix84b-value="1" value="' + htmlEncode(current || '') + '" />';
+        } else if (kind === 'select') {
+            html += '<select class="wf-ai-select" data-fix84b-value="1">';
+            (c.options || []).forEach(function (opt) { html += '<option value="' + htmlEncode(opt) + '">' + htmlEncode(opt) + '</option>'; });
+            html += '</select>';
+        } else {
+            html += '<input class="wf-ai-input" data-fix84b-value="1" value="' + htmlEncode(current || '') + '" placeholder="Escribí la respuesta" />';
+        }
+
+        html += '<div class="wf-ai-fix84b-actions"><button type="button" class="btn wf-ai-fix84b-resolve" data-fix84b-submit="1">Usar esta respuesta</button><button type="button" class="btn" data-wf-ai-open-guide="1">Editar paso a paso</button></div>';
+        html += '</div>';
+        return html;
+    }
+
+    function renderFix84bDialogue(res) {
+        var info = fix84bInfo(res) || {};
+        var draft = fix84bDraft(res) || {};
+        var blocking = fix84bBlockingClarifications(res).filter(fix84bCanResolveClarification);
+        var selectedKey = ensureVisualDraftIssueSelection(fix84bVisualQuestions(res));
+        var selected = null;
+        blocking.forEach(function (c) { if (!selected && String(c.id || '') === selectedKey) selected = c; });
+        if (!selected) selected = blocking[0] || null;
+
+        var html = '<div class="wf-ai-fix84b">';
+        html += '<div class="wf-ai-fix84b-head"><div><div class="wf-ai-fix84b-kicker">FIX84B · Interpretación natural</div><div class="wf-ai-fix84b-title">Esto entendí y esto necesito confirmar</div></div><span class="wf-ai-fix84b-badge">No se aplica todavía</span></div>';
+
+        if (draft.nodes && draft.nodes.length) {
+            html += '<div class="wf-ai-fix84b-understood"><div class="wf-ai-fix84b-section-title">Entendido</div><ul>';
+            draft.nodes.forEach(function (n) {
+                html += '<li><strong>' + htmlEncode(n.summary || n.label || n.nodeType || 'Paso') + '</strong> <span class="wf-ai-fix84b-status ' + htmlEncode(n.status || '') + '">' + htmlEncode(fix84bStatusLabel(n.status)) + '</span></li>';
+            });
+            html += '</ul></div>';
+        }
+
+        if (info.appliedAnswers && info.appliedAnswers.length) {
+            html += '<div class="wf-ai-fix84b-resolved"><div class="wf-ai-fix84b-section-title">Decisiones tomadas</div><ul>';
+            info.appliedAnswers.forEach(function (a) { html += '<li>' + htmlEncode(a.question || 'Decisión') + ' → <strong>' + htmlEncode(a.answer || '') + '</strong></li>'; });
+            html += '</ul></div>';
+        }
+
+        if (info.errors && info.errors.length) html += renderList('Necesito corregir esta respuesta', info.errors, 'wf-ai-error-list');
+
+        if (selected) {
+            var idx = blocking.indexOf(selected);
+            html += '<div class="wf-ai-fix84b-progress">Pregunta ' + (idx + 1) + ' de ' + blocking.length + '</div>';
+            html += '<div class="wf-ai-fix84b-question" data-wf-ai-question-key="' + htmlEncode(selected.id || '') + '">';
+            html += '<div class="wf-ai-fix84b-q-node">' + htmlEncode(selected.nodeLabel || selected.nodeType || 'Paso') + '</div>';
+            html += '<div class="wf-ai-fix84b-q-title">' + htmlEncode(selected.question || 'Necesito confirmar un dato') + '</div>';
+            html += fix84bControlHtml(selected);
+            html += '</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function renderFix84bResolvedSummary(res) {
+        var info = fix84bInfo(res);
+        if (!info || !info.appliedAnswers || !info.appliedAnswers.length || fix84bBlockingClarifications(res).length) return '';
+        var html = '<div class="wf-ai-fix84b wf-ai-fix84b-complete"><div class="wf-ai-fix84b-head"><div><div class="wf-ai-fix84b-kicker">Interpretación resuelta</div><div class="wf-ai-fix84b-title">Las aclaraciones ya forman parte del plan</div></div><span class="wf-ai-fix84b-badge complete">Listo para revisar</span></div><ul>';
+        info.appliedAnswers.forEach(function (a) { html += '<li>' + htmlEncode(a.question || 'Decisión') + ' → <strong>' + htmlEncode(a.answer || '') + '</strong></li>'; });
+        html += '</ul></div>';
+        return html;
+    }
+
+    function fix84bNewPayloadRowHtml() {
+        return fix84bPayloadRowsHtml(null);
+    }
+
+    function collectFix84bAnswer(control) {
+        if (!control) return null;
+        var kind = String(control.getAttribute('data-fix84b-control') || 'text');
+        if (kind === 'role_or_user') {
+            var ru = control.querySelector('[data-fix84b-role-user]');
+            var raw = String(ru && ru.value || '');
+            var sep = raw.indexOf('::');
+            if (sep <= 0) return null;
+            return { kind: raw.substring(0, sep), value: raw.substring(sep + 2) };
+        }
+        if (kind === 'available_data') {
+            var available = control.querySelector('[data-fix84b-available]');
+            var manual = control.querySelector('[data-fix84b-manual]');
+            return String(available && available.value || manual && manual.value || '').trim();
+        }
+        if (kind === 'payload_editor') {
+            var payload = {};
+            var hasFields = false;
+            Array.prototype.forEach.call(control.querySelectorAll('[data-fix84b-payload-row]'), function (row) {
+                var name = String((row.querySelector('[data-fix84b-payload-name]') || {}).value || '').trim();
+                var value = String((row.querySelector('[data-fix84b-payload-value]') || {}).value || '').trim();
+                if (!name) return;
+                hasFields = true;
+                payload[name] = value;
+            });
+            if (hasFields) return payload;
+            var text = control.querySelector('[data-fix84b-payload-text]');
+            return String(text && text.value || '').trim();
+        }
+        if (kind === 'condition_builder') {
+            var field = control.querySelector('[data-fix84b-condition-field]');
+            var op = control.querySelector('[data-fix84b-condition-op]');
+            var value = control.querySelector('[data-fix84b-condition-value]');
+            return { mode: 'simple', field: String(field && field.value || ''), op: String(op && op.value || ''), value: String(value && value.value || '') };
+        }
+        var input = control.querySelector('[data-fix84b-value]');
+        if (!input) return null;
+        if (kind === 'boolean') return String(input.value) === 'true';
+        if (kind === 'number') return String(input.value || '').trim();
+        return String(input.value || '').trim();
+    }
+
+    function submitFix84bAnswer(id, value) {
+        id = String(id || '');
+        if (!id) return;
+        if (value == null || (typeof value === 'string' && !value.trim())) {
+            setStatus('Completá la respuesta antes de continuar.', 'warn');
+            return;
+        }
+        aiFix84bAnswers[id] = value;
+        resetGuidedPlanConfirmation();
+        var userText = getCurrentAiPhrase();
+        setStatus('Aplicando la decisión y regenerando el plan...', 'busy');
+        callAiAssistant(userText, function (res) {
+            captureFix84bState(res, userText);
+            renderPhraseVerification(res, userText);
+            if (fix84bBlockingClarifications(res).length) setStatus('Decisión aplicada. Quedan aclaraciones pendientes.', 'warn');
+            else if (res && res.validation && res.validation.ok) setStatus('Interpretación resuelta. Revisá el plan antes de crear el workflow.', 'ok');
+            else setStatus('La respuesta se aplicó, pero todavía hay algo para revisar.', 'warn');
+        }, function (err) {
+            setStatus('No se pudo aplicar la aclaración: ' + (err.message || String(err)), 'error');
+        });
+    }
+
+    function bindFix84bActions(container) {
+        container = container || $('wfAiResult');
+        if (!container) return;
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-option]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var control = btn.closest ? btn.closest('[data-fix84b-id]') : null;
+                submitFix84bAnswer(control && control.getAttribute('data-fix84b-id'), btn.getAttribute('data-fix84b-option'));
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-submit]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var control = btn.closest ? btn.closest('[data-fix84b-id]') : null;
+                if (!control) return;
+                submitFix84bAnswer(control.getAttribute('data-fix84b-id'), collectFix84bAnswer(control));
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-payload-add]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var control = btn.closest ? btn.closest('[data-fix84b-id]') : null;
+                var rows = control && control.querySelector('[data-fix84b-payload-rows]');
+                if (rows) rows.insertAdjacentHTML('beforeend', fix84bNewPayloadRowHtml());
+                bindFix84bActions(container);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-payload-remove]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var row = btn.closest ? btn.closest('[data-fix84b-payload-row]') : null;
+                if (row && row.parentNode) row.parentNode.removeChild(row);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-payload-source]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var row = sel.closest ? sel.closest('[data-fix84b-payload-row]') : null;
+                var value = row && row.querySelector('[data-fix84b-payload-value]');
+                if (value && sel.value) value.value = '${' + sel.value + '}';
+            });
+        });
+    }
+
     function verificationStatus(res, userText) {
         if (!res || !res.ok) return { css: 'error', label: 'FALLA', title: 'No se pudo interpretar la frase' };
+        if (fix84bOwnsDialogue(res)) return { css: 'warn', label: 'ACLARAR', title: 'Entendí el flujo, pero necesito confirmar una decisión' };
+        if (fix84bHasErrors(res)) return { css: 'warn', label: 'REVISAR', title: 'La respuesta necesita una corrección' };
         var validation = res.validation || {};
         var plan = res.plan || {};
         var missing = plan.missingData || [];
@@ -5350,9 +5711,13 @@
         lastPlan = null;
         lastAssistantResult = res || null;
 
-        // Al cambiar la frase no deben sobrevivir decisiones de un fallback anterior.
+        // Al cambiar la frase no deben sobrevivir decisiones de mecanismos anteriores.
         syncFallbackSession(userText || '');
-        prepareVerifiedPlanContract(res, userText || '');
+        captureFix84bState(res, userText || '');
+
+        var contractDialogueActive = fix84bOwnsDialogue(res);
+        var contractErrorsActive = fix84bHasErrors(res);
+        if (!contractDialogueActive && !contractErrorsActive) prepareVerifiedPlanContract(res, userText || '');
 
         var status = verificationStatus(res, userText);
         var plan = (res && res.plan) || {};
@@ -5361,7 +5726,7 @@
         var warningGroups = collectPhraseWarnings(res, validation, plan);
         var functionalWarnings = warningGroups.functional || [];
         var technicalWarnings = warningGroups.technical || [];
-        var fallbackActive = fallbackNeedsHelp(res, userText);
+        var fallbackActive = !contractDialogueActive && fallbackNeedsHelp(res, userText);
 
         var technical = res || { ok: false, error: 'Sin respuesta de verificación.' };
         var technicalJson = JSON.stringify(technical, null, 2);
@@ -5376,11 +5741,15 @@
         html += '  </div>';
         html += '  <div class="wf-ai-verify-phrase">' + htmlEncode(userText || '') + '</div>';
         html += '</div>';
-        if (fallbackActive) {
+
+        if (contractDialogueActive) {
+            html += renderFix84bDialogue(res);
+        } else if (fallbackActive) {
             html += renderFallbackHelp(res, userText);
         } else if (!res || !res.ok) {
             html += '<div class="wf-ai-error">' + htmlEncode((res && (res.messageToUser || res.error)) || 'No se pudo verificar la frase.') + '</div>';
         } else {
+            html += renderFix84bResolvedSummary(res);
             html += '<div class="wf-ai-block"><div class="wf-ai-block-title">Lectura funcional verificada</div>';
             if (understood.length) {
                 html += '<ul>';
@@ -5417,7 +5786,8 @@
         }
 
         var hasValidationErrors = ((validation.errors || []).length > 0) || (missing.length > 0);
-        var canInterpretSafely = !!(res && res.ok && !hasValidationErrors && !fallbackActive);
+        var hasContractBlocking = fix84bBlockingClarifications(res).length > 0;
+        var canInterpretSafely = !!(res && res.ok && !hasValidationErrors && !fallbackActive && !hasContractBlocking && !contractErrorsActive);
 
         html += '<div class="wf-ai-actions wf-ai-verify-actions">';
         html += '<button type="button" class="btn" id="wfAiVerifyCopyPhrase">Copiar frase</button>';
@@ -5430,6 +5800,7 @@
         html += '<details class="wf-ai-json"><summary>Ver JSON técnico de verificación</summary><pre id="wfAiVerifyJsonPre">' + htmlEncode(technicalJson) + '</pre></details>';
 
         out.innerHTML = html;
+        bindFix84bActions(out);
         bindFallbackActions(out);
 
         var copyPhrase = $('wfAiVerifyCopyPhrase');
@@ -5450,12 +5821,15 @@
         var interpretBtn = $('wfAiVerifyInterpret');
         if (interpretBtn) interpretBtn.addEventListener('click', function () { interpretar(); });
 
+        var visualQuestions = contractDialogueActive
+            ? fix84bVisualQuestions(res)
+            : (fallbackActive ? buildFallbackQuestions(res, userText) : []);
         renderVisualDraft(res, userText, {
-            questions: fallbackActive ? buildFallbackQuestions(res, userText) : [],
-            complete: !fallbackActive && canInterpretSafely
+            questions: visualQuestions,
+            complete: !visualQuestions.length && canInterpretSafely
         });
 
-        if (fallbackActive && aiVisualDraftSelectedIssueKey) {
+        if (visualQuestions.length && aiVisualDraftSelectedIssueKey) {
             setTimeout(function () {
                 var card = document.querySelector('[data-wf-ai-question-key="' + aiVisualDraftSelectedIssueKey.replace(/"/g, '') + '"]');
                 if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -5471,12 +5845,15 @@
     }
 
     function callAiAssistant(userText, done, fail, always) {
+        syncFix84bSession(userText || '');
         fetch('Api/WF_AiAssistant.ashx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json; charset=utf-8' },
             body: JSON.stringify({
                 userText: userText,
-                workflowJson: currentWorkflowJson()
+                workflowJson: currentWorkflowJson(),
+                interpretationFingerprint: aiFix84bFingerprint || '',
+                clarificationAnswers: aiFix84bAnswers || {}
             })
         })
             .then(function (r) { return r.json(); })
@@ -5662,6 +6039,10 @@
         validation.warnings = validation.warnings || [];
         var actions = plan.actions || [];
         var missing = plan.missingData || [];
+        captureFix84bState(res, getCurrentAiPhrase());
+        var detailBlocking = fix84bBlockingClarifications(res);
+        if (detailBlocking.length) pushUnique(validation.errors, 'Hay ' + detailBlocking.length + ' aclaración(es) pendientes de FIX84B. Volvé a Verificar frase para resolverlas.');
+        if (fix84bHasErrors(res)) pushUnique(validation.errors, 'La última respuesta de aclaración necesita corrección.');
 
         // fix74 también protege planes provenientes del proveedor ML.NET/legacy.
         if (actions.length) {
@@ -7322,6 +7703,7 @@
             aiFallbackResolvedItems = [];
             aiFallbackBaseKey = '';
             aiFallbackAcceptedRewriteKey = '';
+            resetFix84bDialogue();
             resetGuidedPlanConfirmation();
             clearVisualDraft();
             aiVisualDraftSelectedIssueKey = '';

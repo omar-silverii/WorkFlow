@@ -1239,5 +1239,60 @@
         }
       ]
     }
+  },
+  {
+    "id": "P_FIX84B_QUEUE_CREATE_AMBIGUITY",
+    "name": "FIX84B - aclaración crear cola",
+    "description": "FIX84B: valida que una ambigüedad contractual se pregunte y se resuelva con una respuesta estructurada, sin reescribir la frase original.",
+    "phrase": "Quiero crear una cola banco-fix84b y publicar en la cola banco-fix84b con payload Prueba fix84b. Después finalizar.",
+    "enabled": true,
+    "dialogue": {
+      "enabled": true,
+      "expectedInitialBlocking": 1,
+      "expectedFinalBlocking": 0,
+      "expectedQuestionContains": "crear una cola",
+      "answers": {
+        "a1:ambiguity-createQueueMeaning": "Publicar en una cola existente"
+      }
+    },
+    "expected": {
+      "validationOk": true,
+      "semanticOk": false,
+      "semanticWarningsEmpty": false,
+      "semanticErrorsEmpty": false,
+      "checkValidation": true,
+      "checkSemanticOk": false,
+      "checkSemanticWarnings": false,
+      "checkSemanticErrors": false,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola banco-fix84b",
+          "params": {
+            "broker": "sql",
+            "queue": "banco-fix84b",
+            "payload": "Prueba fix84b",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola banco-fix84b"
+        },
+        {
+          "from": "Publicar en cola banco-fix84b",
+          "to": "Fin"
+        }
+      ]
+    }
   }
 ]

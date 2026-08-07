@@ -1,0 +1,749 @@
+CONTEXTPACK — WORKFLOW STUDIO
+CIERRE DE SESIÓN 06/08/2026
+BASE RECIBIDA: WORKFLOW-MAIN (49)
+LÍNEA POSTERIOR A INTEGRAR EN EL PRÓXIMO ZIP: FIX83 → FIX83D
+DECISIÓN DE PRODUCTO PARA LA PRÓXIMA ETAPA:
+INTERPRETACIÓN NATURAL CON DIÁLOGO DE ACLARACIÓN PARA TODOS LOS NODOS
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, offline/local, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. MÉTODO OFICIAL Y PERMANENTE DE DESARROLLO
+======================================================================
+
+Este método debe mantenerse en todas las sesiones futuras.
+
+Omar no tiene que conocer previamente cómo debe resolverse técnicamente un
+sistema de workflows ni entregar una especificación completa.
+
+Omar puede comenzar con:
+
+- una idea mínima;
+- una necesidad de usuario;
+- una duda;
+- un problema observado;
+- una pregunta sobre qué le falta al producto;
+- o una intención todavía incompleta.
+
+Responsabilidad del asistente como ingeniero del sistema:
+
+1. Leer completo el ContextPack y el Prompt.
+2. Esperar el ZIP completo cuando corresponda.
+3. Inspeccionar primero los archivos reales.
+4. Reconstruir el estado desde el ZIP y no desde recuerdos.
+5. Analizar el problema como producto, no solamente como código.
+6. Investigar productos similares, prácticas profesionales o información
+   actual cuando aporte valor a la decisión.
+7. Proponer cómo debería funcionar el sistema.
+8. Detectar implicaciones operativas:
+   - quién lo usa;
+   - qué permisos requiere;
+   - dónde queda registrado;
+   - qué trazabilidad deja;
+   - qué ocurre en estados cerrados;
+   - qué errores o casos límite existen;
+   - qué falta para que sea productivo.
+9. Presentar alternativas cuando exista una decisión real.
+10. Recomendar una dirección y explicar por qué.
+11. Conversar la propuesta con Omar antes de implementar.
+12. Incorporar la experiencia de Omar como usuario final.
+13. Insistir cuando exista un camino claramente mejor.
+14. Ser honesto y crítico; no ser complaciente para evitar una discusión.
+15. Implementar solamente después de acordar la dirección.
+16. Trabajar con cambios mínimos, precisos y comprobables.
+17. Validar con un caso operativo real de punta a punta.
+18. Cerrar la etapa con ContextPack y Prompt actualizados.
+
+La conversación natural entre Omar y el asistente es parte del método.
+
+No se requieren fichas, formularios ni especificaciones técnicas obligatorias.
+El asistente debe aplicar internamente la disciplina de inventario, alcance,
+dependencias, agrupación, riesgo y regresión sin trasladar esa carga a Omar.
+
+Distribución de responsabilidades:
+
+- Omar aporta la necesidad, la experiencia real de uso, las correcciones de
+  producto y la decisión final.
+- El asistente aporta investigación, ingeniería del sistema, propuesta
+  funcional, arquitectura compatible con el proyecto real, análisis técnico,
+  implementación y criterio profesional.
+- Ambos refinan la solución mediante la conversación previa al código.
+
+Ciclo de trabajo habitual:
+
+1. Omar plantea la idea o el problema.
+2. El asistente analiza qué significa para el producto.
+3. Se inspecciona el ZIP y el código real.
+4. El asistente informa qué existe, qué falta y qué recomienda.
+5. Se conversa y acuerda la solución.
+6. El asistente propone el primer grupo o fix.
+7. Se genera ZIP de reemplazo.
+8. Omar compila y prueba en su entorno real.
+9. Se corrigen únicamente problemas demostrados.
+10. Se cierra y documenta la etapa.
+
+======================================================================
+2. REGLAS NO NEGOCIABLES
+======================================================================
+
+- La fuente de verdad es el ZIP completo más reciente.
+- No asumir que el código quedó igual a lo conversado.
+- No inventar tablas, clases, handlers, controles, APIs, rutas ni archivos.
+- No presentar código de archivos no inspeccionados.
+- No reutilizar archivos antiguos sin compararlos con el ZIP actual.
+- No cambiar arquitectura sin necesidad real.
+- No reescribir cosas que funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- No tocar motor, HDocLoad, extractores cerrados, mapa, queue runtime, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar datos de WF_Tarea sin identificar primero su origen.
+- No convertir recuerdos antiguos o hipótesis en requisitos.
+- Si una memoria anterior no coincide con el ZIP, este ContextPack o la
+  validación real, prevalecen el ZIP actual y la evidencia.
+- Cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener la estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar parches con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría extensa con una corrección puntual.
+- Evaluar siempre el funcionamiento productivo completo.
+- No generar un fix si el ZIP ya contiene correctamente el estado esperado.
+
+======================================================================
+3. DECISIÓN OFICIAL DEL CONSTRUCTOR IA
+======================================================================
+
+Se adopta como dirección oficial:
+
+INTERPRETACIÓN NATURAL CON DIÁLOGO DE ACLARACIÓN.
+
+Esta decisión se aplica a:
+
+- todos los nodos ya existentes;
+- todos los nodos que se incorporen en el futuro;
+- el Constructor IA por frase;
+- el Constructor paso a paso;
+- Datos disponibles;
+- el plan estructurado;
+- la validación;
+- y el banco de regresión.
+
+El usuario no debe tener que conocer:
+
+- JSON;
+- sintaxis ${...};
+- nombres internos de variables;
+- nombres técnicos exactos de nodos;
+- propiedades de handlers;
+- ni una gramática artificial.
+
+La frase del usuario puede ser:
+
+- breve;
+- incompleta;
+- ambigua;
+- aproximada;
+- o expresada con palabras distintas a las internas del sistema.
+
+El sistema debe:
+
+1. Interpretar todo lo que pueda con seguridad.
+2. Separar el resultado en:
+   - resuelto;
+   - inferido;
+   - ambiguo;
+   - faltante;
+   - no reconocido.
+3. Mostrar claramente qué entendió.
+4. No inventar silenciosamente decisiones importantes.
+5. Preguntar solamente lo necesario.
+6. Ofrecer controles guiados y editables para resolver las dudas.
+7. Regenerar el plan después de cada respuesta.
+8. Mostrar un resumen final comprensible.
+9. Permitir revisar y editar el plan.
+10. Aplicar al canvas solamente después de una confirmación real.
+
+Secuencia de producto deseada:
+
+No entiendo perfecto
+→ muestro lo entendido
+→ pregunto lo necesario
+→ el usuario decide
+→ genero el plan válido
+→ muestro resumen final
+→ el usuario confirma
+→ aplico al canvas.
+
+El modo paso a paso continúa siendo el camino determinista y seguro.
+
+La frase funciona como acelerador e inicio de una conversación, no como un
+lenguaje técnico disfrazado.
+
+======================================================================
+4. CONTRATO UNIVERSAL DE CONSTRUCCIÓN ASISTIDA
+======================================================================
+
+Todos los nodos actuales y futuros deben compartir una definición común.
+
+Cada nodo deberá declarar, conceptualmente:
+
+- intención humana que representa;
+- nombres y expresiones habituales;
+- parámetros obligatorios;
+- parámetros opcionales;
+- tipo de cada parámetro;
+- valores predeterminados seguros;
+- valores que pueden inferirse;
+- valores que nunca deben inferirse sin preguntar;
+- datos disponibles que puede consumir;
+- salidas que deja disponibles;
+- validaciones;
+- resumen legible;
+- pregunta de aclaración cuando falte un dato;
+- control guiado para resolverlo;
+- reglas de seguridad;
+- forma de generar el plan estructurado;
+- casos de regresión.
+
+El mismo contrato debe alimentar:
+
+- Constructor paso a paso;
+- interpretación por frase;
+- diálogo de aclaración;
+- Datos disponibles;
+- resumen del plan;
+- validación funcional;
+- contrato/fingerprint;
+- banco de regresión.
+
+Objetivo:
+
+Agregar un nodo nuevo no debe requerir construir otra lógica artesanal e
+independiente para cada pantalla.
+
+Proceso deseado para un nodo futuro:
+
+1. Implementar o confirmar runtime e inspector.
+2. Registrar el nodo en el catálogo.
+3. Declarar su contrato de construcción asistida.
+4. El modo paso a paso usa ese contrato.
+5. El intérprete natural puede proponerlo.
+6. Las dudas se resuelven con el mismo contrato.
+7. Las salidas alimentan Datos disponibles.
+8. La regresión prueba resolución directa y con diálogo.
+
+======================================================================
+5. LÍMITE DEL ENFOQUE ANTERIOR
+======================================================================
+
+Los fixes 83 a 83d demostraron que el sistema puede reconocer frases técnicas y
+generar correctamente nodos de colas.
+
+También demostraron un límite:
+
+Una frase como:
+
+"Quiero iniciar un flujo, publicar en la cola banco-fix83 con payload
+{...}, luego consumir 1 mensaje..."
+
+funciona, pero obliga al usuario a conocer:
+
+- queue.publish;
+- queue.consume;
+- payload;
+- JSON;
+- ${wf.instanceId};
+- ${queue.hasMessage};
+- ${queue.messageId};
+- ${payload};
+- y el orden técnico completo.
+
+Eso es un lenguaje controlado, no una conversación natural.
+
+Una frase humana real puede ser:
+
+"Iniciar, crear una cola Banco-fix83 con wf.instanceId como instanceId y
+Prueba por frase como origen, luego crear un log con los mensajes del payload."
+
+Esa frase contiene ambigüedades reales:
+
+- "crear una cola" puede significar crear infraestructura o publicar;
+- no indica con certeza si hay que consumir;
+- "mensajes del payload" puede significar registrar el enviado, el recibido,
+  el objeto completo o algunos campos.
+
+El sistema profesional no debe ignorar ni inventar esas decisiones.
+
+Debe explicar lo entendido y preguntar, por ejemplo:
+
+- ¿Querés publicar en una cola existente?
+- ¿Querés registrar el mensaje enviado o consumirlo primero?
+- ¿Querés registrar el payload completo o campos específicos?
+
+No continuar agregando indefinidamente expresiones regulares y sinónimos como
+solución principal.
+
+Las reglas existentes pueden mantenerse como soporte transitorio, pero la
+dirección principal debe ser el contrato universal más diálogo.
+
+======================================================================
+6. BASE REAL DE ESTA SESIÓN
+======================================================================
+
+Se recibió e inspeccionó:
+
+- WorkFlow-main (49).zip
+- 49 ContextPack.txt
+- 49 Prompt.txt
+
+El ZIP 49 contenía correctamente el estado de fix82f.
+
+Se confirmó estáticamente:
+
+- las cinco cabeceras contextuales del reproceso;
+- un único desplegable para el ciclo actual;
+- separación de otros ciclos;
+- detalles cerrados por defecto;
+- documentos de respuesta filtrados por tareaId;
+- tareas cerradas sin adjuntar ni eliminar;
+- seguridad, Mi bandeja y contadores conservados;
+- no se requirió otro fix para fix82f.
+
+======================================================================
+7. LÍNEA DE FIXES 83
+======================================================================
+
+FIX83 — COLAS EN EL CONSTRUCTOR PASO A PASO
+
+Objetivo:
+
+Incorporar al armado paso a paso:
+
+- queue.publish — Cola: Publicar
+- queue.consume — Cola: Consumir
+
+Se agregó:
+
+- formulario de publicación;
+- formulario de consumo;
+- generación directa del plan;
+- datos disponibles;
+- validaciones;
+- compatibilidad con control.retry;
+- cache-busting fix83.
+
+Archivos:
+
+- WorkflowUI.aspx
+- Scripts/workflow.ai.assistant.js
+
+No modificó runtime de colas, motor ni base.
+
+----------------------------------------------------------------------
+FIX83B — PAYLOAD GUIADO Y LOGGER DE OBJETOS
+----------------------------------------------------------------------
+
+La prueba real mostró que exigir JSON al usuario no era suficientemente guiado.
+
+Se agregó en Cola: Publicar:
+
+- modo Campos guiados;
+- modo Texto o JSON avanzado;
+- filas Nombre / Valor;
+- agregar y quitar campos;
+- selección desde Datos disponibles;
+- vista previa del JSON;
+- validación de nombres repetidos o inválidos.
+
+Después de publicar y consumir para la misma cola, Datos disponibles puede
+mostrar campos conocidos como:
+
+- payload.instanceId
+- payload.origen
+
+HLogger fue ajustado para serializar diccionarios, listas y JToken como JSON
+compacto durante la interpolación.
+
+Archivos:
+
+- WorkflowUI.aspx
+- Scripts/workflow.ai.assistant.js
+- App_Code/Handlers/HLogger.cs
+
+----------------------------------------------------------------------
+FIX83C — FRASES NATURALES DE COLAS Y CONTRATO
+----------------------------------------------------------------------
+
+Problema:
+
+La frase generaba correctamente queue.publish y queue.consume, pero
+Crear workflow quedaba bloqueado porque el contrato fix74b se validaba antes
+de haberse generado para el plan de ML.NET.
+
+Corrección:
+
+- generar contrato durante Verificar frase;
+- volver a comprobarlo antes de Crear workflow;
+- limpiar desambiguación anterior al cambiar la frase;
+- reconocer variantes como:
+  - publicar en la cola;
+  - mandar/enviar a la cola;
+  - consumir un mensaje de la cola;
+  - leer/tomar mensajes.
+
+Archivos:
+
+- WorkflowUI.aspx
+- Scripts/workflow.ai.assistant.js
+- App_Code/Ai/WfAiMlnetProvider.cs
+
+Validación visual:
+
+- los cinco nodos aparecieron;
+- Crear workflow pudo aplicarlos al canvas;
+- conexiones correctas.
+
+----------------------------------------------------------------------
+FIX83D — PAYLOAD JSON Y MENSAJE LOGGER POR FRASE
+----------------------------------------------------------------------
+
+Problemas reales:
+
+1. El payload incorporaba texto posterior como "luego consumir...".
+2. El Logger quedaba con "Paso agregado por Asistente IA".
+3. El JSON llegaba como texto escapado y no como objeto limpio.
+
+Corrección:
+
+- extracción balanceada de objetos y arreglos JSON;
+- respeto de comillas, escapes y anidación;
+- corte exacto al cerrar el JSON;
+- payload válido generado como JObject/JArray;
+- Logger reconoce:
+  - indicando;
+  - indicando que;
+  - con mensaje;
+  - con el mensaje;
+- corte del mensaje antes de finalmente/finalizar/terminar;
+- auditoría semántica de JSON por estructura.
+
+Archivos:
+
+- App_Code/Ai/WfAiMlnetProvider.cs
+- App_Data/WF_AI/ai_regression_cases.json
+
+Nuevo caso:
+
+- O_QUEUE_ROUNDTRIP_JSON_LOGGER
+
+======================================================================
+8. VALIDACIONES REALES OBTENIDAS
+======================================================================
+
+Prueba paso a paso:
+
+- Definición: Prueba FIX83 Colas
+- DefId observado: 10189
+- Instancia: 180545
+- Estado: Finalizado
+- Mensaje de cola observado: 30057
+- queue.publish: ejecutado
+- queue.consume: ejecutado
+- payload navegable en DatosContexto
+- mapa correcto
+- todos los nodos ejecutados
+
+La primera prueba descubrió:
+
+- el usuario no sabía que "origen" era un campo libre;
+- ${payload} se mostraba inicialmente como Dictionary técnico.
+
+Eso originó fix83b.
+
+Prueba por frase anterior a fix83d:
+
+- DefId observado: 10190
+- Instancia: 180547
+- Estado: Finalizado
+- Los nodos de cola se ejecutaron.
+- El payload contenía parte de la instrucción posterior.
+- El Logger mostraba "Paso agregado por Asistente IA".
+
+Esa prueba no debe considerarse cierre correcto.
+
+Prueba final posterior a fix83d:
+
+- DefId observado: 10191
+- Instancia: 180548
+- Estado: Finalizado
+- Mensaje de cola observado: 30060
+- Payload limpio y navegable:
+  - instanceId = 180548
+  - origen = "Prueba por frase"
+- payload.instanceId y payload.origen disponibles
+- Logger conservó:
+  Consumido=True, Id=30060, Payload={...}
+- No apareció "Paso agregado por Asistente IA".
+
+Banco de regresión:
+
+- O_QUEUE_ROUNDTRIP_JSON_LOGGER: OK
+- Checks observados: OK 12 / FALLA 0 / SKIP 0
+- Validador funcional: OK
+- phraseSemanticConsistencyOk: True
+- queue.publish: OK
+- queue.consume: OK
+- util.logger: OK
+- util.end: OK
+- conexiones: OK
+
+Importante:
+
+No quedó documentada en imágenes una ejecución completa de los 15 casos juntos
+posterior a fix83d.
+
+En la próxima sesión puede hacerse una regresión completa rápida después de
+confirmar la integración del ZIP.
+
+======================================================================
+9. ESTADO FINAL ESPERADO EN EL PRÓXIMO ZIP
+======================================================================
+
+Omar generará un ZIP completo nuevo.
+
+Ese ZIP debería contener:
+
+- WorkFlow-main (49);
+- fix83;
+- fix83b;
+- fix83c;
+- fix83d.
+
+Archivos finales a inspeccionar primero:
+
+- WorkflowUI.aspx
+- Scripts/workflow.ai.assistant.js
+- App_Code/Handlers/HLogger.cs
+- App_Code/Ai/WfAiMlnetProvider.cs
+- App_Data/WF_AI/ai_regression_cases.json
+- Workflow Studio .csproj
+
+Estado final esperado por archivo:
+
+- WorkflowUI.aspx: estado de fix83c, conservando fix83 y fix83b.
+- workflow.ai.assistant.js: estado de fix83c, conservando fix83 y fix83b.
+- HLogger.cs: estado de fix83b.
+- WfAiMlnetProvider.cs: estado de fix83d, que debe incluir fix83c.
+- ai_regression_cases.json: estado de fix83d con el caso O.
+
+No aplicar automáticamente los ZIP parciales.
+
+Primero inspeccionar el ZIP completo y confirmar que no se mezclaron versiones.
+
+======================================================================
+10. PRÓXIMO TRABAJO — FIX84
+======================================================================
+
+Nombre previsto:
+
+FIX84 — BASE UNIVERSAL DE INTERPRETACIÓN Y ACLARACIÓN
+
+No comenzar programando de inmediato.
+
+Primero:
+
+1. Inspeccionar el ZIP completo.
+2. Confirmar fix83 a fix83d.
+3. Revisar la arquitectura real existente:
+   - catálogo de nodos;
+   - proveedor ML.NET;
+   - segmentación;
+   - plan estructurado;
+   - decisiones y desambiguación;
+   - contratos y fingerprints;
+   - Constructor paso a paso;
+   - Datos disponibles;
+   - banco de regresión.
+4. Proponer cómo incorporar el contrato universal sin reescribir lo que ya
+   funciona.
+5. Conversar la propuesta con Omar.
+6. Recién después implementar.
+
+Muestra inicial recomendada para demostrar el mecanismo:
+
+- queue.publish
+- queue.consume
+- util.logger
+- human.task
+- control.if
+
+La muestra cubre:
+
+- un nodo de salida;
+- un nodo de entrada;
+- un nodo de operación;
+- una tarea humana;
+- una bifurcación.
+
+Fix84 debería incorporar:
+
+- modelo común de interpretación parcial;
+- estados resuelto/inferido/ambiguo/faltante/no reconocido;
+- panel genérico de aclaraciones;
+- controles editables;
+- regeneración del plan;
+- resumen final;
+- confirmación real;
+- bloqueo de Crear workflow mientras existan dudas;
+- regresión directa y con diálogo.
+
+No convertir fix84 en:
+
+- una reescritura del motor;
+- un reemplazo del canvas;
+- otro parser gigante;
+- una colección infinita de expresiones regulares;
+- una dependencia de internet;
+- una solución demo.
+
+Debe ser una base profesional, local, extensible y reutilizable.
+
+======================================================================
+11. BANCO DE REGRESIÓN FUTURO
+======================================================================
+
+El banco deberá distinguir:
+
+1. RESOLUCIÓN DIRECTA
+   La frase tiene información suficiente y genera plan sin preguntas.
+
+2. RESOLUCIÓN CON DIÁLOGO
+   La frase es natural o incompleta.
+   Debe validarse:
+   - qué interpretó;
+   - qué duda generó;
+   - qué opciones ofreció;
+   - qué respuesta eligió la prueba;
+   - qué plan final produjo.
+
+3. PROTECCIÓN CONTRA INFERENCIAS PELIGROSAS
+   El sistema debe preguntar antes de inventar:
+   - destinatarios;
+   - tablas;
+   - conexiones;
+   - rutas;
+   - operaciones destructivas;
+   - condiciones;
+   - resultados humanos;
+   - credenciales;
+   - estructuras de datos sensibles.
+
+Las frases de regresión no deben ser solamente frases artificiales escritas para
+el parser.
+
+Deben incluir maneras humanas, breves, incompletas y alternativas de expresar
+la misma intención.
+
+======================================================================
+12. ÁREAS CERRADAS
+======================================================================
+
+No reabrir salvo regresión real:
+
+- Motor / WorkflowRunner.
+- Handlers runtime estables.
+- Canvas, aristas, zoom y minimapa.
+- WF_Instancia_Mapa y WF_Instancias.
+- Queue runtime.
+- SMTP y email.send.
+- HSubFlow y runtime de subflujos.
+- NC_AR y FACTURA_AR.
+- Extractores documentales cerrados.
+- HDocLoad y doc.load.
+- Export JSON con Meta.Name.
+- OC moderna validada.
+- Documento original en tarea.
+- Seguridad fix81.
+- Consistencia de contadores fix80.
+- Circuito profesional de reproceso hasta fix82f.
+- Runtime validado de queue.publish y queue.consume.
+
+HLogger fue modificado en fix83b solamente para representar objetos como JSON.
+No volver a tocarlo salvo evidencia concreta.
+
+======================================================================
+13. TEMAS APARCADOS
+======================================================================
+
+No avanzar automáticamente con:
+
+- VEP.
+- IA clasificadora documental.
+- Asociación de documentos a instancias existentes.
+- Nuevos nodos adicionales antes de diseñar fix84.
+- Cambios de extractores de OC.
+- Rediseño de base.
+- Cambios de motor.
+- Estado Finalizado con advertencias.
+- Borrado de tareas históricas.
+
+La prioridad próxima es definir e implementar la base universal de aclaración.
+
+======================================================================
+14. PRIMERAS VALIDACIONES DE LA PRÓXIMA SESIÓN
+======================================================================
+
+Cuando Omar entregue el ZIP completo:
+
+1. Confirmar que se leyó este ContextPack.
+2. Inspeccionar la estructura real.
+3. Confirmar que fix82f continúa integrado.
+4. Confirmar fix83, fix83b, fix83c y fix83d.
+5. Comparar los cinco archivos principales.
+6. Confirmar que no se mezclaron versiones.
+7. Confirmar el caso O en ai_regression_cases.json.
+8. Compilar en Visual Studio 2022.
+9. Si corresponde, ejecutar los 15 casos completos.
+10. No agregar nuevos nodos todavía.
+11. Analizar y proponer la arquitectura de fix84.
+12. Conversar la propuesta con Omar.
+13. Recién después generar el primer fix.
+
+======================================================================
+15. CRITERIO DE CIERRE DE ESTA VERSIÓN
+======================================================================
+
+La versión queda cerrada cuando:
+
+- el ZIP completo compile;
+- fix82f siga integrado;
+- queue.publish y queue.consume estén disponibles paso a paso;
+- payload guiado esté integrado;
+- objetos del Logger se serialicen como JSON;
+- las frases de colas puedan crear el grafo;
+- el contrato permita aplicar el plan;
+- el payload JSON se recorte correctamente;
+- el mensaje del Logger se conserve;
+- la instancia finalice;
+- el payload sea navegable;
+- el caso O quede OK;
+- no se hayan modificado áreas cerradas sin necesidad.
+
+DECISIÓN FINAL DE SESIÓN:
+
+La infraestructura de colas queda validada.
+
+No se continuará ampliando el parser frase por frase como dirección principal.
+
+La próxima versión comienza con el diseño de una base universal de
+interpretación natural y diálogo de aclaración para todos los nodos actuales y
+futuros, manteniendo el método colaborativo que Omar y el asistente ya venían
+utilizando.
