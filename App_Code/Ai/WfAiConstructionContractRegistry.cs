@@ -12,7 +12,7 @@ namespace Intranet.WorkflowStudio.WebForms
     /// </summary>
     public static class WfAiConstructionContractRegistry
     {
-        public const string Version = "fix84b-contract-v2";
+        public const string Version = "fix84b2-contract-v3";
 
         public static List<WfAiNodeConstructionContract> Build()
         {
@@ -130,7 +130,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 NodeType = "queue.publish",
                 Label = "Cola: Publicar",
                 HumanIntent = "Publicar un mensaje de negocio en una cola existente.",
-                HumanPhrases = L("publicar en una cola", "mandar un mensaje a una cola", "encolar un mensaje"),
+                HumanPhrases = L("publicar en una cola", "publicar", "mandar un mensaje a una cola", "encolar un mensaje"),
                 Parameters = new List<WfAiParameterContract>
                 {
                     P("broker", "Broker", "string", false, WfAiInferencePolicy.SafeDefault, J("sql"), "", WfAiControlKind.Select, L("sql"), false),
@@ -150,10 +150,11 @@ namespace Intranet.WorkflowStudio.WebForms
                     {
                         Key = "createQueueMeaning",
                         PhraseFragments = L("crear una cola", "crear cola"),
-                        Question = "Cuando decís crear una cola, ¿querés publicar en una cola existente o crear infraestructura de cola?",
+                        Question = "Cuando decís crear una cola, ¿querés usar una cola existente dentro del workflow o realmente crear la infraestructura de la cola?",
                         ControlKind = WfAiControlKind.Select,
-                        Options = L("Publicar en una cola existente", "Crear infraestructura de cola"),
-                        Blocking = true
+                        Options = L("Usar una cola existente", "Crear infraestructura de cola", "Dejar la creación fuera del workflow"),
+                        Blocking = true,
+                        ContextResolverKey = "queue.create.followed_by_publish"
                     }
                 },
                 Validations = L("queue no debe inventarse", "payload debe representar el mensaje solicitado", "connectionStringName usa DefaultConnection salvo decisión explícita"),

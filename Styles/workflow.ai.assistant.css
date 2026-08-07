@@ -2300,3 +2300,50 @@
         flex-direction: column;
     }
 }
+
+/* ------------------------------------------------------------
+   FIX84B2 — contexto natural y cierre explícito de respuestas no soportadas
+   ------------------------------------------------------------ */
+.wf-ai-fix84b-unsupported {
+    margin: 10px 0;
+    padding: 11px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 11px;
+    background: #fff7f7;
+    color: #7f1d1d;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.wf-ai-fix84b-unsupported-answer {
+    margin: 6px 0 4px;
+    color: #991b1b;
+}
+
+.wf-ai-fix84b-unsupported-next {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid #fecaca;
+    color: #7c2d12;
+}
+
+.wf-ai-fix84b-inference-title {
+    margin-top: 10px;
+}
+
+.wf-ai-fix84b-inference-explanation {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.wf-ai-fix84b-implicit-note {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: #eff6ff;
+    color: #1e40af;
+    font-size: 11px;
+    line-height: 1.4;
+}

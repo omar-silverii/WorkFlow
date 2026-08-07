@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="Content/bootstrap.min.css" />
 
    <link rel="stylesheet" href="Styles/workflow.ui.css?v=dev210" />
-   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix84b" />
+   <link rel="stylesheet" href="Styles/workflow.ai.assistant.css?v=fix84b2" />
 
   <style>
      body { background: #f6f7fb; }
@@ -193,7 +193,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix84b"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix84b2"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
@@ -217,7 +217,7 @@
     <script src="Scripts/inspectors/inspector.data.sql.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.notify.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.chat.notify.js?v=dev200"></script>
-    <script src="Scripts/inspectors/inspector.queue.publish.js?v=dev200"></script>
+    <script src="Scripts/inspectors/inspector.queue.publish.js?v=fix84b2"></script>
     <script src="Scripts/inspectors/inspector.doc.entrada.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.doc.load.js?v=dev200"></script>
     <script src="Scripts/inspectors/inspector.util.docTipo.resolve.js?v=dev200"></script>

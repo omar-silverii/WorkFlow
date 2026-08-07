@@ -2472,17 +2472,28 @@ namespace Intranet.WorkflowStudio.WebForms
             string t = Normalize(normalizedText);
             if (string.IsNullOrWhiteSpace(t)) return request;
 
+            WfAiNaturalPhraseContext natural = WfAiNaturalPhraseContext.Analyze(originalText);
             bool wants = ContainsAny(t,
                 "publicar en cola", "publicar en la cola",
                 "encolar", "queue publish",
                 "mandar a cola", "mandar a la cola",
-                "enviar a cola", "enviar a la cola");
+                "enviar a cola", "enviar a la cola")
+                || (natural.Queue != null && natural.Queue.WantsPublish);
             if (!wants) return request;
 
             request.WantsQueuePublish = true;
-            request.Queue = ExtractQueueName(originalText);
+            request.Queue = natural.Queue == null ? "" : natural.Queue.PublishQueue;
+            if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = ExtractQueueName(originalText);
             if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = "banco-regresion";
-            request.Payload = ExtractQueuePayload(originalText);
+
+            // FIX84B2: si la persona expresa el contenido naturalmente después de "publicar",
+            // se usa como mensaje sin exigir la palabra técnica payload. Las frases legacy con
+            // payload explícito conservan el extractor validado de fix83d.
+            if (natural.Queue != null && natural.Queue.PublishContentInferredByPosition && !natural.Queue.PublishHasTechnicalPayloadWord)
+                request.Payload = natural.Queue.PublishContent;
+            else
+                request.Payload = ExtractQueuePayload(originalText);
+
             if (string.IsNullOrWhiteSpace(request.Payload)) request.Payload = "Mensaje generado por Asistente IA";
             request.Broker = "sql";
             request.ConnectionStringName = "DefaultConnection";
@@ -2496,18 +2507,21 @@ namespace Intranet.WorkflowStudio.WebForms
             string t = Normalize(normalizedText);
             if (string.IsNullOrWhiteSpace(t)) return request;
 
+            WfAiNaturalPhraseContext natural = WfAiNaturalPhraseContext.Analyze(originalText);
             bool wants = ContainsAny(t,
                 "consumir de cola", "consumir de la cola", "consumir mensaje de cola", "consumir mensaje de la cola",
                 "leer de cola", "leer de la cola",
                 "tomar mensaje", "tomar un mensaje", "tomar mensajes",
                 "queue consume")
-                || Regex.IsMatch(t, @"\bconsumir\s+(?:\d+\s+)?(?:un\s+)?mensajes?\s+de\s+(?:la\s+)?cola\b", RegexOptions.IgnoreCase);
+                || Regex.IsMatch(t, @"\bconsumir\s+(?:\d+\s+)?(?:un\s+)?mensajes?\s+de\s+(?:la\s+)?cola\b", RegexOptions.IgnoreCase)
+                || (natural.Queue != null && natural.Queue.WantsConsume);
             if (!wants) return request;
 
             request.WantsQueueConsume = true;
-            request.Queue = ExtractQueueName(originalText);
+            request.Queue = natural.Queue == null ? "" : natural.Queue.ConsumeQueue;
+            if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = ExtractQueueName(originalText);
             if (string.IsNullOrWhiteSpace(request.Queue)) request.Queue = "banco-regresion";
-            request.Take = ExtractQueueTake(originalText);
+            request.Take = natural.Queue != null && natural.Queue.WantsConsume ? natural.Queue.ConsumeCount : ExtractQueueTake(originalText);
             if (request.Take <= 0) request.Take = 1;
             request.Broker = "sql";
             request.ConnectionStringName = "DefaultConnection";

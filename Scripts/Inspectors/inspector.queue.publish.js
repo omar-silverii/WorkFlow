@@ -80,7 +80,7 @@
         taPayload.value = (p.payload === undefined || p.payload === null)
             ? ''
             : (typeof p.payload === 'string' ? p.payload : JSON.stringify(p.payload, null, 2));
-        const sPayload = section('Payload (texto o JSON)', taPayload);
+        const sPayload = section('Contenido del mensaje (texto o JSON)', taPayload);
 
         const bTpl = btn('Insertar plantilla');
         const bSave = btn('Guardar');

@@ -244,13 +244,22 @@ namespace Intranet.WorkflowStudio.WebForms
             if (string.Equals(clarification.NodeType, "queue.publish", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(clarification.Parameter, "createQueueMeaning", StringComparison.OrdinalIgnoreCase))
             {
-                if (value.IndexOf("publicar", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (value.IndexOf("usar", StringComparison.OrdinalIgnoreCase) >= 0
+                    || value.IndexOf("existente", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    Accept(result, clarification, "Publicar en una cola existente");
+                    Accept(result, clarification, "Usar una cola existente");
                     return;
                 }
 
-                result.Errors.Add("Workflow Studio hoy publica/consume mensajes de colas existentes; no tiene un nodo para crear infraestructura de cola. Elegí publicar en una cola existente o armá ese requisito fuera de este workflow.");
+                if (value.IndexOf("fuera", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Accept(result, clarification, "La creación de infraestructura queda fuera del workflow; el flujo usará la cola existente.");
+                    return;
+                }
+
+                string reason = "Entendí que querés crear la infraestructura de la cola, pero Workflow Studio hoy solo publica y consume mensajes de colas existentes. Esa infraestructura debe prepararse fuera de este workflow.";
+                Reject(result, clarification, "Crear infraestructura de cola", reason, "Dejar la creación fuera del workflow");
+                result.Errors.Add(reason);
                 return;
             }
 
@@ -460,6 +469,25 @@ namespace Intranet.WorkflowStudio.WebForms
                 Answer = answerDisplay ?? string.Empty
             });
         }
+
+        private static void Reject(
+            WfAiClarificationResolutionResult result,
+            WfAiClarification clarification,
+            string answerDisplay,
+            string reason,
+            string suggestedAnswer)
+        {
+            result.RejectedAnswers.Add(new WfAiRejectedClarification
+            {
+                Id = clarification == null ? string.Empty : clarification.Id,
+                NodeType = clarification == null ? string.Empty : clarification.NodeType,
+                NodeLabel = clarification == null ? string.Empty : clarification.NodeLabel,
+                Question = clarification == null ? string.Empty : clarification.Question,
+                Answer = answerDisplay ?? string.Empty,
+                Reason = reason ?? string.Empty,
+                SuggestedAnswer = suggestedAnswer ?? string.Empty
+            });
+        }
     }
 
     public class WfAiClarificationResolutionResult
@@ -467,6 +495,7 @@ namespace Intranet.WorkflowStudio.WebForms
         public JObject Plan { get; set; }
         public List<string> AcceptedAnswerIds { get; set; }
         public List<WfAiResolvedClarification> AppliedAnswers { get; set; }
+        public List<WfAiRejectedClarification> RejectedAnswers { get; set; }
         public List<string> Errors { get; set; }
         public List<string> Warnings { get; set; }
 
@@ -474,6 +503,7 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             AcceptedAnswerIds = new List<string>();
             AppliedAnswers = new List<WfAiResolvedClarification>();
+            RejectedAnswers = new List<WfAiRejectedClarification>();
             Errors = new List<string>();
             Warnings = new List<string>();
         }
@@ -486,5 +516,16 @@ namespace Intranet.WorkflowStudio.WebForms
         public string NodeLabel { get; set; }
         public string Question { get; set; }
         public string Answer { get; set; }
+    }
+
+    public class WfAiRejectedClarification
+    {
+        public string Id { get; set; }
+        public string NodeType { get; set; }
+        public string NodeLabel { get; set; }
+        public string Question { get; set; }
+        public string Answer { get; set; }
+        public string Reason { get; set; }
+        public string SuggestedAnswer { get; set; }
     }
 }

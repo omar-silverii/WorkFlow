@@ -132,6 +132,9 @@ namespace Intranet.WorkflowStudio.WebForms
         [JsonProperty("blocking")]
         public bool Blocking { get; set; }
 
+        [JsonProperty("contextResolverKey")]
+        public string ContextResolverKey { get; set; }
+
         public WfAiAmbiguityRule()
         {
             PhraseFragments = new List<string>();

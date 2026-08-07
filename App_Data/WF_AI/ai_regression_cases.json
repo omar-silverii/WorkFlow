@@ -1241,18 +1241,18 @@
     }
   },
   {
-    "id": "P_FIX84B_QUEUE_CREATE_AMBIGUITY",
-    "name": "FIX84B - aclaración crear cola",
-    "description": "FIX84B: valida que una ambigüedad contractual se pregunte y se resuelva con una respuesta estructurada, sin reescribir la frase original.",
-    "phrase": "Quiero crear una cola banco-fix84b y publicar en la cola banco-fix84b con payload Prueba fix84b. Después finalizar.",
+    "id": "P_FIX84B_QUEUE_MESSAGE_MISSING",
+    "name": "FIX84B - pedir contenido faltante",
+    "description": "FIX84B2: valida un diálogo humano real: la persona indica la cola pero no el contenido. El contrato debe preguntar solamente qué quiere publicar, sin exigir la propiedad técnica payload ni reescribir la frase.",
+    "phrase": "Publicar en la cola Omar.",
     "enabled": true,
     "dialogue": {
       "enabled": true,
       "expectedInitialBlocking": 1,
       "expectedFinalBlocking": 0,
-      "expectedQuestionContains": "crear una cola",
+      "expectedQuestionContains": "información querés publicar",
       "answers": {
-        "a1:ambiguity-createQueueMeaning": "Publicar en una cola existente"
+        "a1:payload": "quiero un mate"
       }
     },
     "expected": {
@@ -1269,11 +1269,11 @@
       "nodes": [
         {
           "type": "queue.publish",
-          "label": "Publicar en cola banco-fix84b",
+          "label": "Publicar en cola Omar",
           "params": {
             "broker": "sql",
-            "queue": "banco-fix84b",
-            "payload": "Prueba fix84b",
+            "queue": "Omar",
+            "payload": "quiero un mate",
             "connectionStringName": "DefaultConnection"
           }
         },
@@ -1286,10 +1286,173 @@
       "connections": [
         {
           "from": "Inicio",
-          "to": "Publicar en cola banco-fix84b"
+          "to": "Publicar en cola Omar"
         },
         {
-          "from": "Publicar en cola banco-fix84b",
+          "from": "Publicar en cola Omar",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "Q_FIX84B2_QUEUE_CONTEXT_NATURAL",
+    "name": "FIX84B2 - cola y contenido por contexto",
+    "description": "FIX84B2: valida lenguaje natural sin propiedades internas ni Inicio/Fin explícitos. La cola presentada antes se reutiliza al publicar y el texto posterior a publicar se interpreta como contenido del mensaje.",
+    "phrase": "Quiero crear una cola llamada Omar y publicar quiero un mate.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": false,
+      "semanticWarningsEmpty": false,
+      "semanticErrorsEmpty": false,
+      "checkValidation": true,
+      "checkSemanticOk": false,
+      "checkSemanticWarnings": false,
+      "checkSemanticErrors": false,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola Omar",
+          "params": {
+            "broker": "sql",
+            "queue": "Omar",
+            "payload": "quiero un mate",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola Omar"
+        },
+        {
+          "from": "Publicar en cola Omar",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "R_FIX84B2_QUEUE_REFERENCE_CARRY",
+    "name": "FIX84B2 - reutilizar referencia de cola",
+    "description": "FIX84B2: valida que una cola presentada una sola vez quede como referente activo para publicar y luego leer un mensaje, salvo que el usuario nombre otra cola.",
+    "phrase": "Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje.",
+    "enabled": true,
+    "expected": {
+      "validationOk": true,
+      "semanticOk": false,
+      "semanticWarningsEmpty": false,
+      "semanticErrorsEmpty": false,
+      "checkValidation": true,
+      "checkSemanticOk": false,
+      "checkSemanticWarnings": false,
+      "checkSemanticErrors": false,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola Pedidos",
+          "params": {
+            "broker": "sql",
+            "queue": "Pedidos",
+            "payload": "número 123",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "queue.consume",
+          "label": "Consumir cola Pedidos",
+          "params": {
+            "broker": "sql",
+            "queue": "Pedidos",
+            "take": "1",
+            "prefetch": "1",
+            "connectionStringName": "DefaultConnection",
+            "outputPrefix": "queue.consume"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola Pedidos"
+        },
+        {
+          "from": "Publicar en cola Pedidos",
+          "to": "Consumir cola Pedidos"
+        },
+        {
+          "from": "Consumir cola Pedidos",
+          "to": "Fin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "S_FIX84B2_QUEUE_CREATE_REAL_AMBIGUITY",
+    "name": "FIX84B2 - ambigüedad real de infraestructura",
+    "description": "FIX84B2: valida que no se auto-resuelva crear infraestructura cuando la cola creada y la cola publicada son distintas. La creación puede quedar explícitamente fuera del workflow sin reescribir la frase.",
+    "phrase": "Quiero crear una cola llamada Infra y publicar en la cola Operativa un aviso.",
+    "enabled": true,
+    "dialogue": {
+      "enabled": true,
+      "expectedInitialBlocking": 1,
+      "expectedFinalBlocking": 0,
+      "expectedQuestionContains": "crear una cola",
+      "answers": {
+        "a1:ambiguity-createQueueMeaning": "Dejar la creación fuera del workflow"
+      }
+    },
+    "expected": {
+      "validationOk": true,
+      "semanticOk": false,
+      "semanticWarningsEmpty": false,
+      "semanticErrorsEmpty": false,
+      "checkValidation": true,
+      "checkSemanticOk": false,
+      "checkSemanticWarnings": false,
+      "checkSemanticErrors": false,
+      "checkNodes": true,
+      "checkConnections": true,
+      "nodes": [
+        {
+          "type": "queue.publish",
+          "label": "Publicar en cola Operativa",
+          "params": {
+            "broker": "sql",
+            "queue": "Operativa",
+            "payload": "un aviso",
+            "connectionStringName": "DefaultConnection"
+          }
+        },
+        {
+          "type": "util.end",
+          "label": "Fin",
+          "params": {}
+        }
+      ],
+      "connections": [
+        {
+          "from": "Inicio",
+          "to": "Publicar en cola Operativa"
+        },
+        {
+          "from": "Publicar en cola Operativa",
           "to": "Fin"
         }
       ]

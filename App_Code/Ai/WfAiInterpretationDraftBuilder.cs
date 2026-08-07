@@ -37,7 +37,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
             var draft = new WfAiInterpretationDraft
             {
-                Version = "fix84b-dialog-v1",
+                Version = "fix84b2-dialog-v2",
                 SourceText = sourceText ?? string.Empty,
                 Fingerprint = string.IsNullOrWhiteSpace(fingerprintOverride) ? BuildFingerprint(sourceText, plan) : fingerprintOverride,
                 CoveredNodeTypes = WfAiConstructionContractRegistry.CoveredNodeTypes(),
@@ -159,7 +159,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
             foreach (WfAiParameterContract parameterContract in contract.Parameters)
             {
-                WfAiParameterInterpretation parameter = InterpretParameter(sourceText, parameters, parameterContract);
+                WfAiParameterInterpretation parameter = InterpretParameter(sourceText, parameters, parameterContract, contract.NodeType);
                 node.Parameters.Add(parameter);
 
                 if (parameter.Blocking)
@@ -209,6 +209,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 string ambiguityId = ClarificationId(actionIndex, "ambiguity-" + ambiguity.Key);
                 if (acceptedClarificationIds != null && acceptedClarificationIds.Contains(ambiguityId)) continue;
 
+                WfAiNaturalPhraseContext naturalContext = WfAiNaturalPhraseContext.Analyze(sourceText);
+                if (!string.IsNullOrWhiteSpace(ambiguity.ContextResolverKey)
+                    && naturalContext.ResolvesAmbiguity(ambiguity.ContextResolverKey, Text(parameters["queue"])))
+                    continue;
+
                 AddClarification(draft, new WfAiClarification
                 {
                     Id = ambiguityId,
@@ -232,7 +237,8 @@ namespace Intranet.WorkflowStudio.WebForms
         private static WfAiParameterInterpretation InterpretParameter(
             string sourceText,
             JObject parameters,
-            WfAiParameterContract contract)
+            WfAiParameterContract contract,
+            string nodeType)
         {
             JToken value = parameters == null ? null : parameters[contract.Name];
             bool hasValue = HasValue(value);
@@ -296,6 +302,43 @@ namespace Intranet.WorkflowStudio.WebForms
                 result.Status = WfAiInterpretationStatus.Inferred;
                 result.Source = "visible_inference";
                 result.Explanation = "Valor generado a partir del contexto; debe mostrarse al usuario antes de confirmar.";
+                return result;
+            }
+
+            // FIX84B2: el valor puede estar escrito por la persona sin que haya nombrado la
+            // propiedad técnica. En ese caso el contrato marca como inferido el rol semántico.
+            WfAiNaturalPhraseContext natural = WfAiNaturalPhraseContext.Analyze(sourceText);
+            if (string.Equals(nodeType, "queue.publish", StringComparison.OrdinalIgnoreCase) && natural.Queue != null)
+            {
+                if (string.Equals(contract.Name, "queue", StringComparison.OrdinalIgnoreCase)
+                    && natural.Queue.PublishUsesContextQueue
+                    && string.Equals(Text(value), natural.Queue.PublishQueue, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Status = WfAiInterpretationStatus.Inferred;
+                    result.Source = "natural_context";
+                    result.Explanation = "Se reutilizó la cola mencionada anteriormente; no era necesario repetirla al publicar.";
+                    return result;
+                }
+
+                if (string.Equals(contract.Name, "payload", StringComparison.OrdinalIgnoreCase)
+                    && natural.Queue.PublishContentInferredByPosition
+                    && string.Equals(Text(value), natural.Queue.PublishContent, StringComparison.Ordinal))
+                {
+                    result.Status = WfAiInterpretationStatus.Inferred;
+                    result.Source = "natural_context";
+                    result.Explanation = "El texto posterior a «publicar» se interpretó como contenido del mensaje; no era necesario conocer el nombre interno del parámetro.";
+                    return result;
+                }
+            }
+
+            if (string.Equals(nodeType, "queue.consume", StringComparison.OrdinalIgnoreCase) && natural.Queue != null
+                && string.Equals(contract.Name, "queue", StringComparison.OrdinalIgnoreCase)
+                && natural.Queue.ConsumeUsesContextQueue
+                && string.Equals(Text(value), natural.Queue.ConsumeQueue, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Status = WfAiInterpretationStatus.Inferred;
+                result.Source = "natural_context";
+                result.Explanation = "La lectura continúa sobre la cola mencionada anteriormente mientras no se indique otra.";
                 return result;
             }
 

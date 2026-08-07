@@ -543,7 +543,7 @@
                 addAvailableField(fields, source, 'queue.last.id', 'ID del mensaje publicado', 'número');
                 addAvailableField(fields, source, 'queue.last.queue', 'Cola utilizada', 'texto');
                 addAvailableField(fields, source, 'queue.last.correlationId', 'Correlation ID', 'texto');
-                addAvailableField(fields, source, 'queue.last.payload', 'Payload publicado', 'texto');
+                addAvailableField(fields, source, 'queue.last.payload', 'Contenido publicado', 'texto');
                 queuePayloadAvailablePaths(step).forEach(function (field) {
                     addAvailableField(fields, source, 'queue.last.payload.' + field.path, 'Campo publicado: ' + field.label, field.type);
                 });
@@ -553,7 +553,7 @@
                 addAvailableField(fields, source, 'queue.messageId', 'ID del primer mensaje consumido', 'número');
                 addAvailableField(fields, source, 'queue.message', 'Primer mensaje consumido', 'texto');
                 addAvailableField(fields, source, 'queue.messages', 'Mensajes consumidos', 'texto');
-                addAvailableField(fields, source, 'payload', 'Payload del primer mensaje', 'texto');
+                addAvailableField(fields, source, 'payload', 'Contenido del primer mensaje', 'texto');
                 var matchingPublish = null;
                 for (var qp = idx - 1; qp >= 0; qp--) {
                     if (guideSteps[qp] && guideSteps[qp].type === 'queue_publish' &&
@@ -1714,13 +1714,21 @@
             return 'escribir archivo ' + (step.path || 'C:\\Temp\\salida.txt');
         }
         if (step.type === 'queue_publish') {
+            var queueNamePhrase = step.queue || 'default';
             var queuePayloadPhrase = String(queuePayloadTextForStep(step) || '').replace(/\s+/g, ' ').trim();
-            return 'publicar en cola ' + (step.queue || 'default') + ' con payload ' + (queuePayloadPhrase || 'Mensaje generado por Constructor IA');
+            var sameQueuePublish = !!(ctx.lastQueue && String(ctx.lastQueue).toLowerCase() === String(queueNamePhrase).toLowerCase());
+            ctx.lastQueue = queueNamePhrase;
+            // FIX84B2: la frase humana describe la intención y el contenido; no obliga a
+            // recordar la propiedad técnica "payload" ni a repetir la cola activa.
+            return (sameQueuePublish ? 'publicar ' : 'publicar en la cola ' + queueNamePhrase + ' ') + (queuePayloadPhrase || 'un mensaje');
         }
         if (step.type === 'queue_consume') {
+            var queueNameConsume = step.queue || 'default';
             var queueTakePhrase = parseInt(step.take || '1', 10);
             if (isNaN(queueTakePhrase) || queueTakePhrase < 1) queueTakePhrase = 1;
-            return 'consumir de cola ' + (step.queue || 'default') + ' tomando ' + queueTakePhrase + (queueTakePhrase === 1 ? ' mensaje' : ' mensajes');
+            var sameQueueConsume = !!(ctx.lastQueue && String(ctx.lastQueue).toLowerCase() === String(queueNameConsume).toLowerCase());
+            ctx.lastQueue = queueNameConsume;
+            return 'leer ' + queueTakePhrase + (queueTakePhrase === 1 ? ' mensaje' : ' mensajes') + (sameQueueConsume ? '' : ' de la cola ' + queueNameConsume);
         }
         if (step.type === 'subflow') {
             var txt = 'ejecutar otro workflow ' + (step.ref || '(sin workflow)');
@@ -1772,17 +1780,21 @@
     }
 
     function buildIncrementalPhrase() {
-        var parts = ['Quiero iniciar un flujo'];
-        var ctx = { lastCondition: null, lastTaskRole: null, conditionsById: {}, tasksById: {}, branchesUsed: false, commonAfterBranchExplained: false };
+        // FIX84B2: Inicio y Fin normales son estructura del workflow, no palabras que el
+        // usuario deba recordar. Solo se verbaliza un Fin cuando es funcional a una rama.
+        var parts = [];
+        var ctx = { lastCondition: null, lastTaskRole: null, lastQueue: null, conditionsById: {}, tasksById: {}, branchesUsed: false, commonAfterBranchExplained: false };
 
         guideSteps.forEach(function (step) {
+            var normalEnd = step && step.type === 'end' && (!step.branch || step.branch === 'main' || step.branch === 'always');
+            if (normalEnd) return;
             var prefix = branchPrefix(step.branch, ctx, step);
             var body = stepBody(step, ctx);
 
             // Separador importante para el intérprete ML.NET:
             // sin "luego", un cuerpo de email/notificación puede absorber el texto
             // del paso siguiente. Ej.: cuerpo ... notificar internamente ...
-            if (!prefix && parts.length > 1) {
+            if (!prefix && parts.length > 0) {
                 if (ctx.branchesUsed && !ctx.commonAfterBranchExplained) {
                     prefix = 'luego de cualquiera de las ramas ';
                     ctx.commonAfterBranchExplained = true;
@@ -1797,7 +1809,7 @@
             }
         });
 
-        return cleanGuidePhraseText(parts.join(', ') + '.');
+        return cleanGuidePhraseText(parts.length ? (parts.join(', ') + '.') : '');
     }
 
     function hasEndStep() {
@@ -2332,7 +2344,7 @@
                 '  <pre id="wfAiQueuePayloadPreview" class="wf-ai-queue-preview"></pre>' +
                 '</div>' +
                 '<div id="wfAiQueuePayloadAdvancedBox" style="display:none">' +
-                '  <div class="wf-ai-guide-row"><label>Payload avanzado</label><textarea id="wfAiStepQueuePayload" class="wf-ai-input wf-ai-textarea" placeholder="Texto libre o JSON. Ej.: {&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}">{&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}</textarea></div>' +
+                '  <div class="wf-ai-guide-row"><label>Contenido avanzado (texto o JSON)</label><textarea id="wfAiStepQueuePayload" class="wf-ai-input wf-ai-textarea" placeholder="Texto libre o JSON. Ej.: {&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}">{&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}</textarea></div>' +
                 '</div>' +
                 '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
                 '<div class="wf-ai-guide-note">Publica en WF_Queue mediante queue.publish. Después deja disponibles queue.last.* y, para los campos definidos, queue.last.payload.*.</div>';
@@ -5317,6 +5329,17 @@
         return info && info.interpretationDraft || null;
     }
 
+    function fix84bNaturalInferences(res) {
+        var info = fix84bInfo(res);
+        var ctx = info && info.naturalContext;
+        return (ctx && ctx.inferences) || [];
+    }
+
+    function fix84bRejectedAnswers(res) {
+        var info = fix84bInfo(res);
+        return (info && info.rejectedAnswers) || [];
+    }
+
     function fix84bBlockingClarifications(res) {
         var draft = fix84bDraft(res);
         return ((draft && draft.clarifications) || []).filter(function (c) { return c && c.blocking; });
@@ -5491,7 +5514,18 @@
             html += '</ul></div>';
         }
 
-        if (info.errors && info.errors.length) html += renderList('Necesito corregir esta respuesta', info.errors, 'wf-ai-error-list');
+        var rejected = fix84bRejectedAnswers(res);
+        if (rejected.length) {
+            html += '<div class="wf-ai-fix84b-unsupported"><div class="wf-ai-fix84b-section-title">Entendí tu elección, pero no puedo aplicarla dentro de este workflow</div>';
+            rejected.forEach(function (a) {
+                html += '<div class="wf-ai-fix84b-unsupported-answer"><strong>Elegiste:</strong> ' + htmlEncode(a.answer || '') + '</div>';
+                if (a.reason) html += '<div>' + htmlEncode(a.reason) + '</div>';
+                if (a.suggestedAnswer) html += '<div class="wf-ai-fix84b-unsupported-next">Si esa infraestructura se prepara por otro medio, elegí <strong>' + htmlEncode(a.suggestedAnswer) + '</strong>.</div>';
+            });
+            html += '</div>';
+        } else if (info.errors && info.errors.length) {
+            html += renderList('Necesito corregir esta respuesta', info.errors, 'wf-ai-error-list');
+        }
 
         if (selected) {
             var idx = blocking.indexOf(selected);
@@ -5508,10 +5542,28 @@
 
     function renderFix84bResolvedSummary(res) {
         var info = fix84bInfo(res);
-        if (!info || !info.appliedAnswers || !info.appliedAnswers.length || fix84bBlockingClarifications(res).length) return '';
-        var html = '<div class="wf-ai-fix84b wf-ai-fix84b-complete"><div class="wf-ai-fix84b-head"><div><div class="wf-ai-fix84b-kicker">Interpretación resuelta</div><div class="wf-ai-fix84b-title">Las aclaraciones ya forman parte del plan</div></div><span class="wf-ai-fix84b-badge complete">Listo para revisar</span></div><ul>';
-        info.appliedAnswers.forEach(function (a) { html += '<li>' + htmlEncode(a.question || 'Decisión') + ' → <strong>' + htmlEncode(a.answer || '') + '</strong></li>'; });
-        html += '</ul></div>';
+        if (!info || fix84bBlockingClarifications(res).length) return '';
+        var answers = info.appliedAnswers || [];
+        var inferences = fix84bNaturalInferences(res);
+        if (!answers.length && !inferences.length) return '';
+
+        var html = '<div class="wf-ai-fix84b wf-ai-fix84b-complete"><div class="wf-ai-fix84b-head"><div><div class="wf-ai-fix84b-kicker">Interpretación resuelta</div><div class="wf-ai-fix84b-title">Esto entendí sin pedirte nombres técnicos</div></div><span class="wf-ai-fix84b-badge complete">Listo para revisar</span></div>';
+        if (answers.length) {
+            html += '<div class="wf-ai-fix84b-section-title">Decisiones confirmadas</div><ul>';
+            answers.forEach(function (a) { html += '<li>' + htmlEncode(a.question || 'Decisión') + ' → <strong>' + htmlEncode(a.answer || '') + '</strong></li>'; });
+            html += '</ul>';
+        }
+        if (inferences.length) {
+            html += '<div class="wf-ai-fix84b-section-title wf-ai-fix84b-inference-title">Inferido por contexto</div><ul>';
+            inferences.forEach(function (x) {
+                html += '<li><strong>' + htmlEncode(x.label || 'Dato') + ':</strong> ' + htmlEncode(x.value || '');
+                if (x.explanation) html += '<div class="wf-ai-fix84b-inference-explanation">' + htmlEncode(x.explanation) + '</div>';
+                html += '</li>';
+            });
+            html += '</ul>';
+        }
+        html += '<div class="wf-ai-fix84b-implicit-note">Inicio y Fin normales se agregan automáticamente al workflow; no hace falta escribirlos en la frase.</div>';
+        html += '</div>';
         return html;
     }
 
@@ -5634,8 +5686,9 @@
 
     function verificationStatus(res, userText) {
         if (!res || !res.ok) return { css: 'error', label: 'FALLA', title: 'No se pudo interpretar la frase' };
-        if (fix84bOwnsDialogue(res)) return { css: 'warn', label: 'ACLARAR', title: 'Entendí el flujo, pero necesito confirmar una decisión' };
+        if (fix84bRejectedAnswers(res).length) return { css: 'warn', label: 'REVISAR', title: 'Entendí tu elección, pero no puede aplicarse dentro de este workflow' };
         if (fix84bHasErrors(res)) return { css: 'warn', label: 'REVISAR', title: 'La respuesta necesita una corrección' };
+        if (fix84bOwnsDialogue(res)) return { css: 'warn', label: 'ACLARAR', title: 'Entendí el flujo, pero necesito confirmar una decisión' };
         var validation = res.validation || {};
         var plan = res.plan || {};
         var missing = plan.missingData || [];

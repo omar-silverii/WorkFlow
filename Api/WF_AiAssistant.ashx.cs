@@ -40,6 +40,7 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                 }
 
                 var catalog = new WfAiCatalogProvider().Build();
+                WfAiNaturalPhraseContext naturalContext = WfAiNaturalPhraseContext.Analyze(req.UserText);
                 var model = new WfAiMlnetProvider().Interpret(req.UserText, catalog, req.WorkflowJson);
 
                 if (!model.Ok)
@@ -125,13 +126,15 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                     fix84b = new
                     {
                         active = true,
-                        version = "fix84b-dialog-v1",
+                        version = "fix84b2-dialog-v2",
                         fingerprint = baseDraft.Fingerprint,
                         stale = stale,
                         ready = dialogueReady,
                         interpretationDraft = interpretationDraft,
                         acceptedAnswerIds = resolution.AcceptedAnswerIds,
                         appliedAnswers = resolution.AppliedAnswers,
+                        rejectedAnswers = resolution.RejectedAnswers,
+                        naturalContext = naturalContext,
                         errors = resolution.Errors,
                         warnings = resolution.Warnings
                     },
