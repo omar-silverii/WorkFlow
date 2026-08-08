@@ -181,8 +181,11 @@ namespace Intranet.WorkflowStudio.WebForms
             // No alcanza con que ML.NET prediga CARGAR_DOCUMENTO:
             // frases de variables como "quitar variable" pueden clasificarse mal.
             // Para agregar doc.load exigimos una señal explícita de documento en la frase.
+            // FIX84B3: "leer" por sí solo no identifica un documento. Puede significar
+            // leer un mensaje de cola, un archivo u otro dato. La carga documental exige
+            // una señal documental real (tipo reconocido, documento/factura/comprobante, etc.).
             bool hasExplicitDocumentSignal = docTipo.Length > 0
-                || ContainsAny(norm, "cargar", "subir", "leer", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
+                || ContainsAny(norm, "cargar", "subir", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
             bool wantsDocument = hasExplicitDocumentSignal;
             if ((fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead)
                 && string.IsNullOrWhiteSpace(docTipo)

@@ -118,16 +118,21 @@ namespace Intranet.WorkflowStudio.WebForms
                 }
 
                 JObject plan = model.Plan;
-                run.PlanJson = plan.ToString(Formatting.Indented);
-                run.NodeTypes = ExtractNodeTypes(plan, item);
 
                 var validation = new WfAiPlanValidator().Validate(plan, catalog);
                 EvaluateValidation(run, item, validation);
                 EvaluateFix84A(run, item, plan, catalog);
-                EvaluateFix84BDialogue(run, item, plan, catalog);
-                EvaluateSemantic(run, item, plan);
-                EvaluateNodes(run, item, plan);
-                EvaluateConnections(run, item, plan);
+
+                // FIX84B3: si el caso incluye diálogo, las validaciones funcionales
+                // posteriores deben mirar el plan que quedó después de aplicar la respuesta,
+                // no el borrador previo que todavía contiene valores de relleno.
+                JObject evaluatedPlan = EvaluateFix84BDialogue(run, item, plan, catalog) ?? plan;
+
+                run.PlanJson = evaluatedPlan.ToString(Formatting.Indented);
+                run.NodeTypes = ExtractNodeTypes(evaluatedPlan, item);
+                EvaluateSemantic(run, item, evaluatedPlan);
+                EvaluateNodes(run, item, evaluatedPlan);
+                EvaluateConnections(run, item, evaluatedPlan);
 
                 run.Status = run.Checks.Any(x => !x.Ok && !x.Skipped) ? "FALLA" : "OK";
             }
@@ -228,10 +233,10 @@ namespace Intranet.WorkflowStudio.WebForms
         // fix84b: valida una conversación contractual completa sin reescribir la frase original.
         // El caso declara la duda esperada y una respuesta estructurada; el servidor debe aplicar
         // la decisión sobre una copia del plan y regenerar un borrador sin aclaraciones bloqueantes.
-        private static void EvaluateFix84BDialogue(AiRegressionRunResult run, AiRegressionCase item, JObject plan, WfAiCatalog catalog)
+        private static JObject EvaluateFix84BDialogue(AiRegressionRunResult run, AiRegressionCase item, JObject plan, WfAiCatalog catalog)
         {
             if (item == null || item.Dialogue == null || !item.Dialogue.Enabled)
-                return;
+                return plan;
 
             try
             {
@@ -241,13 +246,13 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (string.IsNullOrWhiteSpace(initialDraft.Fingerprint))
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b no generó fingerprint para el borrador inicial."));
-                    return;
+                    return plan;
                 }
 
                 if (initialDraft.BlockingClarificationCount != item.Dialogue.ExpectedInitialBlocking)
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b esperaba " + item.Dialogue.ExpectedInitialBlocking + " aclaración(es) inicial(es), pero obtuvo " + initialDraft.BlockingClarificationCount + "."));
-                    return;
+                    return plan;
                 }
 
                 if (!string.IsNullOrWhiteSpace(item.Dialogue.ExpectedQuestionContains))
@@ -258,7 +263,7 @@ namespace Intranet.WorkflowStudio.WebForms
                     if (!found)
                     {
                         run.Checks.Add(AiRegressionCheck.Fail("fix84b no generó la pregunta esperada que contiene: " + item.Dialogue.ExpectedQuestionContains));
-                        return;
+                        return plan;
                     }
                 }
 
@@ -266,7 +271,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (resolution.Errors != null && resolution.Errors.Count > 0)
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b no pudo aplicar la respuesta estructurada: " + string.Join(" | ", resolution.Errors.ToArray())));
-                    return;
+                    return plan;
                 }
 
                 var finalDraft = builder.Build(
@@ -279,37 +284,40 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (finalDraft.BlockingClarificationCount != item.Dialogue.ExpectedFinalBlocking)
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b esperaba " + item.Dialogue.ExpectedFinalBlocking + " aclaración(es) finales, pero obtuvo " + finalDraft.BlockingClarificationCount + "."));
-                    return;
+                    return plan;
                 }
 
                 if (!string.Equals(initialDraft.SourceText, item.Phrase, StringComparison.Ordinal)
                     || !string.Equals(finalDraft.SourceText, item.Phrase, StringComparison.Ordinal))
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b alteró la frase original durante la aclaración."));
-                    return;
+                    return plan;
                 }
 
                 if (!string.Equals(initialDraft.Fingerprint, finalDraft.Fingerprint, StringComparison.Ordinal))
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b cambió el fingerprint del borrador base durante la misma conversación."));
-                    return;
+                    return plan;
                 }
 
                 var finalValidation = new WfAiPlanValidator().Validate(resolution.Plan, catalog);
                 if (finalValidation == null || !finalValidation.Ok)
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b dejó un plan inválido después de resolver el diálogo. Errores: " + JoinList(finalValidation == null ? null : finalValidation.Errors)));
-                    return;
+                    return plan;
                 }
 
                 run.Checks.Add(AiRegressionCheck.Pass(
                     "fix84b diálogo OK: " + initialDraft.BlockingClarificationCount
                     + " duda(s) inicial(es) -> " + finalDraft.BlockingClarificationCount
-                    + ", respuesta estructurada aplicada sin reescribir la frase."));
+                    + ", respuesta estructurada aplicada sin reescribir la frase; validaciones posteriores usan el plan resuelto."));
+
+                return resolution.Plan;
             }
             catch (Exception ex)
             {
                 run.Checks.Add(AiRegressionCheck.Fail("fix84b diálogo lanzó una excepción: " + ex.Message));
+                return plan;
             }
         }
 
