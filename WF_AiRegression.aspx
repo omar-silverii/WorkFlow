@@ -51,7 +51,7 @@
                     <div class="ws-title">Banco de regresión IA</div>
                     <div class="ws-muted small">Prueba frases patrón del Constructor IA y valida nodos, conexiones y auditoría semántica.</div>
                 </div>
-                <span class="ws-chip">fix84b3</span>
+                <span class="ws-chip">fix84c2bf</span>
             </div>
         </div>
 

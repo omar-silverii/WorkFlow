@@ -1,0 +1,820 @@
+CONTEXTPACK — WORKFLOW STUDIO
+CIERRE DE SESIÓN 08/08/2026
+PRÓXIMA ETAPA: FIX84C1 — CAMINO COMÚN ENTRE FRASE Y PASO A PASO
+BASE REAL VALIDADA EN ESTA SESIÓN: WorkFlow-main (50b) + FIX84B3
+PRÓXIMO ZIP ESPERADO: ZIP COMPLETO NUEVO CON FIX84B3 YA INTEGRADO
+
+Usuario: Omar Silverii
+Proyecto: Workflow Studio / Workflow Studio WebForms
+Tecnología: ASP.NET WebForms .NET Framework 4.8, C#, Visual Studio 2022, SQL Server
+Entorno: intranet, offline/local, sin dependencia obligatoria de internet ni CDN
+
+======================================================================
+1. MÉTODO OFICIAL Y PERMANENTE DE DESARROLLO
+======================================================================
+
+Este método debe mantenerse en todas las sesiones futuras.
+
+Omar no tiene que conocer previamente cómo debe resolverse técnicamente un
+sistema de workflows ni entregar una especificación completa.
+
+Omar puede comenzar con una idea mínima, una necesidad de usuario, una duda,
+un problema observado, una pregunta sobre qué le falta al producto o una
+intención todavía incompleta.
+
+Responsabilidad del asistente como ingeniero del sistema:
+
+1. Leer completo el ContextPack y el Prompt.
+2. Esperar el ZIP completo cuando corresponda.
+3. Inspeccionar primero los archivos reales.
+4. Reconstruir el estado desde el ZIP y no desde recuerdos.
+5. Analizar el problema como producto, no solamente como código.
+6. Investigar productos similares, prácticas profesionales o información
+   actual cuando aporte valor a la decisión.
+7. Proponer cómo debería funcionar el sistema.
+8. Detectar implicaciones operativas: quién lo usa, permisos, registro,
+   trazabilidad, estados cerrados, errores, casos límite y qué falta para que
+   sea productivo.
+9. Presentar alternativas cuando exista una decisión real.
+10. Recomendar una dirección y explicar por qué.
+11. Conversar la propuesta con Omar antes de implementar.
+12. Incorporar la experiencia de Omar como usuario final.
+13. Insistir cuando exista un camino claramente mejor.
+14. Ser honesto y crítico; no ser complaciente para evitar una discusión.
+15. Implementar solamente después de acordar la dirección.
+16. Trabajar con cambios mínimos, precisos y comprobables.
+17. Validar con un caso operativo real de punta a punta.
+18. Cerrar cada etapa con ContextPack y Prompt actualizados.
+
+La conversación natural entre Omar y el asistente es parte del método.
+No se requieren fichas, formularios ni especificaciones técnicas obligatorias.
+
+Distribución de responsabilidades:
+- Omar aporta la necesidad, experiencia real de uso, correcciones de producto y decisión final.
+- El asistente aporta investigación, ingeniería del sistema, propuesta funcional,
+  arquitectura compatible con el proyecto real, análisis técnico, implementación y criterio profesional.
+- Ambos refinan la solución mediante conversación previa al código.
+
+======================================================================
+2. REGLAS NO NEGOCIABLES
+======================================================================
+
+- La fuente de verdad es el ZIP completo más reciente.
+- No asumir que el código quedó igual a lo conversado.
+- No inventar tablas, clases, handlers, controles, APIs, rutas ni archivos.
+- No presentar código de archivos no inspeccionados.
+- No reutilizar archivos antiguos sin compararlos con el ZIP actual.
+- No cambiar arquitectura sin necesidad real.
+- No reescribir cosas que funcionan.
+- No volver atrás sobre temas cerrados salvo bug real.
+- No rediseñar base de datos salvo pedido explícito.
+- No tocar motor, HDocLoad, extractores cerrados, mapa, queue runtime, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar datos históricos de tareas sin identificar primero su origen.
+- No convertir recuerdos antiguos o hipótesis en requisitos.
+- Si una memoria anterior no coincide con el ZIP, este ContextPack o la
+  validación real, prevalecen el ZIP actual y la evidencia.
+- Cambios mínimos, precisos y profesionales.
+- Entregar fixes como ZIP de reemplazo.
+- Mantener la estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar parches con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría extensa con una corrección puntual.
+- Evaluar siempre el funcionamiento productivo completo.
+- No generar un fix si el ZIP ya contiene correctamente el estado esperado.
+
+======================================================================
+3. DECISIÓN OFICIAL DEL CONSTRUCTOR IA
+======================================================================
+
+Dirección oficial y permanente:
+
+INTERPRETACIÓN NATURAL CON DIÁLOGO DE ACLARACIÓN.
+
+Se aplica a todos los nodos actuales y futuros, Constructor IA por frase,
+Constructor paso a paso, Datos disponibles, plan estructurado, validación,
+contrato/fingerprint y banco de regresión.
+
+El usuario no debe tener que conocer:
+- JSON;
+- sintaxis ${...};
+- variables internas;
+- nombres técnicos exactos de nodos;
+- nombres internos de propiedades;
+- propiedades de handlers;
+- una gramática artificial.
+
+La frase puede ser breve, incompleta, ambigua, aproximada, expresada con
+palabras diferentes a las internas y sin indicar explícitamente Inicio o Fin.
+
+El sistema debe:
+1. Interpretar todo lo que pueda con seguridad.
+2. Diferenciar resolved / inferred / ambiguous / missing / unrecognized.
+3. Mostrar qué entendió.
+4. Mostrar qué infirió.
+5. No inventar silenciosamente decisiones importantes.
+6. Preguntar solamente lo necesario.
+7. Resolver dudas mediante controles guiados y editables.
+8. Regenerar el plan después de cada respuesta.
+9. Mostrar resumen final comprensible.
+10. Permitir revisión.
+11. Exigir confirmación real.
+12. Aplicar al canvas solamente cuando el plan esté resuelto.
+
+El modo paso a paso continúa siendo el camino determinista.
+La frase es un acelerador y una conversación, no un lenguaje técnico disfrazado.
+
+======================================================================
+4. REGLAS NUEVAS DE LENGUAJE NATURAL VALIDADAS EN ESTA SESIÓN
+======================================================================
+
+A. EL USUARIO NO DEBE CONOCER NOMBRES DE PROPIEDADES
+
+Incorrecto como requisito humano:
+"publicar en la cola Omar con payload quiero un mate"
+
+Correcto:
+"publicar en la cola Omar quiero un mate"
+
+o:
+"crear una cola llamada Omar y publicar quiero un mate"
+
+El sistema entiende que el contenido posterior a la intención de publicar
+corresponde técnicamente al contenido/payload del nodo.
+El usuario expresa QUÉ quiere hacer y QUÉ contenido usar; el contrato decide
+DÓNDE se guarda técnicamente.
+
+B. NO INVENTAR ESTRUCTURA JSON INNECESARIA
+
+"publicar quiero un mate" puede ser texto simple.
+No inventar automáticamente {"mensaje":"quiero un mate"}.
+
+Si el usuario expresa campos, por ejemplo:
+"publicar con origen Prueba e instanceId el de esta instancia"
+puede construirse contenido estructurado con esos campos.
+
+C. REFERENCIAS CONTEXTUALES
+
+Una vez presentado un objeto, una acción posterior puede referirse a él sin
+repetir el nombre.
+
+"Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje."
+Debe interpretarse:
+- publicar en Pedidos;
+- consumir/leer de Pedidos.
+
+Si el usuario nombra otra cola explícitamente, se respeta el nuevo referente.
+
+D. INICIO Y FIN IMPLÍCITOS
+
+No exigir:
+"Quiero iniciar un flujo..."
+ni:
+"Después finalizar."
+
+El sistema agrega util.start y el util.end normal como estructura.
+Excepción: un final explícito de rama sí tiene significado funcional.
+
+E. VERBOS DEPENDEN DEL CONTEXTO
+
+La palabra "leer" sola no debe crear doc.load.
+- "leer un mensaje" → queue.consume;
+- "leer un archivo" → file.read;
+- "leer una factura" → documental;
+- "leer una nota de crédito" → documental;
+- "leer un documento" → documental.
+
+F. FRASES DE REGRESIÓN HUMANAS
+
+No escribir frases para facilitar el parser.
+Evitar como requisitos técnicos: payload, ${...}, queue.publish, queue.consume,
+propiedades internas, "quiero iniciar un flujo", "después finalizar".
+
+G. PREGUNTAR SOLO ANTE AMBIGÜEDAD REAL
+
+"Quiero crear una cola llamada Omar y publicar quiero un mate."
+La acción posterior aclara el contexto operativo: no preguntar por infraestructura.
+
+"Quiero crear una cola llamada Infra y publicar en la cola Operativa un aviso."
+Usa dos colas distintas: sí corresponde aclarar qué significa crear Infra.
+
+======================================================================
+5. ESTADO CERRADO PREVIO — FIX82F Y FIX83–FIX83D
+======================================================================
+
+FIX82F:
+- circuito profesional de reproceso integrado;
+- ciclo actual separado;
+- otros ciclos separados;
+- documentos de respuesta por tareaId;
+- tareas cerradas sin adjuntar/eliminar;
+- seguridad y contadores conservados.
+
+FIX83:
+- queue.publish y queue.consume en Constructor paso a paso.
+
+FIX83B:
+- contenido/payload guiado;
+- campos Nombre/Valor;
+- Datos disponibles;
+- vista previa;
+- HLogger serializa objetos como JSON compacto.
+
+FIX83C:
+- frases de colas;
+- contrato antes de Crear workflow;
+- validación de plan.
+
+FIX83D:
+- recorte correcto de JSON;
+- JObject/JArray;
+- conservación de mensaje Logger;
+- caso O_QUEUE_ROUNDTRIP_JSON_LOGGER.
+
+Runtime de colas validado. No tocarlo salvo evidencia concreta.
+
+======================================================================
+6. FIX84A — BASE UNIVERSAL DE INTERPRETACIÓN Y ACLARACIÓN
+======================================================================
+
+Objetivo:
+crear una capa contractual universal sin romper el provider legacy.
+
+Muestra inicial:
+- queue.publish;
+- queue.consume;
+- util.logger;
+- human.task;
+- control.if.
+
+Decisión importante:
+NO agrandar WfAiMlnetProvider como repositorio de toda la nueva arquitectura.
+El provider existente sigue como generador legacy/candidato.
+
+FIX84A incorporó conceptualmente:
+- contrato universal por nodo;
+- intención humana;
+- parámetros;
+- tipos;
+- obligatoriedad;
+- defaults seguros;
+- política de inferencia;
+- pregunta humana;
+- control recomendado;
+- entradas;
+- salidas;
+- validaciones;
+- resumen;
+- estados resolved / inferred / ambiguous / missing / unrecognized;
+- borrador universal de interpretación;
+- validación contra catálogo real;
+- modo paralelo/fail-open.
+
+Se contrastó el contrato con runtime real, especialmente colas y human.task.
+
+Validación real de Omar:
+15 OK / 0 FALLA / 0 SKIP.
+
+FIX84A validado y cerrado.
+
+======================================================================
+7. FIX84B — DIÁLOGO CONTRACTUAL GENÉRICO
+======================================================================
+
+Se incorporó:
+- panel "Esto entendí y esto necesito confirmar";
+- controles guiados;
+- respuestas estructuradas separadas de la frase;
+- regeneración del plan;
+- bloqueo de Crear workflow con dudas bloqueantes;
+- protección por fingerprint;
+- compatibilidad legacy para nodos fuera de la muestra;
+- prueba de regresión de diálogo.
+
+Se validó que una ambigüedad se muestra, una respuesta válida puede resolverla,
+el plan se regenera y Crear workflow se habilita cuando corresponde.
+
+Problema detectado:
+una opción entendible pero no implementable (crear infraestructura de cola)
+bloqueaba correctamente, pero la UX parecía quedarse detenida.
+Eso originó FIX84B2.
+
+======================================================================
+8. FIX84B2 — CONTEXTO NATURAL, REFERENCIAS Y CIERRE DE DIÁLOGO
+======================================================================
+
+Objetivos:
+1. Dejar de exigir nombres internos como payload.
+2. Reutilizar referencias contextuales.
+3. Hacer Inicio/Fin implícitos.
+4. Mejorar cierre de opciones no soportadas.
+5. Usar frases humanas de regresión.
+
+Ejemplo validado:
+"Quiero crear una cola llamada Omar y publicar quiero un mate."
+
+Resultado:
+Inicio → Publicar en cola Omar → Fin
+
+Inferencias mostradas:
+- cola usada para publicar: Omar;
+- contenido: quiero un mate;
+- sentido de "crear una cola": usarla dentro del workflow;
+- Inicio y Fin normales agregados automáticamente.
+
+No pidió payload, JSON, broker, DefaultConnection, util.start ni util.end.
+
+Ejemplo:
+"Publicar en la cola Omar."
+
+Resultado:
+- detecta que falta solamente contenido;
+- pregunta "¿Qué información querés publicar en la cola?";
+- permite mensaje simple, campos o Datos disponibles;
+- el usuario responde sin conocer payload.
+
+Prueba real:
+respuesta "Quiero un cafe"
+→ Queue = Omar
+→ Contenido del mensaje = Quiero un cafe
+
+También mejoró la opción no soportada de crear infraestructura:
+- respuesta entendida;
+- explicación clara;
+- posibilidad de cambiar respuesta;
+- posibilidad de dejar la creación fuera del workflow.
+
+Se agregaron casos P–S.
+Primera corrida: 17 OK / 2 FALLA / 0 SKIP.
+Los dos fallos originaron FIX84B3.
+
+======================================================================
+9. ERRORES DETECTADOS DESPUÉS DE FIX84B2
+======================================================================
+
+ERROR 1 — BANCO VALIDABA EL PLAN ANTERIOR AL DIÁLOGO
+
+Caso P_FIX84B_QUEUE_MESSAGE_MISSING.
+Frase: "Publicar en la cola Omar."
+
+El diálogo resolvía 1 duda → 0 dudas y regeneraba correctamente, pero el banco
+seguía comparando contra el plan original.
+
+Corrección:
+las verificaciones posteriores deben usar el plan RESULTANTE DEL DIÁLOGO.
+
+ERROR 2 — "LEER UN MENSAJE" CREABA DOC.LOAD
+
+Caso R_FIX84B2_QUEUE_REFERENCE_CARRY.
+Frase:
+"Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje."
+
+Resultado incorrecto previo:
+Inicio → Cargar documento → Publicar Pedidos → Consumir Pedidos → Fin
+
+Causa:
+WfAiMlnetProvider consideraba "leer" señal documental genérica.
+
+Corrección:
+"leer" sola deja de ser señal suficiente de doc.load y requiere contexto.
+
+======================================================================
+10. FIX84B3 — PLAN POST-DIÁLOGO + LEER CONTEXTUAL
+======================================================================
+
+FIX84B3 fue generado sobre WorkFlow-main (50b).
+
+Alcance mínimo:
+1. Banco valida nodos/conexiones contra el plan resuelto después del diálogo.
+2. Provider evita que "leer un mensaje" cree doc.load.
+
+No se modificaron:
+- contratos;
+- JavaScript;
+- canvas;
+- handlers;
+- runtime de colas;
+- motor;
+- base;
+- mapa;
+- reproceso.
+
+Validación real de Omar:
+19 OK / 0 FALLA / 0 SKIP
+Semántica fuerte = 15
+
+Esto es correcto: los 15 casos anteriores conservan semántica fuerte; P–S
+validan contrato/contexto/diálogo y no necesariamente el auditor legacy.
+
+Prueba real:
+"Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje."
+
+Resultado correcto:
+Inicio → Publicar en cola Pedidos → Consumir cola Pedidos → Fin
+
+NO aparece Cargar documento.
+
+queue.publish observado:
+- Queue = Pedidos
+- Contenido del mensaje = número 123
+- Broker = sql
+- ConnectionString = DefaultConnection
+
+queue.consume observado:
+- Queue = Pedidos
+- Broker = sql
+- Take = 1
+- Prefetch = 1
+- ConnectionString = DefaultConnection
+- Output prefix = queue.consume
+
+Esto valida:
+- referencia contextual;
+- contenido natural;
+- defaults técnicos seguros;
+- lectura contextual;
+- Inicio/Fin implícitos.
+
+Prueba:
+"Publicar en la cola Omar."
+→ pregunta únicamente contenido.
+Respuesta "Quiero un cafe"
+→ Queue = Omar
+→ Contenido del mensaje = Quiero un cafe.
+
+Conclusión:
+FIX84B3 VALIDADO Y CERRADO.
+
+======================================================================
+11. ARQUITECTURA ACORDADA PARA FIX84C
+======================================================================
+
+FIX84C NO debe hacer que el Constructor paso a paso use la pantalla de frases.
+La convergencia debe ocurrir debajo de ambas experiencias.
+
+Situación conceptual previa:
+
+FRASE
+→ interpretar
+→ aclarar
+→ generar plan
+→ canvas
+
+PASO A PASO
+→ formularios JavaScript
+→ construir plan
+→ canvas
+
+Objetivo:
+
+FRASE
+→ interpretación/aclaración
+→ NODO RESUELTO COMÚN
+→ CONTRATO UNIVERSAL
+→ defaults + validación + outputs
+→ PLAN ESTRUCTURADO
+→ resumen / confirmación
+→ canvas
+
+PASO A PASO
+→ controles deterministas
+→ NODO RESUELTO COMÚN
+→ CONTRATO UNIVERSAL
+→ defaults + validación + outputs
+→ PLAN ESTRUCTURADO
+→ resumen / confirmación
+→ canvas
+
+Mismo significado. Distinta experiencia.
+
+======================================================================
+12. PRINCIPIO CENTRAL DE FIX84C
+======================================================================
+
+Frase y Paso a paso deben terminar construyendo el MISMO objeto intermedio.
+
+Ejemplo conceptual:
+
+Nodo resuelto
+Tipo: queue.publish
+Valores:
+- Cola = Pedidos
+- Contenido = número 123
+- Broker = sql
+- Conexión = DefaultConnection
+Origen:
+- Cola → dicho por usuario
+- Contenido → dicho por usuario
+- Broker → default seguro
+- Conexión → default seguro
+Estado: resolved
+
+Después de ese punto, ninguno de los dos constructores debería fabricar
+independientemente el JSON final del nodo.
+La misma capa común debe validar, aplicar defaults, determinar outputs y
+construir el plan estructurado.
+
+======================================================================
+13. CONTRATO UNIVERSAL — FUNCIÓN ESPERADA
+======================================================================
+
+Ejemplo queue.publish:
+- Nombre interno: payload
+- Nombre humano: Contenido del mensaje
+- Tipo: texto / objeto
+- Obligatorio: sí
+- Control recomendado: editor de contenido
+- Puede usar Datos disponibles: sí
+- Puede inferirse desde frase: sí
+- Pregunta humana: ¿Qué información querés publicar?
+
+El contrato controla la SEMÁNTICA.
+No necesariamente debe dibujar cada píxel de la interfaz.
+Se conservan editores especializados cuando agregan valor.
+
+======================================================================
+14. UI PASO A PASO — CRITERIO
+======================================================================
+
+No construir ahora un gigantesco generador automático de formularios.
+Conservar buenos editores actuales, especialmente:
+- editor guiado de contenido;
+- human.task;
+- control.if.
+
+El contrato puede indicar conceptualmente:
+- control estándar;
+- selector de Datos disponibles;
+- selector de rol;
+- editor de contenido;
+- constructor de condición;
+- editor especializado.
+
+El modo paso a paso sigue siendo determinista.
+
+Ejemplo:
+Frase: "Publicar en la cola Omar." → falta contenido → pregunta.
+Paso a paso: elegir Cola: Publicar → mostrar directamente "¿Qué querés publicar?"
+
+Misma obligación semántica. Distinta experiencia.
+
+======================================================================
+15. COMPORTAMIENTO DE LOS CINCO NODOS DE MUESTRA
+======================================================================
+
+queue.publish:
+- Cola;
+- ¿Qué querés publicar?;
+- mensaje simple / campos / Datos disponibles;
+- opciones avanzadas para detalles técnicos;
+- defaults seguros no deben cargar al usuario.
+
+queue.consume:
+- ¿De qué cola querés leer?;
+- ¿Cuántos mensajes?;
+- prefetch/outputPrefix/conexión por contrato/defaults salvo edición necesaria;
+- si hay un referente previo único, puede proponerse visible.
+
+util.logger:
+- mostrar "¿Qué querés registrar?", no "message" como concepto principal;
+- texto o Datos disponibles;
+- Info puede ser default seguro si coincide con runtime real.
+
+human.task:
+- contrato concentra destinatario, rol o usuario, título, obligatorios,
+  resultados y validaciones;
+- la regla "rol O usuario" no debe duplicarse en varios constructores.
+
+control.if:
+- conservar editor especializado;
+- contrato declara dato, tipo, operadores, valor, reglas y rutas.
+
+======================================================================
+16. DATOS DISPONIBLES — DIRECCIÓN FUTURA
+======================================================================
+
+Dirección deseada:
+Contrato de nodo → outputs base → outputs dinámicos conocidos → Datos disponibles.
+
+Ejemplo queue.publish:
+Contrato declara queue.last.* y el contenido estructurado conocido puede agregar
+payload.instanceId, payload.origen, etc.
+
+No implementar toda esta limpieza de una sola vez en C1.
+
+======================================================================
+17. PLAN DE IMPLEMENTACIÓN ACORDADO PARA FIX84C
+======================================================================
+
+No hacer un único ZIP enorme.
+
+División:
+- FIX84C1 — CAMINO COMÚN
+- FIX84C2 — CONTROLES ESPECIALIZADOS
+- FIX84C3 — DATOS DISPONIBLES Y LIMPIEZA
+
+======================================================================
+18. PRÓXIMO TRABAJO EXACTO — FIX84C1
+======================================================================
+
+Nombre:
+FIX84C1 — CAMINO COMÚN ENTRE FRASE Y PASO A PASO
+
+Alcance inicial:
+- util.logger
+- queue.consume
+
+Razón:
+permiten demostrar la convergencia arquitectónica con menor riesgo antes de
+migrar queue.publish, human.task y control.if.
+
+Objetivo técnico:
+
+PASO A PASO
+→ contrato universal
+→ nodo resuelto común
+→ validación común
+→ plan estructurado común
+
+FRASE
+→ interpretación/aclaración
+→ nodo resuelto común
+→ validación común
+→ plan estructurado común
+
+La prueba principal no es un cambio visual grande.
+La prueba es demostrar que ambos caminos usan la misma semántica, defaults,
+validaciones y generador de plan para esos nodos.
+
+No rediseñar todavía los formularios.
+No tocar todavía queue.publish, human.task ni control.if salvo adaptación
+estrictamente necesaria y comprobada para no romper.
+
+======================================================================
+19. REGRESIÓN DE EQUIVALENCIA PARA FIX84C1
+======================================================================
+
+Agregar una nueva categoría de pruebas:
+EQUIVALENCIA DE CONSTRUCCIÓN.
+
+Objetivo:
+demostrar que el nodo creado por frase y el equivalente creado por paso a paso
+terminan siendo semánticamente iguales.
+
+Ejemplo queue.consume:
+Frase: "Usar una cola llamada Pedidos y después leer un mensaje."
+Paso a paso:
+- Cola: Consumir
+- Queue: Pedidos
+- Take: 1
+- defaults seguros
+
+Ambos deben producir el mismo nodo resuelto / parámetros normalizados.
+
+Ejemplo util.logger:
+Frase: "Registrar Operación completada."
+Paso a paso:
+- Logger
+- mensaje: Operación completada
+- nivel default seguro
+
+La comparación debe ser semántica, no depender de ids visuales ni posiciones.
+
+======================================================================
+20. CRITERIOS DE CIERRE DE FIX84C1
+======================================================================
+
+FIX84C1 queda cerrado cuando:
+1. El ZIP completo compile en Visual Studio 2022.
+2. Los 19 casos actuales continúen 19 OK / 0 FALLA / 0 SKIP.
+3. util.logger pueda construirse por frase y por paso a paso.
+4. queue.consume pueda construirse por frase y por paso a paso.
+5. Ambos caminos pasen por el mismo nodo resuelto común.
+6. Ambos usen los mismos defaults.
+7. Ambos usen las mismas validaciones contractuales.
+8. Ambos generen el mismo significado de plan.
+9. Exista regresión de equivalencia frase ↔ paso a paso.
+10. No se modifique motor ni runtime.
+11. No se altere canvas estable.
+12. No se rompan las reglas naturales validadas en B2/B3.
+13. No se elimine código antiguo hasta demostrar que realmente quedó sin uso.
+
+======================================================================
+21. FUTURO POSTERIOR — NO IMPLEMENTAR TODAVÍA
+======================================================================
+
+FIX84C2:
+- migrar queue.publish, human.task y control.if al patrón común;
+- conservar editores especializados.
+
+FIX84C3:
+- Datos disponibles derivados progresivamente del contrato;
+- outputs dinámicos;
+- eliminación de duplicaciones demostradas;
+- regresión cruzada completa;
+- preparación del patrón para nodos futuros.
+
+======================================================================
+22. ÁREAS CERRADAS
+======================================================================
+
+No reabrir salvo regresión real:
+- Motor / WorkflowRunner.
+- Handlers runtime estables.
+- Canvas, aristas, zoom y minimapa.
+- WF_Instancia_Mapa y WF_Instancias.
+- Queue runtime.
+- SMTP y email.send.
+- HSubFlow y runtime de subflujos.
+- NC_AR y FACTURA_AR.
+- Extractores documentales cerrados.
+- HDocLoad y doc.load.
+- Export JSON con Meta.Name.
+- OC moderna validada.
+- Documento original en tarea.
+- Seguridad fix81.
+- Consistencia de contadores fix80.
+- Circuito profesional de reproceso hasta fix82f.
+- Runtime validado de queue.publish y queue.consume.
+- HLogger salvo evidencia concreta de regresión.
+- FIX84A validado.
+- FIX84B/B2/B3 validados en su alcance.
+
+======================================================================
+23. TEMAS APARCADOS
+======================================================================
+
+No avanzar automáticamente con:
+- VEP.
+- IA clasificadora documental.
+- Asociación de documentos a instancias existentes.
+- Nuevos nodos adicionales antes de consolidar FIX84C.
+- Cambios de extractores de OC.
+- Rediseño de base.
+- Cambios de motor.
+- Estado Finalizado con advertencias.
+- Borrado de tareas históricas.
+
+======================================================================
+24. PRIMERAS ACCIONES DE LA PRÓXIMA SESIÓN
+======================================================================
+
+Omar entregará:
+1. este ContextPack;
+2. el Prompt de arranque;
+3. un ZIP completo nuevo creado por él.
+
+Ese ZIP debería contener WorkFlow-main (50b) + FIX84B3 integrado y, por lo tanto,
+toda la línea FIX84A → FIX84B → FIX84B2 → FIX84B3.
+
+Al recibirlo:
+1. Confirmar lectura completa de ContextPack y Prompt.
+2. Esperar y usar el ZIP completo como fuente de verdad.
+3. Inspeccionar estructura real.
+4. Confirmar FIX84B3 integrado.
+5. Confirmar que no se mezclaron versiones.
+6. Revisar los archivos IA reales involucrados en contrato, diálogo, provider,
+   paso a paso, generación de plan y regresión.
+7. Confirmar banco A–S / 19 casos.
+8. No agregar nodos nuevos.
+9. Analizar cómo se construye util.logger hoy por frase y paso a paso.
+10. Analizar cómo se construye queue.consume hoy por frase y paso a paso.
+11. Identificar duplicación real.
+12. Diseñar el adaptador mínimo del camino común.
+13. Si el ZIP difiere de este ContextPack, explicar la diferencia antes de tocar.
+14. Recién después implementar FIX84C1.
+15. Entregar ZIP de reemplazo + LEEME.
+16. Omar compila y valida en VS2022.
+
+======================================================================
+25. DECISIÓN FINAL DE ESTA SESIÓN
+======================================================================
+
+FIX84A: VALIDADO.
+FIX84B: base de diálogo validada.
+FIX84B2: lenguaje natural, contexto y cierre de diálogo incorporados.
+FIX84B3: VALIDADO con 19 OK / 0 FALLA / 0 SKIP.
+
+Reglas naturales validadas:
+- no exigir payload;
+- inferir contenido desde intención;
+- reutilizar referencias contextuales;
+- Inicio/Fin normales implícitos;
+- no inventar JSON innecesario;
+- "leer" depende de contexto;
+- frases de regresión humanas;
+- preguntar solamente ante ambigüedad real.
+
+Próxima prioridad:
+FIX84C1 — hacer que util.logger y queue.consume construidos por frase y por
+paso a paso converjan en el mismo nodo resuelto, contrato, validación y
+generación de plan.
+
+No rediseñar la UI.
+No tocar motor.
+No ampliar nodos todavía.
+Primero demostrar la arquitectura común con dos nodos de bajo riesgo.

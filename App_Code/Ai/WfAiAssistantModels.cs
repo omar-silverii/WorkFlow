@@ -5,7 +5,10 @@ namespace Intranet.WorkflowStudio.WebForms
 {
     public class WfAiAssistantRequest
     {
+        public string Mode { get; set; }
+        public string SourceKind { get; set; }
         public string UserText { get; set; }
+        public JObject Plan { get; set; }
         public string WorkflowJson { get; set; }
         public string ConversationId { get; set; }
         public string InterpretationFingerprint { get; set; }

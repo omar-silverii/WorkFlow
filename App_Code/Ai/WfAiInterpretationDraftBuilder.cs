@@ -184,7 +184,30 @@ namespace Intranet.WorkflowStudio.WebForms
 
             foreach (WfAiAlternativeRequirement requirement in contract.AlternativeRequirements)
             {
-                if (requirement == null || RequirementSatisfied(parameters, requirement)) continue;
+                if (requirement == null) continue;
+
+                int satisfiedAlternatives = CountSatisfiedAlternatives(parameters, requirement);
+                if (requirement.Exclusive && satisfiedAlternatives > 1)
+                {
+                    AddClarification(draft, new WfAiClarification
+                    {
+                        Id = ClarificationId(actionIndex, requirement.Key),
+                        ActionIndex = actionIndex,
+                        NodeType = contract.NodeType,
+                        NodeLabel = node.Label,
+                        Parameter = requirement.Key,
+                        Status = WfAiInterpretationStatus.Ambiguous,
+                        Question = string.IsNullOrWhiteSpace(requirement.ClarificationQuestion)
+                            ? "Elegí una sola alternativa para " + requirement.Label + "."
+                            : requirement.ClarificationQuestion,
+                        ControlKind = requirement.ControlKind,
+                        Blocking = requirement.Blocking,
+                        Source = "contract_requirement_exclusive"
+                    });
+                    continue;
+                }
+
+                if (satisfiedAlternatives > 0) continue;
 
                 AddClarification(draft, new WfAiClarification
                 {
@@ -348,8 +371,14 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private static bool RequirementSatisfied(JObject parameters, WfAiAlternativeRequirement requirement)
         {
-            if (parameters == null || requirement == null || requirement.Alternatives == null) return false;
+            return CountSatisfiedAlternatives(parameters, requirement) > 0;
+        }
 
+        private static int CountSatisfiedAlternatives(JObject parameters, WfAiAlternativeRequirement requirement)
+        {
+            if (parameters == null || requirement == null || requirement.Alternatives == null) return 0;
+
+            int satisfied = 0;
             foreach (List<string> alternative in requirement.Alternatives)
             {
                 if (alternative == null || alternative.Count == 0) continue;
@@ -362,9 +391,9 @@ namespace Intranet.WorkflowStudio.WebForms
                         break;
                     }
                 }
-                if (allPresent) return true;
+                if (allPresent) satisfied++;
             }
-            return false;
+            return satisfied;
         }
 
         private static string AggregateNodeStatus(WfAiNodeInterpretation node, WfAiInterpretationDraft draft, int actionIndex)

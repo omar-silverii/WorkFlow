@@ -12,7 +12,7 @@ namespace Intranet.WorkflowStudio.WebForms
     /// </summary>
     public static class WfAiConstructionContractRegistry
     {
-        public const string Version = "fix84b2-contract-v3";
+        public const string Version = "fix84c2b-contract-v6";
 
         public static List<WfAiNodeConstructionContract> Build()
         {
@@ -157,7 +157,7 @@ namespace Intranet.WorkflowStudio.WebForms
                         ContextResolverKey = "queue.create.followed_by_publish"
                     }
                 },
-                Validations = L("queue no debe inventarse", "payload debe representar el mensaje solicitado", "connectionStringName usa DefaultConnection salvo decisión explícita"),
+                Validations = L("queue no debe inventarse", "payload conserva texto simple, objeto o arreglo según lo expresado", "connectionStringName usa DefaultConnection salvo decisión explícita"),
                 SummaryTemplate = "Publicar en la cola {queue}."
             };
         }
@@ -175,14 +175,14 @@ namespace Intranet.WorkflowStudio.WebForms
                     P("broker", "Broker", "string", false, WfAiInferencePolicy.SafeDefault, J("sql"), "", WfAiControlKind.Select, L("sql"), false),
                     P("queue", "Cola", "string", true, WfAiInferencePolicy.NeverInfer, null, "¿De qué cola querés consumir mensajes?", WfAiControlKind.Text, null, true, L("default", "banco-regresion")),
                     P("take", "Cantidad", "number", false, WfAiInferencePolicy.SafeDefault, new JValue(1), "", WfAiControlKind.Number, null, false),
-                    P("prefetch", "Prefetch", "number", false, WfAiInferencePolicy.SafeDefault, new JValue(1), "", WfAiControlKind.Number, null, false),
+                    P("prefetch", "Prefetch", "number", false, WfAiInferencePolicy.SafeDefault, new JValue(1), "", WfAiControlKind.Number, null, false, null, "take"),
                     P("connectionStringName", "Conexión", "string", false, WfAiInferencePolicy.SafeDefault, J("DefaultConnection"), "", WfAiControlKind.Select, L("DefaultConnection"), false),
                     P("outputPrefix", "Prefijo de salida", "string", false, WfAiInferencePolicy.SafeDefault, J("queue.consume"), "", WfAiControlKind.Text, null, false),
                     P("debug", "Debug", "boolean", false, WfAiInferencePolicy.SafeDefault, new JValue(false), "", WfAiControlKind.Boolean, null, false)
                 },
                 OutputFields = L("queue.hasMessage", "queue.messages", "queue.message", "queue.messageId", "queue", "payload", "payload.raw", "queue.error"),
                 DynamicOutputPrefixes = L("payload.", "queue.message."),
-                Validations = L("queue no debe inventarse", "take mínimo 1", "DefaultConnection es la conexión estándar actual"),
+                Validations = L("queue no debe inventarse", "take mínimo 1", "prefetch se deriva de take durante la construcción", "DefaultConnection es la conexión estándar actual"),
                 SummaryTemplate = "Consumir mensajes de la cola {queue}."
             };
         }
@@ -198,11 +198,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 Parameters = new List<WfAiParameterContract>
                 {
                     P("message", "Mensaje", "string", true, WfAiInferencePolicy.NeverInfer, null, "¿Qué querés registrar en el log?", WfAiControlKind.Text, null, true, L("Paso agregado por Asistente IA")),
-                    P("level", "Nivel", "string", false, WfAiInferencePolicy.SafeDefault, J("Info"), "", WfAiControlKind.Select, L("Info", "Warn", "Error"), false)
+                    P("level", "Nivel", "string", false, WfAiInferencePolicy.SafeDefault, J("Info"), "", WfAiControlKind.Select, L("Info", "Warn", "Error", "Debug"), false)
                 },
                 InputFields = L("Cualquier dato disponible mediante ${...}"),
                 OutputFields = L("logger.last.level", "logger.last.message", "logger.last.nodeId"),
-                Validations = L("message obligatorio", "level permitido: Info/Warn/Error"),
+                Validations = L("message obligatorio", "level permitido: Info/Warn/Error/Debug"),
                 SummaryTemplate = "Registrar {level}: {message}."
             };
         }
@@ -219,14 +219,14 @@ namespace Intranet.WorkflowStudio.WebForms
                 {
                     P("rol", "Rol", "string", false, WfAiInferencePolicy.NeverInfer, null, "¿A qué rol querés asignar la tarea?", WfAiControlKind.Select, null, true),
                     P("usuarioAsignado", "Usuario", "string", false, WfAiInferencePolicy.NeverInfer, null, "¿A qué usuario querés asignar la tarea?", WfAiControlKind.Select, null, true),
-                    P("titulo", "Título", "string", true, WfAiInferencePolicy.VisibleInference, null, "¿Qué título querés para la tarea?", WfAiControlKind.Text, null, false),
-                    P("descripcion", "Descripción", "string", false, WfAiInferencePolicy.VisibleInference, null, "", WfAiControlKind.Text, null, false),
-                    P("scopeKey", "Scope", "string", false, WfAiInferencePolicy.NeverInfer, null, "", WfAiControlKind.AvailableData, null, false),
-                    P("deadlineMinutes", "Vencimiento en minutos", "number", false, WfAiInferencePolicy.SafeDefault, new JValue(0), "", WfAiControlKind.Number, null, false),
-                    P("estadoNegocioPendiente", "Estado pendiente", "string", false, WfAiInferencePolicy.AskIfMissing, null, "", WfAiControlKind.Text, null, false)
+                    P("titulo", "Título", "string", true, WfAiInferencePolicy.VisibleInference, null, "¿Qué título querés para la tarea?", WfAiControlKind.Text, null, false, L("Tarea humana")),
+                    P("descripcion", "Descripción", "string", false, WfAiInferencePolicy.NeverInfer, null, "", WfAiControlKind.Text, null, false, L("Revisión generada por el Asistente IA.", "Tarea generada por el Constructor IA: revisión")),
+                    P("deadlineMinutes", "Vencimiento", "number", false, WfAiInferencePolicy.SafeDefault, new JValue(0), "", WfAiControlKind.Number, null, false),
+                    P("estadoNegocioPendiente", "Estado pendiente", "string", false, WfAiInferencePolicy.VisibleInference, null, "", WfAiControlKind.Text, null, false)
                 },
+                InputFields = L("input.scopeKey", "input.sector", "input.Sector"),
                 OutputFields = L("wf.tarea.id", "wf.tarea.estado", "wf.tarea.resultado", "wf.tarea.{nodeId}.resultado"),
-                Validations = L("debe existir rol o usuarioAsignado", "no inventar destinatario", "APTO/NO APTO requiere ramas distintas"),
+                Validations = L("debe existir exactamente un destino: rol O usuarioAsignado", "no inventar destinatario", "scope se toma del contexto de entrada", "APTO/NO APTO requiere ramas distintas"),
                 SummaryTemplate = "Crear tarea humana para {destino}: {titulo}."
             };
 
@@ -237,7 +237,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 Alternatives = new List<List<string>> { L("rol"), L("usuarioAsignado") },
                 ClarificationQuestion = "¿Quién debe recibir la tarea?",
                 ControlKind = WfAiControlKind.RoleOrUser,
-                Blocking = true
+                Blocking = true,
+                Exclusive = true
             });
 
             return contract;
@@ -290,7 +291,8 @@ namespace Intranet.WorkflowStudio.WebForms
             string controlKind,
             List<string> options,
             bool importantDecision,
-            List<string> placeholderValues = null)
+            List<string> placeholderValues = null,
+            string derivedFromParameter = null)
         {
             return new WfAiParameterContract
             {
@@ -304,7 +306,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 ControlKind = controlKind,
                 Options = options ?? new List<string>(),
                 ImportantDecision = importantDecision,
-                PlaceholderValues = placeholderValues ?? new List<string>()
+                PlaceholderValues = placeholderValues ?? new List<string>(),
+                DerivedFromParameter = derivedFromParameter ?? string.Empty
             };
         }
 

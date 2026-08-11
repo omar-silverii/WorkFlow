@@ -59,7 +59,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
 
-            if (string.Equals(source, "contract_requirement", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(source, "contract_requirement", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(source, "contract_requirement_exclusive", StringComparison.OrdinalIgnoreCase))
             {
                 ApplyRequirementAnswer(result, clarification, answer, catalog);
                 return;

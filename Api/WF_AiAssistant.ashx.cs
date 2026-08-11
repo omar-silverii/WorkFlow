@@ -32,14 +32,59 @@ namespace Intranet.WorkflowStudio.WebForms.Api
 
                 var req = JsonConvert.DeserializeObject<WfAiAssistantRequest>(body ?? "{}") ?? new WfAiAssistantRequest();
                 req.UserText = (req.UserText ?? "").Trim();
+                req.Mode = (req.Mode ?? "interpret").Trim();
+                req.SourceKind = (req.SourceKind ?? "phrase").Trim();
+
+                var catalog = new WfAiCatalogProvider().Build();
+
+                // FIX84C1/FIX84C2A/FIX84C2Ab/FIX84C2B: el Constructor paso a paso envía su plan candidato a este mismo
+                // endpoint para que util.logger, queue.consume, queue.publish y human.task pasen por la misma capa C#
+                // de resolución contractual que usa la ruta por frase.
+                if (string.Equals(req.Mode, "normalize_plan", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (req.Plan == null)
+                    {
+                        WriteJson(context, new { ok = false, error = "normalize_plan requiere un plan candidato." });
+                        return;
+                    }
+
+                    var common = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(req.Plan, req.UserText, req.SourceKind);
+                    var normalizedValidation = new WfAiPlanValidator().Validate(common.Plan, catalog) ?? new WfAiValidationResult();
+                    foreach (string error in common.Errors)
+                    {
+                        normalizedValidation.Ok = false;
+                        normalizedValidation.Errors.Add(error);
+                    }
+                    foreach (string warning in common.Warnings)
+                        normalizedValidation.Warnings.Add(warning);
+
+                    WriteJson(context, new
+                    {
+                        ok = true,
+                        provider = "contract-common",
+                        model = "FIX84C2Bf nodo resuelto común",
+                        plan = common.Plan,
+                        validation = new
+                        {
+                            ok = normalizedValidation.Ok,
+                            errors = normalizedValidation.Errors,
+                            warnings = normalizedValidation.Warnings
+                        },
+                        fix84c1 = common,
+                        fix84c2a = common,
+                        fix84c2ab = common,
+                        fix84c2b = common,
+                        catalogWarnings = catalog.Warnings,
+                        messageToUser = "Plan normalizado por la capa común FIX84C2Bf."
+                    });
+                    return;
+                }
 
                 if (req.UserText.Length == 0)
                 {
                     WriteJson(context, new { ok = false, error = "Escribí una intención para el Asistente IA." });
                     return;
                 }
-
-                var catalog = new WfAiCatalogProvider().Build();
                 WfAiNaturalPhraseContext naturalContext = WfAiNaturalPhraseContext.Analyze(req.UserText);
                 var model = new WfAiMlnetProvider().Interpret(req.UserText, catalog, req.WorkflowJson);
 
@@ -60,7 +105,10 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                 // FIX84B mantiene al proveedor legacy como generador del plan base y aplica las
                 // respuestas estructuradas encima de una copia. Cada POST reconstruye todo desde cero.
                 var builder = new WfAiInterpretationDraftBuilder();
-                JObject basePlan = model.Plan == null ? new JObject() : model.Plan;
+                var commonBuilder = new WfAiResolvedNodeBuilder(catalog);
+                JObject providerPlan = model.Plan == null ? new JObject() : model.Plan;
+                WfAiResolvedPlanResult baseCommon = commonBuilder.ResolvePlan(providerPlan, req.UserText, "phrase");
+                JObject basePlan = baseCommon.Plan;
                 WfAiInterpretationDraft baseDraft = builder.Build(req.UserText, basePlan, catalog);
 
                 bool hasAnswers = req.ClarificationAnswers != null && req.ClarificationAnswers.HasValues;
@@ -76,7 +124,9 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                 if (!stale && hasAnswers)
                     resolution = new WfAiClarificationResolver().Resolve(basePlan, baseDraft, req.ClarificationAnswers, catalog);
 
-                JObject effectivePlan = resolution.Plan ?? (JObject)basePlan.DeepClone();
+                JObject resolvedCandidatePlan = resolution.Plan ?? (JObject)basePlan.DeepClone();
+                WfAiResolvedPlanResult effectiveCommon = commonBuilder.ResolvePlan(resolvedCandidatePlan, req.UserText, "phrase_resolved");
+                JObject effectivePlan = effectiveCommon.Plan;
                 WfAiInterpretationDraft interpretationDraft = builder.Build(
                     req.UserText,
                     effectivePlan,
@@ -96,9 +146,17 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                     validation.Ok = false;
                     validation.Errors.Add(error);
                 }
+                foreach (string error in effectiveCommon.Errors)
+                {
+                    validation.Ok = false;
+                    validation.Errors.Add(error);
+                }
+                foreach (string warning in effectiveCommon.Warnings)
+                    validation.Warnings.Add(warning);
 
                 bool dialogueReady = !stale
                     && resolution.Errors.Count == 0
+                    && effectiveCommon.Errors.Count == 0
                     && interpretationDraft.RegistryErrors.Count == 0
                     && interpretationDraft.BlockingClarificationCount == 0;
 
@@ -137,6 +195,46 @@ namespace Intranet.WorkflowStudio.WebForms.Api
                         naturalContext = naturalContext,
                         errors = resolution.Errors,
                         warnings = resolution.Warnings
+                    },
+                    fix84c1 = new
+                    {
+                        active = true,
+                        version = effectiveCommon.Version,
+                        sourceKind = effectiveCommon.SourceKind,
+                        ok = effectiveCommon.Ok,
+                        nodes = effectiveCommon.Nodes,
+                        errors = effectiveCommon.Errors,
+                        warnings = effectiveCommon.Warnings
+                    },
+                    fix84c2a = new
+                    {
+                        active = true,
+                        version = effectiveCommon.Version,
+                        sourceKind = effectiveCommon.SourceKind,
+                        ok = effectiveCommon.Ok,
+                        nodes = effectiveCommon.Nodes,
+                        errors = effectiveCommon.Errors,
+                        warnings = effectiveCommon.Warnings
+                    },
+                    fix84c2ab = new
+                    {
+                        active = true,
+                        version = effectiveCommon.Version,
+                        sourceKind = effectiveCommon.SourceKind,
+                        ok = effectiveCommon.Ok,
+                        nodes = effectiveCommon.Nodes,
+                        errors = effectiveCommon.Errors,
+                        warnings = effectiveCommon.Warnings
+                    },
+                    fix84c2b = new
+                    {
+                        active = true,
+                        version = effectiveCommon.Version,
+                        sourceKind = effectiveCommon.SourceKind,
+                        ok = effectiveCommon.Ok,
+                        nodes = effectiveCommon.Nodes,
+                        errors = effectiveCommon.Errors,
+                        warnings = effectiveCommon.Warnings
                     },
                     catalogWarnings = catalog.Warnings,
                     messageToUser = Convert.ToString(effectivePlan["messageToUser"] ?? "Propuesta recibida del modelo local.")

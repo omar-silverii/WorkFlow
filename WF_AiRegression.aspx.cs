@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -42,7 +43,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
 
-            RenderResults(new List<AiRegressionRunResult> { RunCase(item) });
+            RenderResults(new List<AiRegressionRunResult> { RunCase(item) }, null);
         }
 
         protected void btnRunAll_Click(object sender, EventArgs e)
@@ -55,7 +56,7 @@ namespace Intranet.WorkflowStudio.WebForms
             foreach (var item in cases)
                 results.Add(RunCase(item));
 
-            RenderResults(results);
+            RenderResults(results, RunConstructionEquivalence());
         }
 
         private void BindCases()
@@ -117,16 +118,30 @@ namespace Intranet.WorkflowStudio.WebForms
                     return run;
                 }
 
-                JObject plan = model.Plan;
+                WfAiResolvedPlanResult initialCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, item.Phrase, "phrase");
+                JObject plan = initialCommon.Plan;
 
-                var validation = new WfAiPlanValidator().Validate(plan, catalog);
-                EvaluateValidation(run, item, validation);
+                // FIX84A/B inspecciona el borrador inicial porque allí deben aparecer las dudas reales.
                 EvaluateFix84A(run, item, plan, catalog);
 
-                // FIX84B3: si el caso incluye diálogo, las validaciones funcionales
-                // posteriores deben mirar el plan que quedó después de aplicar la respuesta,
-                // no el borrador previo que todavía contiene valores de relleno.
+                // FIX84B3/FIX84C2B: las validaciones funcionales y la equivalencia común deben
+                // mirar el plan resultante del diálogo. Así un dato faltante que se resuelve
+                // correctamente (por ejemplo el contenido de queue.publish) no cuenta como falla.
                 JObject evaluatedPlan = EvaluateFix84BDialogue(run, item, plan, catalog) ?? plan;
+                WfAiResolvedPlanResult effectiveCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(evaluatedPlan, item.Phrase, "phrase_resolved");
+                evaluatedPlan = effectiveCommon.Plan;
+                EvaluateFix84C1Common(run, effectiveCommon);
+
+                var validation = new WfAiPlanValidator().Validate(evaluatedPlan, catalog);
+                foreach (string error in effectiveCommon.Errors)
+                {
+                    validation.Ok = false;
+                    validation.Errors.Add(error);
+                }
+                foreach (string warning in effectiveCommon.Warnings)
+                    validation.Warnings.Add(warning);
+
+                EvaluateValidation(run, item, validation);
 
                 run.PlanJson = evaluatedPlan.ToString(Formatting.Indented);
                 run.NodeTypes = ExtractNodeTypes(evaluatedPlan, item);
@@ -143,6 +158,23 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             return run;
+        }
+
+        private static void EvaluateFix84C1Common(AiRegressionRunResult run, WfAiResolvedPlanResult common)
+        {
+            if (common == null || common.Nodes == null || common.Nodes.Count == 0)
+            {
+                run.Checks.Add(AiRegressionCheck.Skip("fix84c2b: el caso no contiene nodos cubiertos por la capa común."));
+                return;
+            }
+
+            if (common.Errors != null && common.Errors.Count > 0)
+            {
+                run.Checks.Add(AiRegressionCheck.Fail("fix84c2b nodo resuelto común: " + string.Join(" | ", common.Errors.ToArray())));
+                return;
+            }
+
+            run.Checks.Add(AiRegressionCheck.Pass("fix84c2b nodo resuelto común OK: " + common.Nodes.Count + " nodo(s) común(es) normalizado(s)."));
         }
 
         private static void EvaluateValidation(AiRegressionRunResult run, AiRegressionCase item, WfAiValidationResult validation)
@@ -274,9 +306,12 @@ namespace Intranet.WorkflowStudio.WebForms
                     return plan;
                 }
 
+                WfAiResolvedPlanResult finalCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(resolution.Plan, item.Phrase, "phrase");
+                JObject finalPlan = finalCommon.Plan;
+
                 var finalDraft = builder.Build(
                     item.Phrase,
-                    resolution.Plan,
+                    finalPlan,
                     catalog,
                     resolution.AcceptedAnswerIds,
                     initialDraft.Fingerprint);
@@ -300,7 +335,15 @@ namespace Intranet.WorkflowStudio.WebForms
                     return plan;
                 }
 
-                var finalValidation = new WfAiPlanValidator().Validate(resolution.Plan, catalog);
+                var finalValidation = new WfAiPlanValidator().Validate(finalPlan, catalog);
+                if (finalValidation != null)
+                {
+                    foreach (string error in finalCommon.Errors)
+                    {
+                        finalValidation.Ok = false;
+                        finalValidation.Errors.Add(error);
+                    }
+                }
                 if (finalValidation == null || !finalValidation.Ok)
                 {
                     run.Checks.Add(AiRegressionCheck.Fail("fix84b dejó un plan inválido después de resolver el diálogo. Errores: " + JoinList(finalValidation == null ? null : finalValidation.Errors)));
@@ -312,7 +355,7 @@ namespace Intranet.WorkflowStudio.WebForms
                     + " duda(s) inicial(es) -> " + finalDraft.BlockingClarificationCount
                     + ", respuesta estructurada aplicada sin reescribir la frase; validaciones posteriores usan el plan resuelto."));
 
-                return resolution.Plan;
+                return finalPlan;
             }
             catch (Exception ex)
             {
@@ -441,7 +484,7 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
-        private void RenderResults(List<AiRegressionRunResult> results)
+        private void RenderResults(List<AiRegressionRunResult> results, ConstructionEquivalenceSummary equivalence)
         {
             int ok = results.Count(x => x.Status == "OK");
             int fail = results.Count(x => x.Status == "FALLA");
@@ -512,9 +555,555 @@ namespace Intranet.WorkflowStudio.WebForms
 
             sb.AppendLine("</tbody></table></div>");
             sb.AppendLine("</div></div>");
+            if (equivalence != null)
+                sb.AppendLine(RenderConstructionEquivalence(equivalence));
             litSummary.Text = sb.ToString();
 
             litDetails.Text = RenderDetails(results);
+        }
+
+        private ConstructionEquivalenceSummary RunConstructionEquivalence()
+        {
+            var summary = new ConstructionEquivalenceSummary();
+            try
+            {
+                var catalog = new WfAiCatalogProvider().Build();
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C1_LOGGER",
+                    "util.logger",
+                    "Registrar Operación completada.",
+                    new[] { "util.start", "util.logger", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "util.logger",
+                        ["label"] = "Registrar evento",
+                        ["params"] = new JObject { ["message"] = "Operación completada" }
+                    }));
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C1_QUEUE_CONSUME",
+                    "queue.consume",
+                    "Usar una cola llamada Pedidos y después leer un mensaje.",
+                    new[] { "util.start", "queue.consume", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "queue.consume",
+                        ["label"] = "Consumir cola Pedidos",
+                        ["params"] = new JObject { ["queue"] = "Pedidos", ["take"] = 1 }
+                    }));
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C2A_QUEUE_PUBLISH_TEXT",
+                    "queue.publish",
+                    "Publicar en la cola Pedidos quiero un mate.",
+                    new[] { "util.start", "queue.publish", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "queue.publish",
+                        ["label"] = "Publicar en cola Pedidos",
+                        ["params"] = new JObject
+                        {
+                            ["queue"] = "Pedidos",
+                            ["payload"] = "quiero un mate"
+                        }
+                    }));
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C2A_QUEUE_PUBLISH_FIELDS",
+                    "queue.publish",
+                    "Publicar en la cola Pedidos origen: Prueba e instanceId: ${wf.instanceId}.",
+                    new[] { "util.start", "queue.publish", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "queue.publish",
+                        ["label"] = "Publicar en cola Pedidos",
+                        ["params"] = new JObject
+                        {
+                            ["queue"] = "Pedidos",
+                            ["payload"] = new JObject
+                            {
+                                ["origen"] = "Prueba",
+                                ["instanceId"] = "${wf.instanceId}"
+                            }
+                        }
+                    }));
+
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C2AB_QUEUE_PUBLISH_EXPLICIT_ASSIGNMENTS",
+                    "queue.publish",
+                    "Publicar en la cola Pedidos con origen = Prueba; instancia = actual.",
+                    new[] { "util.start", "queue.publish", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "queue.publish",
+                        ["label"] = "Publicar en cola Pedidos",
+                        ["params"] = new JObject
+                        {
+                            ["queue"] = "Pedidos",
+                            ["payload"] = new JObject
+                            {
+                                ["origen"] = "Prueba",
+                                ["instancia"] = "${wf.instanceId}"
+                            }
+                        }
+                    }));
+
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C2B_HUMAN_TASK_ROLE",
+                    "human.task",
+                    "Crear una tarea. Rol = COMPRAS; Título = Revisar factura.",
+                    new[] { "util.start", "human.task", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "human.task",
+                        ["label"] = "Tarea humana",
+                        ["params"] = new JObject
+                        {
+                            ["rol"] = "COMPRAS",
+                            ["titulo"] = "Revisar factura"
+                        }
+                    },
+                    true));
+
+                summary.Items.Add(RunEquivalenceCase(
+                    catalog,
+                    "C2B_HUMAN_TASK_USER",
+                    "human.task",
+                    "Crear una tarea. Usuario = USUARIO1; Título = Revisar factura.",
+                    new[] { "util.start", "human.task", "util.end" },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "human.task",
+                        ["label"] = "Tarea humana",
+                        ["params"] = new JObject
+                        {
+                            ["usuarioAsignado"] = "OMARD\\USUARIO1",
+                            ["titulo"] = "Revisar factura"
+                        }
+                    },
+                    true));
+
+                summary.Items.Add(RunHumanTaskAmbiguityCase(catalog));
+            }
+            catch (Exception ex)
+            {
+                summary.Items.Add(new ConstructionEquivalenceItem
+                {
+                    Id = "C2B_GENERAL",
+                    NodeType = "FIX84C2B",
+                    Phrase = "",
+                    Ok = false,
+                    Message = "Excepción ejecutando equivalencia: " + ex.Message
+                });
+            }
+            return summary;
+        }
+
+        private static ConstructionEquivalenceItem RunEquivalenceCase(
+            WfAiCatalog catalog,
+            string id,
+            string nodeType,
+            string phrase,
+            string[] expectedPhraseNodeTypes,
+            JObject stepAction,
+            bool requirePhraseUiReady = false)
+        {
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = id,
+                NodeType = nodeType,
+                Phrase = phrase
+            };
+
+            var model = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            if (model == null || !model.Ok || model.Plan == null)
+            {
+                item.Message = "La frase no produjo un plan válido.";
+                return item;
+            }
+
+            var builder = new WfAiResolvedNodeBuilder(catalog);
+            WfAiResolvedPlanResult phraseResult = builder.ResolvePlan(model.Plan, phrase, "phrase");
+            JObject stepPlan = new JObject
+            {
+                ["intent"] = "build_workflow",
+                ["actions"] = new JArray((JObject)stepAction.DeepClone()),
+                ["missingData"] = new JArray(),
+                ["proposedConnections"] = new JArray()
+            };
+            WfAiResolvedPlanResult stepResult = builder.ResolvePlan(stepPlan, "", "step_by_step");
+
+            if (phraseResult.Errors.Count > 0 || stepResult.Errors.Count > 0)
+            {
+                item.Message = "Error de resolución común. Frase: " + JoinList(phraseResult.Errors) + " Paso a paso: " + JoinList(stepResult.Errors);
+                return item;
+            }
+
+            string[] actualPhraseNodeTypes = AddNodeTypes(phraseResult.Plan);
+            string[] expectedNodeTypes = expectedPhraseNodeTypes ?? new string[0];
+            if (!actualPhraseNodeTypes.SequenceEqual(expectedNodeTypes, StringComparer.OrdinalIgnoreCase))
+            {
+                item.Message = "La frase generó una forma de plan inesperada. Esperado="
+                    + string.Join(" → ", expectedNodeTypes)
+                    + " / Real=" + string.Join(" → ", actualPhraseNodeTypes);
+                return item;
+            }
+
+            JObject phraseAction = FindActionByType(phraseResult.Plan, nodeType);
+            JObject normalizedStepAction = FindActionByType(stepResult.Plan, nodeType);
+            if (phraseAction == null || normalizedStepAction == null)
+            {
+                item.Message = "No se encontró el nodo esperado en ambos caminos.";
+                return item;
+            }
+
+            JObject phraseCanonical = CanonicalResolvedAction(phraseAction, nodeType);
+            JObject stepCanonical = CanonicalResolvedAction(normalizedStepAction, nodeType);
+            item.PhraseJson = phraseCanonical.ToString(Formatting.None);
+            item.StepJson = stepCanonical.ToString(Formatting.None);
+            item.Ok = JToken.DeepEquals(phraseCanonical, stepCanonical);
+            item.Message = item.Ok
+                ? "Frase y Paso a paso convergen en el mismo nodo resuelto, parámetros normalizados y forma de plan esperada."
+                : "Diferencia semántica. Frase=" + item.PhraseJson + " / Paso a paso=" + item.StepJson;
+
+            // FIX84C2Bc/C2Bd: en human.task el título resuelto debe ser también el label visible y mantener referencias coherentes.
+            // Esto protege el recorrido real del canvas: no alcanza con que params.titulo sea correcto.
+            if (item.Ok && string.Equals(nodeType, "human.task", StringComparison.OrdinalIgnoreCase))
+            {
+                string expectedTaskLabel = Convert.ToString((phraseAction["params"] as JObject)?["titulo"] ?? "").Trim();
+                string phraseLabel = Convert.ToString(phraseAction["label"] ?? "").Trim();
+                string stepLabel = Convert.ToString(normalizedStepAction["label"] ?? "").Trim();
+                if (expectedTaskLabel.Length == 0
+                    || !phraseLabel.Equals(expectedTaskLabel, StringComparison.OrdinalIgnoreCase)
+                    || !stepLabel.Equals(expectedTaskLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.Ok = false;
+                    item.Message = "El nodo converge en parámetros, pero el label visual no usa el título resuelto. "
+                        + "Título=" + expectedTaskLabel + " / Frase=" + phraseLabel + " / Paso a paso=" + stepLabel;
+                }
+                else
+                {
+                    item.Message += " El label visible también usa el título resuelto.";
+                }
+            }
+
+            // FIX84C2Bb: para human.task no alcanza con comparar el nodo aislado.
+            // Recorremos el mismo tramo semántico que usa Dibujar propuesta:
+            // plan candidato -> nodo común -> borrador contractual -> plan efectivo -> borrador final.
+            // Una asignación explícita válida no puede dejar una aclaración bloqueante legacy.
+            if (item.Ok && requirePhraseUiReady)
+            {
+                string uiError;
+                if (!PhraseUiReadyWithoutAnswers(catalog, phrase, phraseResult.Plan, out uiError))
+                {
+                    item.Ok = false;
+                    item.Message = "El nodo converge, pero Dibujar propuesta todavía queda bloqueado: " + uiError;
+                }
+                else
+                {
+                    item.Message += " Dibujar propuesta queda listo sin aclaraciones innecesarias.";
+                }
+            }
+
+            return item;
+        }
+
+        private static bool PhraseUiReadyWithoutAnswers(
+            WfAiCatalog catalog,
+            string phrase,
+            JObject commonPlan,
+            out string error)
+        {
+            error = string.Empty;
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft baseDraft = draftBuilder.Build(phrase, commonPlan, catalog);
+
+            if (baseDraft == null)
+            {
+                error = "no se pudo construir el borrador contractual.";
+                return false;
+            }
+
+            if (baseDraft.BlockingClarificationCount > 0)
+            {
+                error = "el borrador inicial conserva " + baseDraft.BlockingClarificationCount.ToString(CultureInfo.InvariantCulture)
+                    + " aclaración(es) bloqueante(s): " + BlockingClarificationSummary(baseDraft);
+                return false;
+            }
+
+            var commonBuilder = new WfAiResolvedNodeBuilder(catalog);
+            WfAiResolvedPlanResult effectiveCommon = commonBuilder.ResolvePlan(commonPlan, phrase, "phrase_resolved");
+            if (effectiveCommon == null || effectiveCommon.Errors.Count > 0)
+            {
+                error = "la resolución efectiva devolvió errores: "
+                    + (effectiveCommon == null ? "resultado nulo" : JoinList(effectiveCommon.Errors));
+                return false;
+            }
+
+            WfAiInterpretationDraft finalDraft = draftBuilder.Build(
+                phrase,
+                effectiveCommon.Plan,
+                catalog,
+                null,
+                baseDraft.Fingerprint);
+
+            if (finalDraft == null)
+            {
+                error = "no se pudo construir el borrador final.";
+                return false;
+            }
+
+            if (finalDraft.BlockingClarificationCount > 0)
+            {
+                error = "el borrador final conserva " + finalDraft.BlockingClarificationCount.ToString(CultureInfo.InvariantCulture)
+                    + " aclaración(es) bloqueante(s): " + BlockingClarificationSummary(finalDraft);
+                return false;
+            }
+
+            // FIX84C2Bd: replicar también la validación estructural que usa el endpoint real.
+            // C2Bc cambió el label visible de human.task, pero proposedConnections todavía podía
+            // apuntar al label anterior; el borrador contractual quedaba sin dudas y aun así la UI
+            // entraba al fallback GUIADO por errores de conexiones. Esta comprobación evita ese falso OK.
+            WfAiValidationResult finalValidation = new WfAiPlanValidator().Validate(effectiveCommon.Plan, catalog);
+            if (finalValidation == null || !finalValidation.Ok || finalValidation.Errors.Count > 0)
+            {
+                error = "la validación final del plan conserva errores: "
+                    + (finalValidation == null ? "resultado nulo" : JoinList(finalValidation.Errors));
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string BlockingClarificationSummary(WfAiInterpretationDraft draft)
+        {
+            if (draft == null || draft.Clarifications == null) return string.Empty;
+            return string.Join(" | ", draft.Clarifications
+                .Where(c => c != null && c.Blocking)
+                .Select(c => (c.Source ?? "") + ":" + (c.Parameter ?? "") + ":" + (c.Question ?? ""))
+                .ToArray());
+        }
+
+        private static ConstructionEquivalenceItem RunHumanTaskAmbiguityCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Crear una tarea. Rol = COMPRAS; Usuario = USUARIO1; Título = Revisar factura.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2B_HUMAN_TASK_DESTINATION_AMBIGUOUS",
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var model = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            if (model == null || !model.Ok || model.Plan == null)
+            {
+                item.Message = "La frase no produjo un plan válido para comprobar la ambigüedad.";
+                return item;
+            }
+
+            var common = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase");
+            JObject task = FindActionByType(common.Plan, "human.task");
+            JObject p = task == null ? null : task["params"] as JObject;
+            bool bothPresent = p != null
+                && !string.IsNullOrWhiteSpace(Convert.ToString(p["rol"] ?? ""))
+                && !string.IsNullOrWhiteSpace(Convert.ToString(p["usuarioAsignado"] ?? ""));
+
+            var draft = new WfAiInterpretationDraftBuilder().Build(phrase, common.Plan, catalog);
+            bool asksDestination = draft != null && draft.Clarifications != null && draft.Clarifications.Any(c =>
+                c != null
+                && string.Equals(c.NodeType, "human.task", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(c.Parameter, "taskDestination", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(c.Status, WfAiInterpretationStatus.Ambiguous, StringComparison.OrdinalIgnoreCase)
+                && c.Blocking);
+
+            bool commonBlocks = common.Errors != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("único destino", StringComparison.OrdinalIgnoreCase) >= 0
+                || (e ?? string.Empty).IndexOf("rol y usuario", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            WfAiClarification destinationQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c =>
+                    c != null
+                    && string.Equals(c.NodeType, "human.task", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "taskDestination", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+            bool dialogueResolves = false;
+            if (destinationQuestion != null)
+            {
+                var answers = new JObject
+                {
+                    [destinationQuestion.Id] = new JObject
+                    {
+                        ["kind"] = "role",
+                        ["value"] = "COMPRAS"
+                    }
+                };
+
+                WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(
+                    common.Plan, draft, answers, catalog);
+                WfAiResolvedPlanResult resolvedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                    resolution.Plan, phrase, "phrase_resolved");
+                JObject resolvedTask = FindActionByType(resolvedCommon.Plan, "human.task");
+                JObject resolvedParams = resolvedTask == null ? null : resolvedTask["params"] as JObject;
+                var resolvedDraft = new WfAiInterpretationDraftBuilder().Build(phrase, resolvedCommon.Plan, catalog);
+
+                bool onlyRole = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["rol"] ?? ""), "COMPRAS", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(Convert.ToString(resolvedParams["usuarioAsignado"] ?? ""));
+                bool noBlockingDestination = resolvedDraft == null || resolvedDraft.Clarifications == null || !resolvedDraft.Clarifications.Any(c =>
+                    c != null
+                    && string.Equals(c.NodeType, "human.task", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "taskDestination", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+                dialogueResolves = resolution.Errors.Count == 0
+                    && resolvedCommon.Errors.Count == 0
+                    && onlyRole
+                    && noBlockingDestination;
+            }
+
+            item.Ok = bothPresent && asksDestination && commonBlocks && dialogueResolves;
+            item.Message = item.Ok
+                ? "Rol + Usuario no se resuelve en silencio: bloquea, pregunta y una respuesta guiada deja un único destino válido."
+                : "La ambigüedad Rol + Usuario o su resolución guiada no quedó protegida como se esperaba.";
+            return item;
+        }
+
+        private static string[] AddNodeTypes(JObject plan)
+        {
+            var result = new List<string>();
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return result.ToArray();
+
+            foreach (JToken token in actions)
+            {
+                JObject action = token as JObject;
+                if (action == null) continue;
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string nodeType = Convert.ToString(action["nodeType"] ?? "").Trim();
+                if (nodeType.Length > 0) result.Add(nodeType);
+            }
+
+            return result.ToArray();
+        }
+
+        private static JObject FindActionByType(JObject plan, string nodeType)
+        {
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return null;
+            foreach (JToken token in actions)
+            {
+                JObject action = token as JObject;
+                if (action == null) continue;
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(Convert.ToString(action["nodeType"] ?? ""), nodeType, StringComparison.OrdinalIgnoreCase)) return action;
+            }
+            return null;
+        }
+
+        private static JObject CanonicalResolvedAction(JObject action, string nodeType)
+        {
+            var result = new JObject { ["nodeType"] = nodeType };
+            var normalizedParams = new JObject();
+            JObject actual = action == null ? null : action["params"] as JObject;
+            WfAiNodeConstructionContract contract = WfAiConstructionContractRegistry.Find(nodeType);
+            if (contract != null && actual != null)
+            {
+                foreach (WfAiParameterContract parameter in contract.Parameters)
+                {
+                    if (parameter == null || string.IsNullOrWhiteSpace(parameter.Name)) continue;
+                    JToken value = actual[parameter.Name];
+                    if (value != null) normalizedParams[parameter.Name] = value.DeepClone();
+                }
+            }
+            result["params"] = normalizedParams;
+            return result;
+        }
+
+        private static string RenderConstructionEquivalence(ConstructionEquivalenceSummary summary)
+        {
+            if (summary == null || summary.Items == null || summary.Items.Count == 0) return string.Empty;
+
+            var sb = new StringBuilder();
+            var c1 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C1_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2ab = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2b = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2a = summary.Items.Where(x => x != null
+                && (x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (c1.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Equivalencia de construcción FIX84C1b",
+                    "Compara Frase ↔ Paso a paso para Logger y Queue Consume sobre el nodo resuelto común y verifica que la frase no genere nodos extra.",
+                    c1));
+
+            if (c2a.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Equivalencia de construcción FIX84C2A — Queue Publish",
+                    "Compara Frase ↔ Paso a paso para contenido simple y estructurado; exige Inicio → queue.publish → Fin y conserva la forma real del mensaje.",
+                    c2a));
+
+            if (c2ab.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Equivalencia de construcción FIX84C2Ab — Sintaxis de precisión opcional",
+                    "Valida que Nombre = valor sea una ayuda opcional: crea campos reales del mensaje y resuelve referencias humanas conocidas sin exigir JSON ni ${...}.",
+                    c2ab));
+
+
+            if (c2b.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Equivalencia de construcción FIX84C2Bf — Tarea humana",
+                    "Compara Frase ↔ Paso a paso para destino por Rol y por Usuario, verifica que Dibujar propuesta no pida datos ya explícitos y que Rol + Usuario simultáneos obliguen a aclarar un único destino.",
+                    c2b));
+
+            var other = summary.Items.Where(x => x != null
+                && !(x.Id ?? string.Empty).StartsWith("C1_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (other.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Equivalencia de construcción",
+                    "Controles adicionales de convergencia.",
+                    other));
+
+            return sb.ToString();
+        }
+
+        private static string RenderConstructionEquivalenceGroup(string title, string description, List<ConstructionEquivalenceItem> items)
+        {
+            int ok = items.Count(x => x.Ok);
+            int total = items.Count;
+            string badge = ok == total && total > 0 ? "ws-badge-ok" : "ws-badge-fail";
+            var sb = new StringBuilder();
+            sb.AppendLine("<div class=\"card ws-card mb-3\"><div class=\"card-body\">");
+            sb.AppendLine("<div class=\"d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2\"><div><div class=\"fw-bold\">" + Html(title) + "</div><div class=\"small ws-muted\">" + Html(description) + "</div></div><span class=\"ws-chip " + badge + "\">" + ok + "/" + total + "</span></div>");
+            sb.AppendLine("<div class=\"ws-table-wrap\"><table class=\"table table-sm mb-0\"><thead class=\"table-light\"><tr><th>Caso</th><th>Nodo</th><th>Estado</th><th>Control</th></tr></thead><tbody>");
+            foreach (ConstructionEquivalenceItem item in items)
+            {
+                string itemBadge = item.Ok ? "ws-badge-ok" : "ws-badge-fail";
+                sb.AppendLine("<tr><td><strong>" + Html(item.Id) + "</strong><br/><span class=\"small ws-muted\">" + Html(item.Phrase) + "</span></td><td><span class=\"ws-node-chip\">" + Html(item.NodeType) + "</span></td><td><span class=\"ws-chip " + itemBadge + "\">" + (item.Ok ? "OK" : "FALLA") + "</span></td><td class=\"small\">" + Html(item.Message) + "</td></tr>");
+            }
+            sb.AppendLine("</tbody></table></div></div></div>");
+            return sb.ToString();
         }
 
         private static string RenderDetails(List<AiRegressionRunResult> results)
@@ -810,6 +1399,23 @@ namespace Intranet.WorkflowStudio.WebForms
         private static List<AiRegressionCase> BuiltInCases()
         {
             return new List<AiRegressionCase>();
+        }
+
+        private class ConstructionEquivalenceSummary
+        {
+            public List<ConstructionEquivalenceItem> Items { get; set; }
+            public ConstructionEquivalenceSummary() { Items = new List<ConstructionEquivalenceItem>(); }
+        }
+
+        private class ConstructionEquivalenceItem
+        {
+            public string Id { get; set; }
+            public string NodeType { get; set; }
+            public string Phrase { get; set; }
+            public bool Ok { get; set; }
+            public string Message { get; set; }
+            public string PhraseJson { get; set; }
+            public string StepJson { get; set; }
         }
 
         private class AiRegressionCase

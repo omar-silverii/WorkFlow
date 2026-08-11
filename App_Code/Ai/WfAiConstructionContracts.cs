@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -73,6 +76,9 @@ namespace Intranet.WorkflowStudio.WebForms
         [JsonProperty("placeholderValues")]
         public List<string> PlaceholderValues { get; set; }
 
+        [JsonProperty("derivedFromParameter")]
+        public string DerivedFromParameter { get; set; }
+
         public WfAiParameterContract()
         {
             Options = new List<string>();
@@ -104,10 +110,16 @@ namespace Intranet.WorkflowStudio.WebForms
         [JsonProperty("blocking")]
         public bool Blocking { get; set; }
 
+        // FIX84C2B: cuando es true las alternativas representan opciones mutuamente
+        // excluyentes (por ejemplo, una tarea va a un rol O a un usuario, no a ambos).
+        [JsonProperty("exclusive")]
+        public bool Exclusive { get; set; }
+
         public WfAiAlternativeRequirement()
         {
             Alternatives = new List<List<string>>();
             Blocking = true;
+            Exclusive = false;
         }
     }
 
@@ -202,6 +214,156 @@ namespace Intranet.WorkflowStudio.WebForms
                     return item;
             }
             return null;
+        }
+
+        /// <summary>
+        /// FIX84C2Ab: permite que la sintaxis opcional "Nombre = valor" use nombres humanos
+        /// sin obligar a conocer la propiedad interna. Compara tanto Name como Label,
+        /// ignorando mayúsculas, espacios, guiones y acentos.
+        /// </summary>
+        public WfAiParameterContract FindParameterByHumanName(string humanName)
+        {
+            string key = WfAiExplicitAssignmentParser.NormalizeHumanKey(humanName);
+            if (key.Length == 0) return null;
+
+            foreach (WfAiParameterContract item in Parameters)
+            {
+                if (item == null) continue;
+                if (key == WfAiExplicitAssignmentParser.NormalizeHumanKey(item.Name)
+                    || key == WfAiExplicitAssignmentParser.NormalizeHumanKey(item.Label))
+                    return item;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// FIX84C2Ab: una asignación humana explícita y opcional del tipo "Nombre = valor".
+    /// No reemplaza el lenguaje natural; solamente agrega una señal de precisión reutilizable
+    /// por los contratos actuales y futuros.
+    /// </summary>
+    public class WfAiExplicitAssignment
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("rawValue")]
+        public string RawValue { get; set; }
+
+        [JsonProperty("value")]
+        public JToken Value { get; set; }
+    }
+
+    public static class WfAiExplicitAssignmentParser
+    {
+        private static readonly Regex AssignmentRegex = new Regex(
+            @"(?:^|[;,]\s*|\s+(?:y|e)\s+)(?<name>[A-Za-zÁÉÍÓÚÜÑáéíóúüñ_][A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ_\.\-]*)\s*=\s*(?<value>.+?)(?=(?:[;,]\s*|\s+(?:y|e)\s+)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ_][A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ_\.\-]*\s*=|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        public static List<WfAiExplicitAssignment> ParseBlock(string assignmentBlock)
+        {
+            var result = new List<WfAiExplicitAssignment>();
+            string text = (assignmentBlock ?? string.Empty).Trim();
+            if (text.Length == 0 || text.IndexOf('=') < 0) return result;
+
+            MatchCollection matches = AssignmentRegex.Matches(text);
+            foreach (Match match in matches)
+            {
+                if (!match.Success) continue;
+
+                string name = (match.Groups["name"].Value ?? string.Empty).Trim();
+                string rawValue = CleanValue(match.Groups["value"].Value);
+                if (name.Length == 0 || rawValue.Length == 0) continue;
+
+                result.Add(new WfAiExplicitAssignment
+                {
+                    Name = name,
+                    RawValue = rawValue,
+                    Value = ResolveHumanValue(name, rawValue)
+                });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Traduce referencias humanas seguras a Datos disponibles conocidos.
+        /// Se mantiene deliberadamente pequeño: sólo referencias inequívocas.
+        /// </summary>
+        public static JToken ResolveHumanValue(string rawValue)
+        {
+            return ResolveHumanValue(string.Empty, rawValue);
+        }
+
+        public static JToken ResolveHumanValue(string assignmentName, string rawValue)
+        {
+            string value = CleanValue(rawValue);
+            if (value.Length == 0) return new JValue(string.Empty);
+
+            if (value.StartsWith("${", StringComparison.Ordinal) && value.EndsWith("}", StringComparison.Ordinal))
+                return new JValue(value);
+
+            string normalized = NormalizeHumanPhrase(value);
+            string nameKey = NormalizeHumanKey(assignmentName);
+
+            if (normalized == "instancia actual"
+                || normalized == "esta instancia"
+                || normalized == "id de esta instancia"
+                || normalized == "id de la instancia actual"
+                || normalized == "id instancia actual"
+                || normalized == "el id de esta instancia"
+                || normalized == "el de esta instancia"
+                || normalized == "numero de esta instancia"
+                || normalized == "numero de instancia actual"
+                || ((nameKey == "instancia" || nameKey == "instanceid" || nameKey == "idinstancia")
+                    && (normalized == "actual" || normalized == "esta" || normalized == "la actual")))
+                return new JValue("${wf.instanceId}");
+
+            return new JValue(value);
+        }
+
+        public static string NormalizeHumanKey(string value)
+        {
+            string normalized = RemoveDiacritics((value ?? string.Empty).Trim()).ToLowerInvariant();
+            var sb = new StringBuilder();
+            foreach (char c in normalized)
+            {
+                if (char.IsLetterOrDigit(c)) sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        private static string NormalizeHumanPhrase(string value)
+        {
+            string normalized = RemoveDiacritics((value ?? string.Empty).Trim()).ToLowerInvariant();
+            normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
+            return normalized;
+        }
+
+        private static string CleanValue(string value)
+        {
+            string clean = (value ?? string.Empty).Trim();
+            clean = clean.TrimEnd('.', ',', ';').Trim();
+            if (clean.Length >= 2)
+            {
+                if ((clean[0] == '"' && clean[clean.Length - 1] == '"')
+                    || (clean[0] == '\'' && clean[clean.Length - 1] == '\''))
+                    clean = clean.Substring(1, clean.Length - 2).Trim();
+            }
+            return clean;
+        }
+
+        private static string RemoveDiacritics(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            string formD = value.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
+            foreach (char c in formD)
+            {
+                UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (category != UnicodeCategory.NonSpacingMark)
+                    sb.Append(c);
+            }
+            return sb.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 

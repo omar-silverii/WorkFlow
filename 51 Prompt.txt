@@ -1,0 +1,422 @@
+PROMPT DE ARRANQUE — WORKFLOW STUDIO
+PRÓXIMA SESIÓN: VALIDAR ZIP COMPLETO Y DESARROLLAR FIX84C1
+
+Voy a pasarte:
+
+1. Este Prompt.
+2. El ContextPack de cierre del 08/08/2026.
+3. Un ZIP completo nuevo de Workflow Studio armado por mí.
+4. Ese ZIP debería contener integrada toda esta línea:
+   - FIX84A
+   - FIX84B
+   - FIX84B2
+   - FIX84B3
+5. Algún archivo adicional, si corresponde.
+
+======================================================================
+PASO 1
+======================================================================
+
+Confirmá que leíste completo el ContextPack.
+
+======================================================================
+PASO 2
+======================================================================
+
+Esperá el ZIP completo antes de proponer cambios de código.
+
+======================================================================
+PASO 3
+======================================================================
+
+Cuando tengas el ZIP:
+- inspeccioná primero los archivos reales;
+- confirmá la estructura;
+- verificá qué fixes quedaron realmente incorporados;
+- comprobá que no se mezclaron versiones intermedias;
+- no asumas que el código quedó igual a los ZIP parciales;
+- usá el ZIP como fuente de verdad;
+- recién después analizá o propongas cambios.
+
+======================================================================
+MÉTODO PERMANENTE DE TRABAJO
+======================================================================
+
+No quiero tener que diseñar yo aquello que desconozco del sistema.
+Puedo darte una idea mínima, una necesidad o una duda.
+
+Quiero que actúes como ingeniero del sistema:
+- estudiá el producto real;
+- inspeccioná el código;
+- investigá productos similares o información actual cuando sirva;
+- detectá qué debería hacer profesionalmente el sistema;
+- proponé alternativas;
+- recomendá una;
+- explicá implicaciones operativas;
+- conversala conmigo;
+- incorporá mi experiencia como usuario;
+- y recién después implementá.
+
+No necesito fichas obligatorias ni una especificación técnica completa.
+No seas complaciente.
+Si ves un camino mejor, decímelo e insistí con argumentos.
+La conversación previa al código es parte del método.
+La fuente de verdad siempre es el ZIP completo más reciente.
+
+======================================================================
+REGLAS OBLIGATORIAS
+======================================================================
+
+- No inventar nada.
+- No inventar tablas, clases, handlers, APIs, controles ni carpetas.
+- No cambiar arquitectura sin necesidad.
+- No reescribir cosas que funcionan.
+- No usar código anterior sin revisar el ZIP.
+- Trabajar siempre sobre código real.
+- Cambios mínimos y precisos.
+- Entregar correcciones como ZIP de reemplazo.
+- Mantener estructura real de carpetas.
+- Incluir archivos completos modificados.
+- Incluir LEEME.
+- No usar diff con líneas + / -.
+- Si no se entrega ZIP, usar DONDE DICE → REEMPLAZAR POR.
+- Si algo no cierra, decirlo.
+- Si falta una pieza, pedirla.
+- No mezclar teoría larga con una corrección puntual.
+- Evaluar el funcionamiento productivo completo.
+- No tocar motor, HDocLoad, extractores, mapa, queue runtime, SMTP,
+  subflow runtime ni canvas estable sin evidencia concreta.
+- No borrar tareas históricas.
+- No convertir recuerdos antiguos en requisitos.
+- Si una memoria no coincide con el ZIP, prevalece el ZIP y la validación real.
+
+======================================================================
+DECISIÓN DE PRODUCTO OBLIGATORIA
+======================================================================
+
+Para todos los nodos actuales y futuros, el Constructor IA debe evolucionar a:
+
+INTERPRETACIÓN NATURAL CON DIÁLOGO DE ACLARACIÓN.
+
+El usuario no debe tener que conocer:
+- JSON;
+- ${...};
+- variables internas;
+- nombres técnicos exactos de nodos;
+- nombres de propiedades como payload;
+- gramática artificial.
+
+El sistema debe:
+1. Mostrar qué entendió.
+2. Diferenciar resolved / inferred / ambiguous / missing / unrecognized.
+3. Preguntar solamente lo necesario.
+4. Resolver dudas con controles guiados y editables.
+5. Regenerar el plan.
+6. Mostrar resumen final.
+7. Exigir confirmación real.
+8. Aplicar al canvas solamente cuando el plan esté resuelto.
+
+======================================================================
+REGLAS NATURALES QUE NO DEBEN REGRESIONAR
+======================================================================
+
+1. NO EXIGIR PROPIEDADES INTERNAS
+
+Ejemplo humano:
+"Crear una cola llamada Omar y publicar quiero un mate."
+
+El usuario no tiene que decir "payload".
+El sistema decide que "quiero un mate" es el contenido técnico del nodo.
+
+2. REFERENCIA CONTEXTUAL
+
+"Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje."
+Debe entender:
+- publicar en Pedidos;
+- consumir de Pedidos.
+No hacer repetir el nombre.
+
+3. INICIO Y FIN IMPLÍCITOS
+
+No exigir "quiero iniciar un flujo" ni "después finalizar" para el Inicio y Fin normales.
+
+4. NO INVENTAR JSON
+
+Texto simple puede seguir siendo texto simple.
+Los campos explícitos pueden convertirse en estructura.
+
+5. VERBOS SEGÚN CONTEXTO
+
+"leer un mensaje" no es doc.load.
+"leer un archivo" puede ser file.read.
+"leer una factura/documento" puede ser documental.
+
+6. FRASES HUMANAS
+
+Las regresiones no deben redactarse para satisfacer al parser.
+
+7. PREGUNTAR SOLO SI HAY DUDA REAL
+
+"Crear una cola llamada Omar y publicar quiero un mate."
+→ puede resolverse por contexto.
+
+"Crear una cola llamada Infra y publicar en la cola Operativa un aviso."
+→ hay dos referentes y corresponde aclarar.
+
+======================================================================
+ESTADO VALIDADO QUE NO DEBE REHACERSE
+======================================================================
+
+FIX82F:
+- circuito profesional de reproceso cerrado.
+
+FIX83–FIX83D:
+- queue.publish / queue.consume paso a paso;
+- contenido guiado;
+- Datos disponibles;
+- Logger JSON;
+- frases de colas;
+- JSON recortado;
+- caso O validado.
+
+FIX84A:
+- contrato universal inicial;
+- borrador de interpretación;
+- estados resolved/inferred/ambiguous/missing/unrecognized;
+- muestra de cinco nodos;
+- validado inicialmente con 15/15.
+
+FIX84B:
+- diálogo contractual genérico;
+- respuestas estructuradas;
+- regeneración;
+- bloqueo por dudas;
+- fingerprint.
+
+FIX84B2:
+- contenido natural sin payload;
+- referencia contextual;
+- Inicio/Fin implícitos;
+- cierre de respuesta no soportada;
+- casos P–S.
+
+FIX84B3:
+- banco valida plan post-diálogo;
+- "leer un mensaje" ya no crea doc.load;
+- validado por Omar:
+  19 OK / 0 FALLA / 0 SKIP;
+  Semántica fuerte = 15.
+
+Prueba validada:
+"Usar una cola llamada Pedidos, publicar número 123 y después leer un mensaje."
+
+Resultado:
+Inicio → Publicar Pedidos → Consumir Pedidos → Fin
+
+Sin Cargar documento.
+
+Prueba validada:
+"Publicar en la cola Omar."
+
+Pregunta únicamente el contenido.
+Respuesta: "Quiero un cafe"
+Resultado:
+- Queue = Omar
+- Contenido del mensaje = Quiero un cafe.
+
+======================================================================
+PRIMER TRABAJO DE LA SESIÓN
+======================================================================
+
+Después de validar el ZIP completo, desarrollar:
+
+FIX84C1 — CAMINO COMÚN ENTRE FRASE Y PASO A PASO
+
+======================================================================
+OBJETIVO ARQUITECTÓNICO DE FIX84C1
+======================================================================
+
+No hacer que el Paso a paso use la pantalla de frases.
+La convergencia debe ocurrir debajo de ambas interfaces.
+
+Objetivo:
+
+FRASE
+→ interpretación/aclaración
+→ NODO RESUELTO COMÚN
+→ contrato
+→ validación/defaults
+→ plan estructurado
+
+PASO A PASO
+→ controles deterministas
+→ NODO RESUELTO COMÚN
+→ contrato
+→ validación/defaults
+→ plan estructurado
+
+Frase y Paso a paso deben terminar construyendo el mismo objeto semántico.
+
+======================================================================
+ALCANCE DE FIX84C1
+======================================================================
+
+Trabajar primero solamente con:
+- util.logger
+- queue.consume
+
+No migrar todavía:
+- queue.publish
+- human.task
+- control.if
+
+salvo adaptación estrictamente necesaria para no romper.
+
+======================================================================
+POR QUÉ LOGGER + QUEUE.CONSUME
+======================================================================
+
+util.logger:
+- operación simple;
+- mensaje;
+- default de nivel;
+- puede consumir Datos disponibles.
+
+queue.consume:
+- integración;
+- cola;
+- cantidad;
+- defaults técnicos;
+- referencia contextual.
+
+Permiten probar la arquitectura con menor riesgo que queue.publish, human.task y control.if.
+
+======================================================================
+QUÉ DEBE DEMOSTRAR FIX84C1
+======================================================================
+
+Para util.logger y queue.consume:
+1. Frase y Paso a paso llegan al mismo modelo/nodo resuelto.
+2. Usan los mismos defaults.
+3. Usan las mismas validaciones contractuales.
+4. La misma capa construye el plan estructurado.
+5. La UI paso a paso puede seguir siendo la actual.
+6. No obligar al usuario a conocer parámetros técnicos.
+7. No romper el lenguaje natural validado.
+8. No tocar runtime.
+
+======================================================================
+NO HACER EN FIX84C1
+======================================================================
+
+No:
+- rediseñar toda la UI;
+- hacer un generador universal gigante de formularios;
+- migrar todos los nodos;
+- eliminar código viejo por intuición;
+- tocar motor;
+- tocar handlers runtime;
+- tocar canvas;
+- tocar queue runtime;
+- rediseñar Datos disponibles completo;
+- agregar nodos nuevos.
+
+Los editores especializados deben conservarse.
+El contrato controla semántica, no necesariamente cada píxel.
+
+======================================================================
+REGRESIÓN NUEVA REQUERIDA
+======================================================================
+
+Agregar pruebas de:
+EQUIVALENCIA DE CONSTRUCCIÓN FRASE ↔ PASO A PASO.
+
+Ejemplo queue.consume:
+Frase:
+"Usar una cola llamada Pedidos y después leer un mensaje."
+
+Paso a paso:
+- queue.consume
+- Queue = Pedidos
+- Take = 1
+- defaults seguros
+
+Ambos deben converger semánticamente.
+
+Ejemplo util.logger:
+Frase:
+"Registrar Operación completada."
+
+Paso a paso:
+- Logger
+- mensaje = Operación completada
+- nivel default seguro
+
+La comparación debe ignorar ids visuales, coordenadas y detalles irrelevantes de canvas.
+Debe comparar semántica y parámetros normalizados.
+
+======================================================================
+CRITERIOS DE CIERRE DE FIX84C1
+======================================================================
+
+- Compila en VS2022.
+- Los 19 casos actuales siguen 19 OK / 0 FALLA / 0 SKIP.
+- util.logger por frase funciona.
+- util.logger por paso a paso funciona.
+- queue.consume por frase funciona.
+- queue.consume por paso a paso funciona.
+- ambos caminos usan el mismo nodo resuelto.
+- mismos defaults.
+- mismas validaciones.
+- mismo significado de plan.
+- regresión de equivalencia OK.
+- sin cambios en motor/runtime/canvas.
+- sin regresión de reglas naturales.
+- no borrar código viejo hasta demostrar que quedó sin uso.
+
+======================================================================
+ORDEN DE TRABAJO DE LA PRÓXIMA SESIÓN
+======================================================================
+
+1. Leer ContextPack completo.
+2. Esperar ZIP completo.
+3. Inspeccionar ZIP.
+4. Confirmar FIX84B3 integrado.
+5. Confirmar banco A–S / 19 casos.
+6. Revisar arquitectura real de:
+   - contrato universal;
+   - interpretación;
+   - diálogo;
+   - provider;
+   - paso a paso;
+   - generación del plan;
+   - regresión.
+7. Localizar exactamente cómo util.logger se construye hoy por frase y por paso a paso.
+8. Localizar exactamente cómo queue.consume se construye hoy por frase y por paso a paso.
+9. Identificar duplicación real.
+10. Proponer el adaptador mínimo si el ZIP difiere de lo esperado.
+11. Implementar FIX84C1.
+12. Entregar ZIP de reemplazo + LEEME.
+13. Omar compila.
+14. Ejecutar banco completo.
+15. Ejecutar equivalencia frase ↔ paso a paso.
+16. No avanzar a FIX84C2 hasta validar C1.
+
+======================================================================
+ENTREGA
+======================================================================
+
+FIX84C1 debe entregarse:
+- ZIP de reemplazo;
+- estructura real;
+- archivos completos modificados;
+- LEEME;
+- causa;
+- corrección;
+- archivos;
+- prueba;
+- resultado esperado.
+
+No quiero dos constructores que solamente se parezcan.
+Quiero que Frase y Paso a paso sean dos experiencias distintas que alimenten
+la misma semántica, el mismo contrato y el mismo generador de plan.

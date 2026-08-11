@@ -242,8 +242,9 @@
         return optionsHtml(guideCatalog.users, userKey, userLabel, null);
     }
 
-    function userInputHtml(id, selectedValue) {
-        var value = String(selectedValue || firstUser(['OMARD\\OMARD']) || '').trim();
+    function userInputHtml(id, selectedValue, useDefault) {
+        var fallback = useDefault === false ? '' : (firstUser(['OMARD\\OMARD']) || '');
+        var value = String(selectedValue || fallback || '').trim();
         return '<input id="' + htmlEncode(id) + '" class="wf-ai-input wf-ai-user-picker" list="wfAiUsersList" value="' + htmlEncode(value) + '" placeholder="Escribí parte del usuario y seleccioná" />' +
             '<datalist id="wfAiUsersList">' + userDatalistOptions() + '</datalist>';
     }
@@ -452,7 +453,7 @@
         if (!step) return 'Paso';
         if (step.type === 'doc_load') return 'Cargar documento: ' + docPhrase(step.docTipo || '');
         if (step.type === 'condition') return 'Condición';
-        if (step.type === 'human_task') return 'Tarea humana: ' + ((step.destType === 'usuario' || step.user) ? (step.user || '(usuario)') : (step.role || '')) + ' / ' + (step.purpose || 'revisión');
+        if (step.type === 'human_task') return 'Tarea humana: ' + ((step.destType === 'usuario' || step.user) ? (step.user || '(usuario)') : (step.role || '(rol)')) + ' / ' + (step.title || step.purpose || 'tarea');
         if (step.type === 'email_send') return 'Enviar correo: ' + (step.to || '(sin destinatario)');
         if (step.type === 'notify') return 'Notificar: ' + (step.destType === 'usuario' ? (step.user || '(usuario)') : (step.role || '(rol)'));
         if (step.type === 'http_request') return 'Solicitud HTTP: ' + ((step.method || 'GET') + ' ' + (step.url || '(sin URL)'));
@@ -746,7 +747,8 @@
     }
 
     function defaultQueuePayloadFields() {
-        return [{ name: 'instanceId', value: '${wf.instanceId}' }];
+        // FIX84C2A: no inventar campos de negocio. El usuario decide el contenido.
+        return [];
     }
 
     function normalizeQueuePayloadFields(fields) {
@@ -806,6 +808,7 @@
 
         var raw = String(step.payloadText || '').trim();
         if (!raw) return '';
+        if (mode === 'simple') return raw;
         try { return JSON.parse(raw); }
         catch (e) { return raw; }
     }
@@ -920,20 +923,21 @@
         box.innerHTML = '';
         queuePayloadLastValueInput = null;
         var normalized = normalizeQueuePayloadFields(fields || []);
-        if (!normalized.length) normalized = defaultQueuePayloadFields();
         normalized.forEach(addQueuePayloadFieldRow);
         updateQueuePayloadPreview();
     }
 
     function syncQueuePayloadModeFields() {
         var mode = $('wfAiStepQueuePayloadMode');
+        var simple = $('wfAiQueuePayloadSimpleBox');
         var guided = $('wfAiQueuePayloadGuidedBox');
         var advanced = $('wfAiQueuePayloadAdvancedBox');
-        if (!mode || !guided || !advanced) return;
-        var isAdvanced = mode.value === 'advanced';
-        guided.style.display = isAdvanced ? 'none' : '';
-        advanced.style.display = isAdvanced ? '' : 'none';
-        if (!isAdvanced) updateQueuePayloadPreview();
+        if (!mode || !simple || !guided || !advanced) return;
+        var value = String(mode.value || 'simple');
+        simple.style.display = value === 'simple' ? '' : 'none';
+        guided.style.display = value === 'fields' ? '' : 'none';
+        advanced.style.display = value === 'advanced' ? '' : 'none';
+        if (value === 'fields') updateQueuePayloadPreview();
     }
 
     function isValidStatePath(path) {
@@ -1522,17 +1526,28 @@
             return;
         }
 
-        if (type === 'queue_publish' && (selectedText('wfAiStepQueuePayloadMode') || 'fields') === 'fields') {
-            var queueTarget = queuePayloadLastValueInput;
-            if (!queueTarget || !document.body.contains(queueTarget)) {
-                var queueRows = $('wfAiQueuePayloadFields');
-                queueTarget = queueRows && queueRows.querySelector('[data-queue-payload-value]');
-            }
-            if (queueTarget) {
-                queueTarget.value = token;
-                queuePayloadLastValueInput = queueTarget;
-                updateQueuePayloadPreview();
-                setStatus('Dato cargado como valor del campo del mensaje: ' + token, 'ok');
+        if (type === 'queue_publish') {
+            var queuePublishMode = selectedText('wfAiStepQueuePayloadMode') || 'simple';
+            if (queuePublishMode === 'fields') {
+                var queueTarget = queuePayloadLastValueInput;
+                if (!queueTarget || !document.body.contains(queueTarget)) {
+                    var queueRows = $('wfAiQueuePayloadFields');
+                    queueTarget = queueRows && queueRows.querySelector('[data-queue-payload-value]');
+                }
+                if (queueTarget) {
+                    queueTarget.value = token;
+                    queuePayloadLastValueInput = queueTarget;
+                    updateQueuePayloadPreview();
+                    setStatus('Dato cargado como valor del campo del mensaje: ' + token, 'ok');
+                    return;
+                }
+            } else if (queuePublishMode === 'simple') {
+                insertAtCursor($('wfAiStepQueuePayloadSimple'), token);
+                setStatus('Dato insertado en el mensaje: ' + token, 'ok');
+                return;
+            } else {
+                insertAtCursor($('wfAiStepQueuePayload'), token);
+                setStatus('Dato insertado en el contenido avanzado: ' + token, 'ok');
                 return;
             }
         }
@@ -1643,7 +1658,7 @@
         if (!step) return '';
         if (step.type === 'doc_load') return 'Cargar documento: ' + docPhrase(step.docTipo || '');
         if (step.type === 'condition') return 'Condición: ' + conditionInfo(step).text;
-        if (step.type === 'human_task') return 'Tarea humana: ' + ((step.destType === 'usuario' || step.user) ? (step.user || '(usuario)') : (step.role || '')) + ' / ' + (step.purpose || 'revisión');
+        if (step.type === 'human_task') return 'Tarea humana: ' + ((step.destType === 'usuario' || step.user) ? (step.user || '(usuario)') : (step.role || '(rol)')) + ' / ' + (step.title || step.purpose || 'tarea');
         if (step.type === 'email_send') return 'Enviar correo: ' + (step.to || '(sin destinatario)');
         if (step.type === 'notify') return 'Notificar: ' + (step.destType === 'usuario' ? (step.user || '(usuario)') : (step.role || '(rol)'));
         if (step.type === 'http_request') return 'Solicitud HTTP: ' + ((step.method || 'GET') + ' ' + (step.url || '(sin URL)'));
@@ -1680,13 +1695,20 @@
             return info.text;
         }
         if (step.type === 'human_task') {
-            var role = step.role || 'COMPRAS';
+            var role = step.role || '';
             var user = step.user || '';
-            var purpose = step.purpose || 'revisión';
+            var title = step.title || step.purpose || '';
             ctx.lastTaskRole = user || role;
-            if (step.id) ctx.tasksById[step.id] = { role: user || role, purpose: purpose };
-            if (step.destType === 'usuario' || user) return 'mandar la tarea al usuario ' + (user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD') + ' para ' + purpose;
-            return 'mandar la tarea al rol ' + role + ' para ' + purpose;
+            if (step.id) ctx.tasksById[step.id] = { role: user || role, purpose: title };
+
+            var taskParts = [];
+            if (step.destType === 'usuario' || user) taskParts.push('Usuario = ' + user);
+            else taskParts.push('Rol = ' + role);
+            if (title) taskParts.push('Título = ' + title);
+            if (String(step.description || '').trim()) taskParts.push('Descripción = ' + String(step.description).trim());
+            if ((parseInt(step.deadlineMinutes || 0, 10) || 0) > 0) taskParts.push('Vencimiento = ' + parseInt(step.deadlineMinutes, 10));
+            if (String(step.pendingState || '').trim()) taskParts.push('Estado = ' + String(step.pendingState).trim());
+            return 'crear una tarea con ' + taskParts.join('; ');
         }
         if (step.type === 'email_send') {
             return 'enviar un email a ' + (step.to || 'destinatario@empresa.com') +
@@ -1714,7 +1736,7 @@
             return 'escribir archivo ' + (step.path || 'C:\\Temp\\salida.txt');
         }
         if (step.type === 'queue_publish') {
-            var queueNamePhrase = step.queue || 'default';
+            var queueNamePhrase = step.queue || '';
             var queuePayloadPhrase = String(queuePayloadTextForStep(step) || '').replace(/\s+/g, ' ').trim();
             var sameQueuePublish = !!(ctx.lastQueue && String(ctx.lastQueue).toLowerCase() === String(queueNamePhrase).toLowerCase());
             ctx.lastQueue = queueNamePhrase;
@@ -1723,7 +1745,7 @@
             return (sameQueuePublish ? 'publicar ' : 'publicar en la cola ' + queueNamePhrase + ' ') + (queuePayloadPhrase || 'un mensaje');
         }
         if (step.type === 'queue_consume') {
-            var queueNameConsume = step.queue || 'default';
+            var queueNameConsume = step.queue || '';
             var queueTakePhrase = parseInt(step.take || '1', 10);
             if (isNaN(queueTakePhrase) || queueTakePhrase < 1) queueTakePhrase = 1;
             var sameQueueConsume = !!(ctx.lastQueue && String(ctx.lastQueue).toLowerCase() === String(queueNameConsume).toLowerCase());
@@ -2068,7 +2090,7 @@
                 var queuePayloadValue = queuePayloadValueFromStep(step);
                 if (queuePayloadValue === '' || queuePayloadValue == null ||
                     (typeof queuePayloadValue === 'object' && !Array.isArray(queuePayloadValue) && !Object.keys(queuePayloadValue).length)) {
-                    pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar el payload a publicar.');
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar qué información querés publicar.');
                 }
                 if (String(step.payloadMode || '') === 'fields') {
                     var queueFieldNames = {};
@@ -2079,7 +2101,6 @@
                         queueFieldNames[normalizedName] = true;
                     });
                 }
-                if (!String(step.connectionStringName || '').trim()) pushUnique(result.warnings, stepShortName(step, idx) + ': falta indicar la conexión SQL.');
             }
 
             if (step.type === 'queue_consume') {
@@ -2264,9 +2285,15 @@
             return '' +
                 guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Destino</label><select id="wfAiStepTaskDestType" class="wf-ai-select"><option value="rol">Rol</option><option value="usuario">Usuario</option></select></div>' +
-                '<div class="wf-ai-guide-row" id="wfAiStepTaskRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select">' + roleOptions(firstRole(['COMPRAS'])) + '</select></div>' +
-                '<div class="wf-ai-guide-row" id="wfAiStepTaskUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepTaskUser', firstUser(['OMARD\\OMARD'])) + '</div>' +
-                '<div class="wf-ai-guide-row"><label>Qué hace</label><input id="wfAiStepPurpose" class="wf-ai-input" value="revisión" placeholder="Ej.: revisar, aprobar, corregir, cargar datos" /></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepTaskRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select"><option value="">— elegir rol —</option>' + roleOptions('') + '</select></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepTaskUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepTaskUser', '', false) + '</div>' +
+                '<div class="wf-ai-guide-row"><label>Título</label><input id="wfAiStepTaskTitle" class="wf-ai-input" placeholder="Ej.: Revisar factura. Si queda vacío, se propone según el destino." /></div>' +
+                '<div class="wf-ai-guide-row"><label>Descripción (opcional)</label><textarea id="wfAiStepTaskDescription" class="wf-ai-input wf-ai-textarea" placeholder="Detalle adicional para la persona que recibe la tarea"></textarea></div>' +
+                '<div class="wf-ai-guide-row"><label>Vencimiento en minutos (opcional)</label><input id="wfAiStepTaskDeadline" class="wf-ai-input" type="number" min="0" value="0" /></div>' +
+                '<details class="wf-ai-guide-note"><summary>Opciones avanzadas</summary>' +
+                '<div class="wf-ai-guide-row"><label>Estado pendiente (opcional)</label><input id="wfAiStepTaskPendingState" class="wf-ai-input" placeholder="Si queda vacío, usa el estado normal según el destino" /></div>' +
+                '<div class="wf-ai-guide-note">El scope de la tarea se toma del contexto del workflow (input.scopeKey / sector); no se configura manualmente acá.</div>' +
+                '</details>' +
                 '<div class="wf-ai-guide-note">Después hacé clic en APROBADO/APTO o RECHAZADO/NO APTO en la columna de pasos para agregar acciones según el resultado humano.</div>';
         }
         if (type === 'email_send') {
@@ -2333,27 +2360,33 @@
         if (type === 'queue_publish') {
             return '' +
                 guideBranchRowHtml('then') +
-                '<div class="wf-ai-guide-row"><label>Broker</label><input id="wfAiStepQueueBroker" class="wf-ai-input" value="sql" readonly /></div>' +
-                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="default" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
-                '<div class="wf-ai-guide-row"><label>Cómo armar el mensaje</label><select id="wfAiStepQueuePayloadMode" class="wf-ai-select"><option value="fields">Campos guiados</option><option value="advanced">Texto o JSON avanzado</option></select></div>' +
-                '<div id="wfAiQueuePayloadGuidedBox">' +
-                '  <div class="wf-ai-guide-note">Cada nombre lo define quien diseña el mensaje: por ejemplo origen, documentoId o importe. No son propiedades fijas del nodo. El valor puede ser texto o un dato disponible.</div>' +
+                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
+                '<div class="wf-ai-guide-row"><label>¿Qué querés publicar?</label><select id="wfAiStepQueuePayloadMode" class="wf-ai-select"><option value="simple">Mensaje simple</option><option value="fields">Campos del mensaje</option><option value="advanced">Texto / JSON avanzado</option></select></div>' +
+                '<div id="wfAiQueuePayloadSimpleBox">' +
+                '  <div class="wf-ai-guide-row"><label>Mensaje</label><textarea id="wfAiStepQueuePayloadSimple" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Quiero un mate"></textarea></div>' +
+                '  <div class="wf-ai-guide-note">Publicá texto directamente. No hace falta conocer JSON ni nombres internos del nodo.</div>' +
+                '</div>' +
+                '<div id="wfAiQueuePayloadGuidedBox" style="display:none">' +
+                '  <div class="wf-ai-guide-note">Definí sólo los campos de negocio que necesites, por ejemplo origen, documentoId o importe. El valor puede ser texto o un dato disponible.</div>' +
                 '  <div id="wfAiQueuePayloadFields" class="wf-ai-queue-fields"></div>' +
                 '  <button type="button" class="btn wf-ai-queue-add" id="wfAiAddQueuePayloadField">Agregar campo</button>' +
-                '  <div class="wf-ai-queue-preview-title">Vista previa del payload</div>' +
+                '  <div class="wf-ai-queue-preview-title">Vista previa del mensaje</div>' +
                 '  <pre id="wfAiQueuePayloadPreview" class="wf-ai-queue-preview"></pre>' +
                 '</div>' +
                 '<div id="wfAiQueuePayloadAdvancedBox" style="display:none">' +
-                '  <div class="wf-ai-guide-row"><label>Contenido avanzado (texto o JSON)</label><textarea id="wfAiStepQueuePayload" class="wf-ai-input wf-ai-textarea" placeholder="Texto libre o JSON. Ej.: {&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}">{&#10;  &quot;instanceId&quot;: &quot;${wf.instanceId}&quot;&#10;}</textarea></div>' +
+                '  <div class="wf-ai-guide-row"><label>Contenido avanzado</label><textarea id="wfAiStepQueuePayload" class="wf-ai-input wf-ai-textarea" placeholder="Texto libre o JSON"></textarea></div>' +
                 '</div>' +
-                '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
-                '<div class="wf-ai-guide-note">Publica en WF_Queue mediante queue.publish. Después deja disponibles queue.last.* y, para los campos definidos, queue.last.payload.*.</div>';
+                '<details class="wf-ai-guide-note"><summary>Opciones técnicas</summary>' +
+                '  <div class="wf-ai-guide-row"><label>Broker</label><input id="wfAiStepQueueBroker" class="wf-ai-input" value="sql" readonly /></div>' +
+                '  <div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
+                '</details>' +
+                '<div class="wf-ai-guide-note">Después de publicar quedan disponibles queue.last.* y, cuando el mensaje tiene campos, queue.last.payload.*.</div>';
         }
         if (type === 'queue_consume') {
             return '' +
                 guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Broker</label><input id="wfAiStepQueueBroker" class="wf-ai-input" value="sql" readonly /></div>' +
-                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="default" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Nombre de cola</label><input id="wfAiStepQueueName" class="wf-ai-input" value="" placeholder="Ej.: documentos-pendientes" maxlength="100" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Cantidad a tomar</label><input id="wfAiStepQueueTake" class="wf-ai-input" type="number" min="1" max="100" value="1" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Conexión</label><input id="wfAiStepQueueConnection" class="wf-ai-input" value="DefaultConnection" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Logs de diagnóstico</label><select id="wfAiStepQueueDebug" class="wf-ai-select"><option value="false">No</option><option value="true">Sí</option></select></div>' +
@@ -2421,7 +2454,7 @@
                 '  <option value="Error">Error</option>' +
                 '  <option value="Debug">Debug</option>' +
                 '</select></div>' +
-                '<div class="wf-ai-guide-row"><label>Mensaje</label><textarea id="wfAiStepMessage" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Total=${sql.rowCount}, Estado=${payload.status}">Paso agregado por Asistente IA</textarea></div>' +
+                '<div class="wf-ai-guide-row"><label>Mensaje</label><textarea id="wfAiStepMessage" class="wf-ai-input wf-ai-textarea" placeholder="Ej.: Operación completada o Total=${sql.rowCount}"></textarea></div>' +
                 '<div class="wf-ai-guide-note">Podés usar variables con ${...}, por ejemplo ${wf.instanceId}, ${payload.status}, ${sql.rowCount} o campos de Datos disponibles.</div>';
         }
         if (type === 'end') {
@@ -2535,9 +2568,12 @@
             }
         } else if (step.type === 'human_task') {
             setControlValue('wfAiStepTaskDestType', step.destType || (step.user ? 'usuario' : 'rol'));
-            setControlValue('wfAiStepRole', step.role || firstRole(['COMPRAS']));
-            setControlValue('wfAiStepTaskUser', step.user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD');
-            setControlValue('wfAiStepPurpose', step.purpose || 'revisión');
+            setControlValue('wfAiStepRole', step.role || '');
+            setControlValue('wfAiStepTaskUser', step.user || '');
+            setControlValue('wfAiStepTaskTitle', step.title || step.purpose || '');
+            setControlValue('wfAiStepTaskDescription', step.description || '');
+            setControlValue('wfAiStepTaskDeadline', step.deadlineMinutes == null ? '0' : step.deadlineMinutes);
+            setControlValue('wfAiStepTaskPendingState', step.pendingState || '');
         } else if (step.type === 'email_send') {
             setControlValue('wfAiStepTo', step.to || 'destinatario@empresa.com');
             setControlValue('wfAiStepSubject', step.subject || 'Aviso Workflow Studio');
@@ -2584,18 +2620,25 @@
         } else if (step.type === 'queue_publish') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepQueueBroker', step.broker || 'sql');
-            setControlValue('wfAiStepQueueName', step.queue || 'default');
+            setControlValue('wfAiStepQueueName', step.queue || '');
             var queueMode = String(step.payloadMode || '').toLowerCase();
             var queueFields = queuePayloadFieldsForStep(step);
-            if (!queueMode) queueMode = queueFields.length ? 'fields' : 'advanced';
+            if (!queueMode) {
+                if (queueFields.length) queueMode = 'fields';
+                else {
+                    var existingPayload = queuePayloadValueFromStep(step);
+                    queueMode = existingPayload && typeof existingPayload === 'object' ? 'advanced' : 'simple';
+                }
+            }
             setControlValue('wfAiStepQueuePayloadMode', queueMode);
             if (queueMode === 'fields') renderQueuePayloadRows(queueFields);
-            else setControlValue('wfAiStepQueuePayload', step.payloadText || '{\n  "instanceId": "${wf.instanceId}"\n}');
+            else if (queueMode === 'simple') setControlValue('wfAiStepQueuePayloadSimple', step.payloadText || '');
+            else setControlValue('wfAiStepQueuePayload', step.payloadText || '');
             setControlValue('wfAiStepQueueConnection', step.connectionStringName || 'DefaultConnection');
         } else if (step.type === 'queue_consume') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepQueueBroker', step.broker || 'sql');
-            setControlValue('wfAiStepQueueName', step.queue || 'default');
+            setControlValue('wfAiStepQueueName', step.queue || '');
             setControlValue('wfAiStepQueueTake', step.take || '1');
             setControlValue('wfAiStepQueueConnection', step.connectionStringName || 'DefaultConnection');
             setControlValue('wfAiStepQueueDebug', step.debug ? 'true' : 'false');
@@ -2635,7 +2678,7 @@
         } else if (step.type === 'logger') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepLogLevel', step.level || 'Info');
-            setControlValue('wfAiStepMessage', step.message || 'Paso agregado por Asistente IA');
+            setControlValue('wfAiStepMessage', step.message || '');
         }
 
         syncDynamicStepFields();
@@ -2668,7 +2711,7 @@
         var box = $('wfAiStepFields');
         if (!box) return;
         box.innerHTML = fieldHtmlForType(type);
-        if (type === 'queue_publish') renderQueuePayloadRows(defaultQueuePayloadFields());
+        if (type === 'queue_publish') renderQueuePayloadRows([]);
 
         var condition = $('wfAiStepCondition');
         if (condition) condition.addEventListener('change', syncDynamicStepFields);
@@ -2754,14 +2797,28 @@
             setControlValue('wfAiStepUser', notifyUser);
         }
 
-        if (type === 'human_task' && selectedText('wfAiStepTaskDestType') === 'usuario') {
-            var taskUser = resolveUserSelection(selectedText('wfAiStepTaskUser'));
-            if (!taskUser) {
-                var tf = $('wfAiStepTaskUser');
-                if (tf && tf.focus) tf.focus();
-                return 'Seleccioná un usuario válido de la lista para la tarea humana.';
+        if (type === 'human_task') {
+            var taskDestType = selectedText('wfAiStepTaskDestType') || 'rol';
+            if (taskDestType === 'usuario') {
+                var taskUser = resolveUserSelection(selectedText('wfAiStepTaskUser'));
+                if (!taskUser) {
+                    var tf = $('wfAiStepTaskUser');
+                    if (tf && tf.focus) tf.focus();
+                    return 'Seleccioná un usuario válido de la lista para la tarea humana.';
+                }
+                setControlValue('wfAiStepTaskUser', taskUser);
+            } else if (!selectedText('wfAiStepRole')) {
+                var tr = $('wfAiStepRole');
+                if (tr && tr.focus) tr.focus();
+                return 'Seleccioná un rol real para la tarea humana.';
             }
-            setControlValue('wfAiStepTaskUser', taskUser);
+
+            var deadlineText = selectedText('wfAiStepTaskDeadline');
+            if (deadlineText && (!/^\d+$/.test(deadlineText) || parseInt(deadlineText, 10) < 0)) {
+                var td = $('wfAiStepTaskDeadline');
+                if (td && td.focus) td.focus();
+                return 'El vencimiento debe ser una cantidad de minutos mayor o igual a 0.';
+            }
         }
 
         if (type === 'sql_query') {
@@ -2805,6 +2862,12 @@
             }
         }
 
+        if (type === 'logger' && !selectedText('wfAiStepMessage')) {
+            var lmf = $('wfAiStepMessage');
+            if (lmf && lmf.focus) lmf.focus();
+            return 'Indicá qué querés registrar en el log.';
+        }
+
         if (type === 'queue_publish' || type === 'queue_consume') {
             var queueName = selectedText('wfAiStepQueueName');
             if (!queueName) {
@@ -2817,7 +2880,7 @@
                 if (qnl && qnl.focus) qnl.focus();
                 return 'El nombre de la cola no puede superar 100 caracteres.';
             }
-            if (!selectedText('wfAiStepQueueConnection')) {
+            if (type === 'queue_consume' && !selectedText('wfAiStepQueueConnection')) {
                 var qcf = $('wfAiStepQueueConnection');
                 if (qcf && qcf.focus) qcf.focus();
                 return 'Indicá el nombre de la conexión SQL.';
@@ -2825,8 +2888,15 @@
         }
 
         if (type === 'queue_publish') {
-            var queuePayloadMode = selectedText('wfAiStepQueuePayloadMode') || 'fields';
-            if (queuePayloadMode === 'fields') {
+            var queuePayloadMode = selectedText('wfAiStepQueuePayloadMode') || 'simple';
+            if (queuePayloadMode === 'simple') {
+                var simplePayload = selectedText('wfAiStepQueuePayloadSimple');
+                if (!simplePayload) {
+                    var qps = $('wfAiStepQueuePayloadSimple');
+                    if (qps && qps.focus) qps.focus();
+                    return 'Indicá qué información querés publicar.';
+                }
+            } else if (queuePayloadMode === 'fields') {
                 var queueFields = collectQueuePayloadFieldsFromForm();
                 if (!queueFields.length) return 'Agregá al menos un campo al mensaje.';
                 var queueNames = {};
@@ -2854,7 +2924,7 @@
                     catch (queueJsonError) {
                         var qpj = $('wfAiStepQueuePayload');
                         if (qpj && qpj.focus) qpj.focus();
-                        return 'El payload parece JSON pero no es válido. Corregilo o usá Campos guiados.';
+                        return 'El contenido parece JSON pero no es válido. Corregilo o usá Campos del mensaje.';
                     }
                 }
             }
@@ -2982,10 +3052,13 @@
         } else if (type === 'human_task') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.destType = selectedText('wfAiStepTaskDestType') || 'rol';
-            step.role = selectedText('wfAiStepRole') || firstRole(['COMPRAS']);
-            step.user = selectedText('wfAiStepTaskUser') || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD';
-            step.purpose = selectedText('wfAiStepPurpose') || 'revisión';
-            if (step.destType !== 'usuario') step.user = '';
+            step.role = step.destType === 'rol' ? (selectedText('wfAiStepRole') || '') : '';
+            step.user = step.destType === 'usuario' ? (selectedText('wfAiStepTaskUser') || '') : '';
+            step.title = selectedText('wfAiStepTaskTitle') || '';
+            step.purpose = step.title;
+            step.description = selectedText('wfAiStepTaskDescription') || '';
+            step.deadlineMinutes = parseInt(selectedText('wfAiStepTaskDeadline') || '0', 10) || 0;
+            step.pendingState = selectedText('wfAiStepTaskPendingState') || '';
         } else if (type === 'email_send') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.to = selectedText('wfAiStepTo') || 'destinatario@empresa.com';
@@ -3032,25 +3105,26 @@
             step.entryName = selectedText('wfAiStepFileWriteEntry') || '';
         } else if (type === 'queue_publish') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
-            step.broker = 'sql';
-            step.queue = selectedText('wfAiStepQueueName') || 'default';
-            step.payloadMode = selectedText('wfAiStepQueuePayloadMode') || 'fields';
+            step.broker = selectedText('wfAiStepQueueBroker') || '';
+            step.queue = selectedText('wfAiStepQueueName') || '';
+            step.payloadMode = selectedText('wfAiStepQueuePayloadMode') || 'simple';
             if (step.payloadMode === 'fields') {
                 step.payloadFields = collectQueuePayloadFieldsFromForm();
                 step.payloadText = JSON.stringify(queuePayloadObjectFromFields(step.payloadFields), null, 2);
+            } else if (step.payloadMode === 'simple') {
+                step.payloadFields = [];
+                step.payloadText = selectedText('wfAiStepQueuePayloadSimple') || '';
             } else {
                 step.payloadFields = [];
-                step.payloadText = selectedText('wfAiStepQueuePayload') || 'Mensaje generado por Constructor IA';
+                step.payloadText = selectedText('wfAiStepQueuePayload') || '';
             }
-            step.connectionStringName = selectedText('wfAiStepQueueConnection') || 'DefaultConnection';
+            step.connectionStringName = selectedText('wfAiStepQueueConnection') || '';
         } else if (type === 'queue_consume') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
-            step.broker = 'sql';
-            step.queue = selectedText('wfAiStepQueueName') || 'default';
-            step.take = selectedText('wfAiStepQueueTake') || '1';
-            step.prefetch = step.take;
-            step.connectionStringName = selectedText('wfAiStepQueueConnection') || 'DefaultConnection';
-            step.outputPrefix = 'queue.consume';
+            step.broker = selectedText('wfAiStepQueueBroker') || '';
+            step.queue = selectedText('wfAiStepQueueName') || '';
+            step.take = selectedText('wfAiStepQueueTake') || '';
+            step.connectionStringName = selectedText('wfAiStepQueueConnection') || '';
             step.debug = selectedText('wfAiStepQueueDebug') === 'true';
         } else if (type === 'subflow') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
@@ -3090,7 +3164,7 @@
         } else if (type === 'logger') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.level = selectedText('wfAiStepLogLevel') || 'Info';
-            step.message = selectedText('wfAiStepMessage') || 'Paso agregado por Asistente IA';
+            step.message = selectedText('wfAiStepMessage') || '';
         } else if (type === 'end') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
         }
@@ -4618,13 +4692,20 @@
         if (buildGuidedResolutionStepsFromPhrase(userText || base || '')) {
             setWideMode(false);
             resetGuidedPlanConfirmation();
-            var structuredResult = buildStructuredGuideResult(getCurrentAiPhrase());
-            if (structuredResult) {
-                structuredResult.guidedResolution = true;
-                structuredResult.requiresFinalConfirmation = true;
-            }
-            renderResult(structuredResult);
-            setStatus('Resolución generada. Revisá el plan y confirmalo antes de aplicar al canvas.', 'ok');
+            var currentText = getCurrentAiPhrase();
+            var structuredResult = buildStructuredGuideResult(currentText);
+            setStatus('Resolviendo el plan con la capa común FIX84C2A...', 'busy');
+            normalizeStructuredGuideResult(structuredResult, currentText, function (resolved) {
+                if (resolved) {
+                    resolved.guidedResolution = true;
+                    resolved.requiresFinalConfirmation = true;
+                }
+                renderResult(resolved);
+                setStatus('Resolución generada. Revisá el plan y confirmalo antes de aplicar al canvas.', 'ok');
+            }, function (err) {
+                renderResult({ ok: false, error: err.message || String(err) });
+                setStatus('No se pudo resolver el plan por la capa común FIX84C2A.', 'error');
+            });
             return;
         }
 
@@ -5349,7 +5430,9 @@
         if (!c) return false;
         var source = String(c.source || '');
         var kind = String(c.controlKind || 'text');
-        if (source !== 'contract_parameter' && source !== 'contract_requirement' && source !== 'contract_ambiguity') return false;
+        // FIX84C2Be: las alternativas exclusivas (p.ej. Rol + Usuario en human.task)
+        // también pertenecen al diálogo contractual y tienen resolvedor server-side.
+        if (source !== 'contract_parameter' && source !== 'contract_requirement' && source !== 'contract_requirement_exclusive' && source !== 'contract_ambiguity') return false;
         return ['text', 'number', 'select', 'boolean', 'role_or_user', 'available_data', 'payload_editor', 'condition_builder'].indexOf(kind) >= 0;
     }
 
@@ -5919,6 +6002,92 @@
             });
     }
 
+    // FIX84C1/FIX84C2A/FIX84C2B: el Paso a paso no interpreta lenguaje natural, pero sí entrega su
+    // plan candidato al mismo resolved-node builder C# que usa la ruta por frase.
+    function callAiPlanNormalizer(plan, userText, done, fail, always) {
+        fetch('Api/WF_AiAssistant.ashx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({
+                mode: 'normalize_plan',
+                sourceKind: 'step_by_step',
+                userText: userText || '',
+                plan: plan || {}
+            })
+        })
+            .then(function (r) { return r.json(); })
+            .then(done)
+            .catch(function (err) { if (fail) fail(err); })
+            .finally(function () { if (always) always(); });
+    }
+
+    function finalizeStructuredGuideResult(plan, userText, commonResponse) {
+        if (!plan) return null;
+        plan.assistantVersion = 'constructor-structured-fix84c2b';
+        plan.contract = buildFix74PlanContract(plan, userText || '');
+
+        var validation = buildFunctionalValidation();
+        var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
+        consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        var serverValidation = commonResponse && commonResponse.validation || {};
+        (serverValidation.errors || []).forEach(function (e) { pushUnique(validation.errors, e); });
+        (serverValidation.warnings || []).forEach(function (w) { pushUnique(validation.warnings, w); });
+
+        var contractErrors = validateFix74PlanContract(plan, userText || '', true);
+        contractErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        var selfTest = runFix74ContractSelfTest();
+        if (!selfTest.ok) pushUnique(validation.errors, 'La matriz interna del contrato fix74b no pasó completa.');
+        validation.contract = {
+            ok: contractErrors.length === 0 && selfTest.ok,
+            fingerprint: plan.contract.fingerprint,
+            graphFingerprint: plan.contract.graphFingerprint,
+            matrixPassed: selfTest.passed,
+            matrixTotal: selfTest.total
+        };
+        validation.ok = validation.errors.length === 0;
+        aiFix74LastContractCheck = validation.contract;
+
+        return {
+            ok: true,
+            provider: 'constructor-local + contract-common',
+            model: 'Constructor IA estructurado FIX84C2B',
+            messageToUser: plan.messageToUser,
+            plan: plan,
+            validation: validation,
+            fix84c1: commonResponse && commonResponse.fix84c1 || null,
+            fix84c2a: commonResponse && (commonResponse.fix84c2a || commonResponse.fix84c1) || null,
+            fix84c2b: commonResponse && (commonResponse.fix84c2b || commonResponse.fix84c2ab || commonResponse.fix84c2a || commonResponse.fix84c1) || null,
+            rawText: userText || ''
+        };
+    }
+
+    function planHasFix84C1CoveredNode(plan) {
+        var actions = plan && plan.actions || [];
+        for (var i = 0; i < actions.length; i++) {
+            var nodeType = String(actions[i] && actions[i].nodeType || '').toLowerCase();
+            if (nodeType === 'util.logger' || nodeType === 'queue.consume' || nodeType === 'queue.publish' || nodeType === 'human.task') return true;
+        }
+        return false;
+    }
+
+    function normalizeStructuredGuideResult(localResult, userText, done, fail, always) {
+        if (!localResult || !localResult.plan || !planHasFix84C1CoveredNode(localResult.plan)) {
+            if (done) done(localResult);
+            if (always) always();
+            return;
+        }
+
+        callAiPlanNormalizer(localResult.plan, userText || '', function (res) {
+            if (!res || !res.ok || !res.plan) {
+                if (fail) fail(new Error((res && res.error) || 'No se pudo normalizar el plan por FIX84C2A.'));
+                return;
+            }
+            if (done) done(finalizeStructuredGuideResult(res.plan, userText || '', res));
+        }, fail, always);
+    }
+
     function verificarFrase() {
         resetGuidedPlanConfirmation();
         var userText = getCurrentAiPhrase();
@@ -5929,8 +6098,18 @@
 
         var structuredResult = buildStructuredGuideResult(userText);
         if (structuredResult) {
-            renderPhraseVerification(structuredResult, userText);
-            setStatus('Verificación generada. No se aplicó nada al canvas.', 'ok');
+            setStatus('Verificando el plan con la capa común FIX84C2A...', 'busy');
+            var structuredVerifyBtn = $('wfAiVerify');
+            if (structuredVerifyBtn) structuredVerifyBtn.disabled = true;
+            normalizeStructuredGuideResult(structuredResult, userText, function (resolved) {
+                renderPhraseVerification(resolved, userText);
+                setStatus('Verificación generada. No se aplicó nada al canvas.', 'ok');
+            }, function (err) {
+                renderPhraseVerification({ ok: false, error: err.message || String(err) }, userText);
+                setStatus('No se pudo verificar el plan por FIX84C2A.', 'error');
+            }, function () {
+                if (structuredVerifyBtn) structuredVerifyBtn.disabled = false;
+            });
             return;
         }
 
@@ -6016,7 +6195,7 @@
             var level = normalizeKey(step.level || step.nivel || 'info') === 'WARN' ? 'advertencia' : 'informativa';
             return 'Notificar a ' + notifyDestinationText(step) + ' (' + level + '): ' + (step.title || 'Aviso interno');
         }
-        if (step.type === 'human_task') return 'Crear tarea humana para ' + taskDestinationForPlan(step) + ': ' + (step.purpose || 'revisión');
+        if (step.type === 'human_task') return 'Crear tarea humana para ' + taskDestinationForPlan(step) + ': ' + (step.title || step.purpose || humanTaskTitleForPlan(step));
         if (step.type === 'logger') return 'Registrar log ' + (step.level || 'Info') + ': ' + (step.message || '');
         if (step.type === 'end') return 'Finalizar flujo';
         return createStepTitle(step);
@@ -6257,7 +6436,7 @@
     function humanTaskTitleForPlan(step) {
         step = step || {};
         if (step.destType === 'usuario' || step.user) return 'Enviar a ' + (step.user || 'usuario');
-        var role = step.role || 'COMPRAS';
+        var role = step.role || '';
         if (normalizeKey(role) === 'DIR_GENERAL') return 'Aprobación Dirección';
         if (normalizeKey(role) === 'ADM_FIN') return 'Enviar a Administración';
         if (normalizeKey(role) === 'COMPRAS') return 'Enviar a Compras';
@@ -6328,14 +6507,16 @@
         }
 
         if (step.type === 'human_task') {
-            var title = humanTaskTitleForPlan(step);
-            var hp = {
-                titulo: title,
-                descripcion: 'Tarea generada por el Constructor IA: ' + (step.purpose || 'revisión')
-            };
-            if (step.destType === 'usuario' || step.user) hp.usuarioAsignado = step.user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD';
-            else hp.rol = step.role || firstRole(['COMPRAS']);
-            return makePlanAction('human.task', labelFor(title), hp);
+            var title = String(step.title || '').trim();
+            var label = title || humanTaskTitleForPlan(step);
+            var hp = {};
+            if (step.destType === 'usuario' || step.user) hp.usuarioAsignado = step.user || '';
+            else hp.rol = step.role || '';
+            if (title) hp.titulo = title;
+            if (String(step.description || '').trim()) hp.descripcion = String(step.description).trim();
+            if ((parseInt(step.deadlineMinutes || 0, 10) || 0) > 0) hp.deadlineMinutes = parseInt(step.deadlineMinutes, 10);
+            if (String(step.pendingState || '').trim()) hp.estadoNegocioPendiente = String(step.pendingState).trim();
+            return makePlanAction('human.task', labelFor(label), hp);
         }
 
         if (step.type === 'email_send') {
@@ -6424,28 +6605,24 @@
 
         if (step.type === 'queue_publish') {
             var payloadValue = queuePayloadValueFromStep(step);
-            if (payloadValue === '' || payloadValue == null) payloadValue = 'Mensaje generado por Constructor IA';
-            return makePlanAction('queue.publish', labelFor('Publicar en cola ' + (step.queue || 'default')), {
-                broker: 'sql',
-                queue: step.queue || 'default',
-                payload: payloadValue,
-                connectionStringName: step.connectionStringName || 'DefaultConnection'
-            });
+            var publishParams = {
+                queue: step.queue || '',
+                payload: payloadValue
+            };
+            if (step.broker && normalizeKey(step.broker) !== 'SQL') publishParams.broker = step.broker;
+            if (step.connectionStringName && step.connectionStringName !== 'DefaultConnection') publishParams.connectionStringName = step.connectionStringName;
+            return makePlanAction('queue.publish', labelFor('Publicar en cola ' + (step.queue || '')), publishParams);
         }
 
         if (step.type === 'queue_consume') {
-            var queueTake = parseInt(step.take || '1', 10);
-            if (isNaN(queueTake) || queueTake < 1) queueTake = 1;
-            queueTake = Math.min(queueTake, 100);
-            return makePlanAction('queue.consume', labelFor('Consumir cola ' + (step.queue || 'default')), {
-                broker: 'sql',
-                queue: step.queue || 'default',
-                take: queueTake,
-                prefetch: queueTake,
-                connectionStringName: step.connectionStringName || 'DefaultConnection',
-                outputPrefix: 'queue.consume',
-                debug: !!step.debug
-            });
+            var queueParams = {
+                queue: step.queue || '',
+                take: step.take || ''
+            };
+            if (step.debug) queueParams.debug = true;
+            if (step.broker && normalizeKey(step.broker) !== 'SQL') queueParams.broker = step.broker;
+            if (step.connectionStringName && step.connectionStringName !== 'DefaultConnection') queueParams.connectionStringName = step.connectionStringName;
+            return makePlanAction('queue.consume', labelFor('Consumir cola ' + (step.queue || '')), queueParams);
         }
 
         if (step.type === 'subflow') {
@@ -6501,10 +6678,9 @@
         }
 
         if (step.type === 'logger') {
-            return makePlanAction('util.logger', labelFor('Registrar evento'), {
-                level: step.level || 'Info',
-                message: step.message || 'Paso agregado por Constructor IA'
-            });
+            var loggerParams = { message: step.message || '' };
+            if (step.level && step.level !== 'Info') loggerParams.level = step.level;
+            return makePlanAction('util.logger', labelFor('Registrar evento'), loggerParams);
         }
 
         if (step.type === 'end') {
@@ -7087,6 +7263,13 @@
         return ((contract && contract.edges) || []).filter(function (e) { return e.from === key; });
     }
 
+    // FIX84C2Be: destino humano común para el contrato visual legacy fix74.
+    // C2B usa usuarioAsignado (camelCase); conservamos aliases históricos sólo para compatibilidad.
+    function fix74HumanTaskUser(params) {
+        params = params || {};
+        return String(params.usuarioAsignado || params.UsuarioAsignado || params.AsignadoA || params.usuario || '').trim();
+    }
+
     function fix74CoreContractErrors(contract) {
         var errors = [];
         if (!contract || contract.version !== 'fix74b-v1') return ['El plan no contiene un contrato fix74b válido.'];
@@ -7106,7 +7289,7 @@
             var p = n.params || {};
             if (n.nodeType === 'doc.load' && (!p.docTipoCodigo || !p.path)) errors.push('El nodo "' + n.label + '" no tiene tipo documental o ruta.');
             if (n.nodeType === 'control.if' && (!p.field || !p.op)) errors.push('La condición "' + n.label + '" no tiene campo u operador.');
-            if (n.nodeType === 'human.task' && !n.role && !p.usuario && !p.UsuarioAsignado) errors.push('La tarea "' + n.label + '" no tiene rol ni usuario destino.');
+            if (n.nodeType === 'human.task' && !n.role && !fix74HumanTaskUser(p)) errors.push('La tarea "' + n.label + '" no tiene rol ni usuario destino.');
             if (n.nodeType === 'util.notify' && !n.role && !p.usuarioDestino && !p.destino) errors.push('La notificación "' + n.label + '" no tiene destinatario.');
             if (n.nodeType === 'util.logger' && !p.message) errors.push('El logger "' + n.label + '" no tiene mensaje.');
         });
@@ -7309,7 +7492,7 @@
         var p = node.params || {};
         if (node.nodeType === 'doc.load') return 'Cargar documento: ' + (p.docTipoCodigo || node.label);
         if (node.nodeType === 'control.if') return 'Validar ' + (p.field || node.label) + ' (' + (p.op || 'condición') + ')';
-        if (node.nodeType === 'human.task') return 'Crear tarea humana para ' + (node.role || 'destino') + ': ' + (p.titulo || node.label);
+        if (node.nodeType === 'human.task') return 'Crear tarea humana para ' + (node.role || fix74HumanTaskUser(p) || 'destino') + ': ' + (p.titulo || node.label);
         if (node.nodeType === 'util.notify') return 'Notificar a ' + (node.role || 'destino') + ': ' + (p.asunto || node.label);
         if (node.nodeType === 'util.logger') return 'Registrar log ' + (p.level || 'Info') + ': ' + (p.message || node.label);
         if (node.nodeType === 'util.end') return 'Finalizar flujo';
@@ -7621,7 +7804,25 @@
             });
         });
 
-        total += 6;
+        total += 7;
+
+        // FIX84C2Be: caso positivo que antes faltaba en la matriz cliente.
+        // Una human.task destinada sólo por usuarioAsignado es válida y no debe forzar fallback GUIADO.
+        var userTaskPlan = {
+            actions: [
+                makePlanAction('util.start', 'Inicio', {}),
+                makePlanAction('human.task', 'Revisar factura', { titulo: 'Revisar factura', usuarioAsignado: 'OMARD\\USUARIO1' }),
+                makePlanAction('util.end', 'Fin', {})
+            ],
+            proposedConnections: [],
+            missingData: [],
+            branchPlan: { branches: [] }
+        };
+        addStructuredConnection(userTaskPlan.proposedConnections, userTaskPlan.actions[0], userTaskPlan.actions[1], '');
+        addStructuredConnection(userTaskPlan.proposedConnections, userTaskPlan.actions[1], userTaskPlan.actions[2], '');
+        userTaskPlan.contract = buildFix74PlanContract(userTaskPlan, '', []);
+        if (!validateFix74PlanContract(userTaskPlan, '', true, []).length) passed++; else errors.push('Una tarea con usuarioAsignado válido fue rechazada por el contrato cliente.');
+
         var brokenBranch = fix74SyntheticPlan('notify', 'notify', 'false', 'both');
         brokenBranch.contract = buildFix74PlanContract(brokenBranch, '', []);
         brokenBranch.proposedConnections = brokenBranch.proposedConnections.filter(function (e) { return !(e.from === 'Validar CAE' && fix74NormalizeCondition(e.condition) === 'false'); });
@@ -7710,8 +7911,18 @@
 
         var structuredResult = buildStructuredGuideResult(userText);
         if (structuredResult) {
-            renderResult(structuredResult);
-            setStatus('Propuesta estructurada generada. Revisá y aplicá al canvas cuando esté correcta.', 'ok');
+            setStatus('Construyendo el plan con la capa común FIX84C2A...', 'busy');
+            var structuredRunBtn = $('wfAiRun');
+            if (structuredRunBtn) structuredRunBtn.disabled = true;
+            normalizeStructuredGuideResult(structuredResult, userText, function (resolved) {
+                renderResult(resolved);
+                setStatus('Propuesta estructurada generada por la capa común. Revisá y aplicá al canvas cuando esté correcta.', 'ok');
+            }, function (err) {
+                renderResult({ ok: false, error: err.message || String(err) });
+                setStatus('No se pudo construir el plan por FIX84C2A.', 'error');
+            }, function () {
+                if (structuredRunBtn) structuredRunBtn.disabled = false;
+            });
             return;
         }
 

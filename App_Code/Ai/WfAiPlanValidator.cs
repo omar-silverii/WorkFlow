@@ -287,6 +287,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
             if (rol.Length == 0 && usuario.Length == 0)
                 result.Errors.Add("Tarea humana sin destino: debe indicar rol o usuario asignado.");
+            else if (rol.Length > 0 && usuario.Length > 0)
+                result.Errors.Add("Tarea humana con destino ambiguo: elegí un rol o un usuario, no ambos.");
         }
 
         private static void ValidateParams(JObject action, WfAiCatalog catalog, WfAiValidationResult result)
@@ -328,6 +330,11 @@ namespace Intranet.WorkflowStudio.WebForms
             string rol = Convert.ToString(paramsObj["rol"] ?? "").Trim();
             if (rol.Length > 0 && !RoleExists(catalog, rol))
                 result.Errors.Add("Rol inexistente o inactivo: " + rol);
+
+            string usuario = Convert.ToString(paramsObj["usuarioAsignado"] ?? "").Trim();
+            if (nodeType.Equals("human.task", StringComparison.OrdinalIgnoreCase)
+                && usuario.Length > 0 && !UserExists(catalog, usuario))
+                result.Errors.Add("Usuario inexistente o inactivo: " + usuario);
 
             string field = Convert.ToString(paramsObj["field"] ?? "").Trim();
             if (field.Length > 0 && !KnownField(catalog, field))
@@ -393,6 +400,18 @@ namespace Intranet.WorkflowStudio.WebForms
             foreach (var d in catalog.DocTypes)
             {
                 if (string.Equals(d.Codigo, codigo, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool UserExists(WfAiCatalog catalog, string userKey)
+        {
+            if (catalog == null || catalog.Users == null || string.IsNullOrWhiteSpace(userKey)) return false;
+            foreach (WfAiUserInfo user in catalog.Users)
+            {
+                if (user == null) continue;
+                if (string.Equals(user.UserKey ?? string.Empty, userKey, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;

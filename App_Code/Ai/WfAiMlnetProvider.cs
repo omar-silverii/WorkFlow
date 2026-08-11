@@ -131,46 +131,51 @@ namespace Intranet.WorkflowStudio.WebForms
             PhraseEngineDiagnostic phraseEngine = BuildPhraseEngineDiagnostic(userText);
 
             string norm = Normalize(userText);
-            string docTipo = ResolveDocTipo(norm, catalog);
+            // FIX84C2B: los valores declarativos de una tarea humana (Título = ...,
+            // Descripción = ...) no deben contaminar la detección de otros nodos.
+            string actionIntentText = StripExplicitHumanTaskAssignmentsForIntent(userText);
+            string actionIntentNorm = Normalize(actionIntentText);
+            bool hasPrecisionHumanAssignments = !string.Equals(actionIntentText, userText ?? string.Empty, StringComparison.Ordinal);
+            string docTipo = ResolveDocTipo(actionIntentNorm, catalog);
             string prefix = ResolvePrefix(docTipo, catalog);
-            string role = ResolveRole(norm, catalog);
-            string userKey = ResolveUser(norm, catalog);
-            string amount = ExtractAmount(norm);
-            List<GuidedConditionRequest> guidedConditions = AnalyzeGuidedConditions(userText);
+            string role = ResolveRole(actionIntentNorm, catalog);
+            string userKey = ResolveUser(actionIntentNorm, catalog);
+            string amount = ExtractAmount(actionIntentNorm);
+            List<GuidedConditionRequest> guidedConditions = AnalyzeGuidedConditions(actionIntentText);
             bool hasGuidedConditions = guidedConditions.Count > 0;
-            NaturalCompositeConditionRequest naturalCompositeCondition = AnalyzeNaturalCompositeCondition(userText, norm, catalog, prefix, amount);
+            NaturalCompositeConditionRequest naturalCompositeCondition = AnalyzeNaturalCompositeCondition(actionIntentText, actionIntentNorm, catalog, prefix, amount);
             bool hasNaturalCompositeCondition = naturalCompositeCondition != null && naturalCompositeCondition.IsDetected;
-            List<HumanTaskOutcomeRequest> humanTaskOutcomes = AnalyzeHumanTaskOutcomeRequests(userText, norm, catalog);
+            List<HumanTaskOutcomeRequest> humanTaskOutcomes = AnalyzeHumanTaskOutcomeRequests(actionIntentText, actionIntentNorm, catalog);
             bool hasHumanTaskOutcome = humanTaskOutcomes != null && humanTaskOutcomes.Count > 0;
-            List<EmailRequest> emailRequests = AnalyzeEmailRequests(userText, norm, catalog);
+            List<EmailRequest> emailRequests = AnalyzeEmailRequests(actionIntentText, actionIntentNorm, catalog);
             EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
-            NotifyRequest notifyRequest = AnalyzeNotifyRequest(userText, norm);
-            StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(userText);
-            DelayRequest delayRequest = AnalyzeDelayRequest(norm);
-            HttpRequestRequest httpRequest = AnalyzeHttpRequestRequest(userText, norm);
-            SqlRequest sqlRequest = AnalyzeSqlRequest(userText, norm);
-            FileWriteRequest fileWriteRequest = AnalyzeFileWriteRequest(userText, norm);
-            FileReadRequest fileReadRequest = AnalyzeFileReadRequest(userText, norm);
-            QueuePublishRequest queuePublishRequest = AnalyzeQueuePublishRequest(userText, norm);
-            QueueConsumeRequest queueConsumeRequest = AnalyzeQueueConsumeRequest(userText, norm);
-            StandaloneLoggerRequest standaloneLoggerRequest = AnalyzeStandaloneLoggerRequest(userText, norm);
-            string preBranchRole = ExtractPreBranchHumanTaskRole(norm, catalog);
+            NotifyRequest notifyRequest = AnalyzeNotifyRequest(actionIntentText, actionIntentNorm);
+            StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(actionIntentText);
+            DelayRequest delayRequest = AnalyzeDelayRequest(actionIntentNorm);
+            HttpRequestRequest httpRequest = AnalyzeHttpRequestRequest(actionIntentText, actionIntentNorm);
+            SqlRequest sqlRequest = AnalyzeSqlRequest(actionIntentText, actionIntentNorm);
+            FileWriteRequest fileWriteRequest = AnalyzeFileWriteRequest(actionIntentText, actionIntentNorm);
+            FileReadRequest fileReadRequest = AnalyzeFileReadRequest(actionIntentText, actionIntentNorm);
+            QueuePublishRequest queuePublishRequest = AnalyzeQueuePublishRequest(actionIntentText, actionIntentNorm);
+            QueueConsumeRequest queueConsumeRequest = AnalyzeQueueConsumeRequest(actionIntentText, actionIntentNorm);
+            StandaloneLoggerRequest standaloneLoggerRequest = AnalyzeStandaloneLoggerRequest(actionIntentText, actionIntentNorm);
+            string preBranchRole = ExtractPreBranchHumanTaskRole(actionIntentNorm, catalog);
             if (!string.IsNullOrWhiteSpace(preBranchRole))
             {
                 role = preBranchRole;
                 userKey = "";
             }
-            else if (emailRequest.WantsEmail && UserMentionAppearsOnlyInEmailContext(norm, userKey))
+            else if (emailRequest.WantsEmail && UserMentionAppearsOnlyInEmailContext(actionIntentNorm, userKey))
             {
                 userKey = "";
             }
-            else if (notifyRequest.WantsNotify && RoleMentionAppearsOnlyInNotifyContext(norm, role))
+            else if (notifyRequest.WantsNotify && RoleMentionAppearsOnlyInNotifyContext(actionIntentNorm, role))
             {
                 role = "";
                 userKey = "";
             }
 
-            bool wantsCaeValidation = !hasGuidedConditions && !hasNaturalCompositeCondition && (ContainsToken(norm, "cae") || ContainsToken(norm, "cai"));
+            bool wantsCaeValidation = !hasGuidedConditions && !hasNaturalCompositeCondition && (ContainsToken(actionIntentNorm, "cae") || ContainsToken(actionIntentNorm, "cai"));
             if (hasGuidedConditions || hasNaturalCompositeCondition)
             {
                 // Si el constructor guiado o la frase libre armó un IF explícito por campo, evitamos duplicar
@@ -184,27 +189,31 @@ namespace Intranet.WorkflowStudio.WebForms
             // FIX84B3: "leer" por sí solo no identifica un documento. Puede significar
             // leer un mensaje de cola, un archivo u otro dato. La carga documental exige
             // una señal documental real (tipo reconocido, documento/factura/comprobante, etc.).
+            // FIX84C2B: los valores de la sintaxis de precisión de una tarea humana
+            // son datos del nodo, no nuevas intenciones del workflow. Ejemplo:
+            // "Crear una tarea. Rol = COMPRAS; Título = Revisar factura."
+            // no debe crear doc.load solamente porque el título contiene "factura".
             bool hasExplicitDocumentSignal = docTipo.Length > 0
-                || ContainsAny(norm, "cargar", "subir", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
+                || ContainsAny(actionIntentNorm, "cargar", "subir", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
             bool wantsDocument = hasExplicitDocumentSignal;
             if ((fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead)
                 && string.IsNullOrWhiteSpace(docTipo)
-                && !ContainsAny(norm, "nota credito", "nota de credito", "factura", "documento"))
+                && !ContainsAny(actionIntentNorm, "nota credito", "nota de credito", "factura", "documento"))
             {
                 // fix64: frases como "leer archivo" o "escribir archivo" son file.read/file.write,
                 // no doc.load. Evitamos que la palabra "leer" dispare carga documental.
                 wantsDocument = false;
             }
 
-            bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || ContainsAny(norm, "enviar a", "mandar a", "derivar a", "pasar a", "aprobar", "revision");
-            if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(norm))
+            bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || HasExplicitHumanTaskSignal(actionIntentNorm);
+            if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(actionIntentNorm))
                 wantsHumanTask = false;
             if ((httpRequest.WantsHttp || sqlRequest.WantsSql
                     || fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead
                     || queuePublishRequest.WantsQueuePublish || queueConsumeRequest.WantsQueueConsume)
-                && !HasExplicitHumanTaskSignal(norm))
+                && !HasExplicitHumanTaskSignal(actionIntentNorm))
                 wantsHumanTask = false;
-            bool wantsLogger = HasIntent(predictions, "REGISTRAR_LOG") || ContainsAny(norm, "log", "registrar", "dejar constancia");
+            bool wantsLogger = (!hasPrecisionHumanAssignments && HasIntent(predictions, "REGISTRAR_LOG")) || ContainsAny(actionIntentNorm, "log", "registrar", "dejar constancia");
             if (hasHumanTaskOutcome)
             {
                 // fix45: si la frase ya pidió qué registrar al aprobar/rechazar una tarea humana,
@@ -212,17 +221,17 @@ namespace Intranet.WorkflowStudio.WebForms
                 // que mezcle las ramas y oculte la decisión APTO/NO APTO.
                 wantsLogger = false;
             }
-            bool wantsEnd = HasIntent(predictions, "FINALIZAR_FLUJO") || ContainsAny(norm, "finalizar", "terminar", "fin del flujo");
+            bool wantsEnd = (!hasPrecisionHumanAssignments && HasIntent(predictions, "FINALIZAR_FLUJO")) || ContainsAny(actionIntentNorm, "finalizar", "terminar", "fin del flujo");
 
-            BranchAnalysis branches = AnalyzeBranches(norm, catalog, amount);
-            BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(userText, norm, amount);
+            BranchAnalysis branches = AnalyzeBranches(actionIntentNorm, catalog, amount);
+            BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(actionIntentText, actionIntentNorm, amount);
             ApplyPhraseSemanticHintsToLegacyGeneration(phraseEngine, branches, branchLoggerRequest, humanTaskOutcomes);
             bool branchTasksCreated = false;
 
             var actions = new JArray();
             var missing = new JArray();
             var warnings = new JArray();
-            string unknownRoleMention = DetectUnknownRoleMention(norm, catalog);
+            string unknownRoleMention = DetectUnknownRoleMention(actionIntentNorm, catalog);
 
             if (!string.IsNullOrWhiteSpace(unknownRoleMention))
             {
@@ -3738,8 +3747,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 { "administracion finanzas", "ADM_FIN" },
                 { "finanzas", "ADM_FIN" },
                 { "operaciones", "OPERACIONES" },
-                { "operación", "OPERACIONES" },
-                { "operacion", "OPERACIONES" },
                 { "it", "IT" },
                 { "sistemas", "IT" },
                 { "informática", "IT" },
@@ -3903,6 +3910,34 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (p.Length > 0) result.Add(p);
             }
             return result;
+        }
+
+        /// <summary>
+        /// FIX84C2B: elimina solamente los pares Nombre = valor que siguen a una intención
+        /// explícita de tarea humana para que sus valores no se interpreten como otras
+        /// acciones del workflow. La frase original sigue usándose para resolver rol,
+        /// usuario y parámetros mediante el contrato común.
+        /// </summary>
+        private static string StripExplicitHumanTaskAssignmentsForIntent(string text)
+        {
+            string source = text ?? string.Empty;
+            if (source.IndexOf('=') < 0) return source;
+
+            bool humanTaskIntent = Regex.IsMatch(
+                RemoveDiacritics(source),
+                @"\b(?:crear|crea|agregar|agrega|mandar|manda|enviar|envia|asignar|asigna)\b[\s\S]{0,40}\b(?:tarea|revision|revisar|aprobar)\b",
+                RegexOptions.IgnoreCase);
+
+            if (!humanTaskIntent) return source;
+
+            return Regex.Replace(
+                source,
+                @"(?<prefix>\b(?:rol|destino|usuario|user|asignado|t[ií]tulo|tarea|descripci[oó]n|detalle|vencimiento|deadline|minutos|estado(?:\s+pendiente)?)\s*=\s*)(?<value>[^;\r\n\.]*)",
+                delegate (Match m)
+                {
+                    return m.Groups["prefix"].Value;
+                },
+                RegexOptions.IgnoreCase);
         }
 
         private static string Normalize(string text)

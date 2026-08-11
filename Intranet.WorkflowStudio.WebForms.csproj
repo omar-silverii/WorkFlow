@@ -582,6 +582,8 @@
     <Compile Include="App_Code\Ai\WfAiPhraseNormalizer.cs" />
     <Compile Include="App_Code\Ai\WfAiPhraseEngine.cs" />
     <Compile Include="App_Code\Ai\WfAiPlanValidator.cs" />
+    <Compile Include="App_Code\Ai\WfAiResolvedNodeBuilder.cs" />
+    <Compile Include="App_Code\Ai\WfAiUserReferenceResolver.cs" />
     <Compile Include="App_Code\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>

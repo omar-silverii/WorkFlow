@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// FIX84B2: contexto natural reutilizable para resolver referencias humanas sin exigir
+    /// FIX84B2/FIX84C2Ab: contexto natural reutilizable para resolver referencias humanas sin exigir
     /// nombres internos de parámetros. Esta primera implementación cubre el dominio de colas
     /// de la muestra FIX84; no ejecuta nodos ni modifica el runtime.
     /// </summary>
@@ -257,11 +257,31 @@ namespace Intranet.WorkflowStudio.WebForms
             Match sentenceMatch = Regex.Match(text.Substring(start), @"\.(?=\s|$)", RegexOptions.Singleline);
             int sentence = sentenceMatch.Success ? start + sentenceMatch.Index : -1;
             if (sentence >= 0 && (best < 0 || sentence < best)) best = sentence;
-            int semicolon = text.IndexOf(';', start);
+            // FIX84C2Ab: ';' puede separar asignaciones explícitas del tipo
+            // "origen = Prueba; instancia = actual". En ese caso sigue siendo
+            // parte del mismo contenido y no debe cortar la frase de publicación.
+            int semicolon = FindSemanticSemicolonBoundary(text, start);
             if (semicolon >= 0 && (best < 0 || semicolon < best)) best = semicolon;
             int newline = text.IndexOf('\n', start);
             if (newline >= 0 && (best < 0 || newline < best)) best = newline;
             return best;
+        }
+
+        private static int FindSemanticSemicolonBoundary(string text, int start)
+        {
+            if (string.IsNullOrEmpty(text) || start < 0 || start >= text.Length) return -1;
+
+            int pos = text.IndexOf(';', start);
+            while (pos >= 0)
+            {
+                string tail = pos + 1 < text.Length ? text.Substring(pos + 1) : string.Empty;
+                bool continuesAssignments = Regex.IsMatch(tail,
+                    @"^\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ_][A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ_\.\-]*\s*=",
+                    RegexOptions.IgnoreCase);
+                if (!continuesAssignments) return pos;
+                pos = text.IndexOf(';', pos + 1);
+            }
+            return -1;
         }
 
         private static string SliceToBoundary(string text, int start)

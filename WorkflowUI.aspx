@@ -110,6 +110,7 @@
           <textarea id="wfAiPrompt"
                     class="wf-ai-textarea"
                     placeholder="Ejemplo: Cargar una nota de crédito y si tiene CAE avisar a Dirección; si no, advertir a Compras."></textarea>
+          <div class="wf-ai-visual-hint">Podés escribir normalmente. Si querés indicar un dato de forma explícita, usá <strong>Nombre = valor</strong>. Ej.: <strong>Origen = Prueba; Instancia = actual</strong>.</div>
           <div class="wf-ai-visual-hint">Las dudas aparecerán en rojo sobre el canvas. Hacé clic allí para resolverlas.</div>
           <div class="wf-ai-actions">
             <button type="button" class="btn wf-ai-main-action" id="wfAiVerify">Dibujar propuesta</button>
@@ -193,7 +194,7 @@
     <script src="Scripts/workflow.catalog.js?v=dev200"></script>
     <script src="Scripts/workflow.templates.js?v=dev200"></script>    
     <script src="Scripts/workflow.ui.js?v=dev210-fix9"></script>
-    <script src="Scripts/workflow.ai.assistant.js?v=fix84b2"></script>
+    <script src="Scripts/workflow.ai.assistant.js?v=fix84c2b"></script>
     <!-- Inspectores -->
     <script src="Scripts/inspectors/json.validator.js?v=dev200"></script>
     <script src="Scripts/inspectors/fieldPicker.js?v=dev200"></script>
