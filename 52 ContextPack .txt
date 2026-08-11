@@ -1,0 +1,542 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA
+## Cierre de sesión — 10/08/2026
+
+### 1. Proyecto y fuente de verdad
+
+Proyecto principal: Workflow Studio / Workflow Studio WebForms.
+
+Stack conocido:
+- ASP.NET WebForms .NET Framework 4.8
+- C#
+- Visual Studio 2022
+- SQL Server
+- Aplicación intranet
+- Debe funcionar sin depender de Internet ni CDNs
+- Una base / una conexión principal: `DefaultConnection`
+
+Regla permanente y obligatoria:
+- La fuente de verdad es SIEMPRE el ZIP completo más reciente que Omar entregue.
+- No asumir que los archivos quedaron exactamente como en el chat.
+- No inventar tablas, handlers, clases, controles, propiedades o endpoints.
+- Si un archivo no fue inspeccionado, no afirmar cómo está.
+- Antes de proponer cambios: inspeccionar el ZIP real y reconstruir el estado actual.
+- No reescribir arquitectura ni tocar cosas que ya funcionan sin evidencia.
+- Cambios mínimos, precisos y profesionales.
+- Si algo no cierra, decirlo.
+- Si existe un camino mejor, insistir y explicarlo.
+- El asistente debe actuar como ingeniero del sistema, no como ejecutor pasivo de instrucciones.
+
+Método de trabajo permanente:
+1. Omar presenta ContextPack + Prompt + ZIP completo actualizado.
+2. Confirmar que se leyó completo el ContextPack.
+3. Tomar el ZIP como única fuente de verdad.
+4. Inspeccionar archivos reales.
+5. Reconstruir el estado integrado.
+6. Analizar implicancias productivas.
+7. Proponer solución y orden de trabajo.
+8. Discutir decisiones importantes antes de implementar.
+9. Recién después modificar.
+10. Preservar lo que ya está validado.
+
+Formato preferido para fixes:
+- ZIP de reemplazo con estructura real del proyecto.
+- Archivos completos modificados dentro del ZIP.
+- `LEEME`.
+- Si no se entrega ZIP: preferir `DONDE DICE → REEMPLAZAR POR`.
+- Evitar diff `+/-`.
+- No mandar archivos completos viejos o no inspeccionados.
+
+---
+
+## 2. Filosofía actual del Constructor IA
+
+Decisión oficial:
+- El Constructor IA debe trabajar con **interpretación natural + diálogo de aclaración**.
+- El usuario no debe conocer JSON, variables internas ni nombres técnicos de propiedades.
+- La IA debe:
+  1. interpretar lo seguro;
+  2. inferir lo razonable;
+  3. mostrar qué entendió;
+  4. preguntar sólo cuando exista una ambigüedad real;
+  5. permitir revisar;
+  6. confirmar;
+  7. aplicar al canvas.
+
+No seguir ampliando un parser rígido frase por frase.
+
+El usuario puede escribir lenguaje humano:
+- “Mandar a Compras para revisar la factura”
+- “Publicar en la cola Pedidos quiero un mate”
+- “Usar una cola llamada Pedidos y después leer un mensaje”
+
+y el sistema debe resolver lo posible sin exigir sintaxis técnica.
+
+---
+
+## 3. Sintaxis de precisión opcional — decisión nueva validada
+
+Se incorporó una ayuda universal opcional:
+
+`Nombre = valor`
+
+NO es obligatoria.
+NO reemplaza lenguaje natural.
+Sirve cuando el usuario quiere ser explícito.
+
+Ejemplos:
+- `Rol = COMPRAS`
+- `Usuario = Usuario1`
+- `Título = Revisar factura`
+- `Origen = Prueba`
+- `Instancia = actual`
+
+Para varios datos puede usarse `;`:
+`Origen = Prueba; Instancia = actual`
+
+Reglas:
+- El usuario trabaja con nombres humanos.
+- El contrato/capa común traduce a propiedades internas.
+- Nunca exigir `${wf.instanceId}`, `usuarioAsignado`, `RolDestino`, etc.
+- Si el valor referencia un dato conocido, resolverlo con Datos disponibles/catálogo.
+- Si es ambiguo, preguntar.
+
+Ejemplo validado:
+`Publicar en la cola Pedidos con origen = Prueba; instancia = actual.`
+
+Resultado interno:
+{
+  "origen": "Prueba",
+  "instancia": "${wf.instanceId}"
+}
+
+El usuario NO tuvo que escribir `${wf.instanceId}`.
+
+---
+
+## 4. Arquitectura IA actual relevante
+
+Existe una capa contractual nueva en `App_Code/Ai` y un camino común de resolución.
+
+Piezas relevantes ya existentes/integradas (verificar nombres exactos en el ZIP nuevo antes de tocar):
+- `WfAiConstructionContractRegistry`
+- contratos por nodo
+- `WfAiInterpretationDraftBuilder`
+- `WfAiClarificationResolver`
+- `WfAiMlnetProvider`
+- `WfAiCatalogProvider`
+- `WfAiResolvedNodeBuilder`
+- regresión `WF_AiRegression.aspx` / `.cs`
+- cliente `Scripts/workflow.ai.assistant.js`
+
+Principio:
+- Frase y Paso a paso pueden tener UIs/editores distintos.
+- Ambos deben terminar en el MISMO nodo semántico resuelto y la misma construcción contractual.
+- Los editores especializados se conservan.
+- No convertir Paso a paso en parser de frases.
+- No duplicar defaults/normalizaciones en JS y C#.
+
+---
+
+## 5. Estado validado al cierre
+
+### Banco histórico
+
+Validado al final de la sesión:
+- `19 OK`
+- `0 FALLA`
+- `0 SKIP`
+- `Semántica fuerte = 15`
+
+Los casos A–S siguen siendo la red histórica y NO deben modificarse para “hacer pasar” fixes nuevos.
+
+---
+
+## 6. FIX84C1 / FIX84C1b — camino común Logger + Queue Consume
+
+### `util.logger`
+
+Validado por Frase y Paso a paso.
+
+Frase probada:
+`Registrar Operación completada.`
+
+Resultado:
+`Inicio → Registrar evento → Fin`
+
+Inspector:
+- Level = `Info`
+- Message = `Operación completada`
+
+Bug detectado y corregido:
+- La palabra `Operación` se interpretaba como rol `OPERACIONES` y agregaba una tarea humana falsa.
+- Se corrigió para que `operación/operacion` no actúe como alias global del rol.
+
+También:
+- El label no debe inventar mensajes.
+- Paso a paso ya no usa “Paso agregado por Asistente IA”.
+
+### `queue.consume`
+
+Validado por Frase y Paso a paso.
+
+Frase:
+`Usar una cola llamada Pedidos y después leer un mensaje.`
+
+Resultado:
+`Inicio → Consumir cola Pedidos → Fin`
+
+Parámetros validados:
+- Broker = `sql`
+- Queue = `Pedidos`
+- Take = `1`
+- Prefetch = `1`
+- ConnectionString = `DefaultConnection`
+- Output prefix = `queue.consume`
+
+Regla común:
+- `prefetch` deriva del `take` actual.
+- No debe aparecer `doc.load`.
+- No debe aparecer human.task u otros nodos extra.
+
+Regresión de equivalencia C1b:
+- `2/2`
+
+---
+
+## 7. FIX84C2A / FIX84C2Ab — Queue Publish
+
+### Texto simple
+
+Frase:
+`Publicar en la cola Pedidos quiero un mate.`
+
+Resultado:
+`Inicio → Publicar en cola Pedidos → Fin`
+
+Parámetros:
+- Broker = `sql`
+- Queue = `Pedidos`
+- ConnectionString = `DefaultConnection`
+- Payload = texto simple `quiero un mate`
+
+Regla:
+- NO transformar texto simple en JSON artificial.
+- NO inventar cola `default`.
+- NO inventar `instanceId`.
+
+### Paso a paso Publish
+
+Editor especializado validado con modos:
+- Mensaje simple
+- Campos del mensaje
+- Texto/JSON avanzado
+
+No arrancar con JSON precargado ficticio.
+
+### Contenido estructurado + sintaxis de precisión
+
+Frase validada:
+`Publicar en la cola Pedidos con origen = Prueba; instancia = actual.`
+
+Debe generar payload objeto real:
+- `origen = Prueba`
+- `instancia = ${wf.instanceId}`
+
+Paso a paso:
+- Campos del mensaje
+- `Origen = Prueba`
+- `Instancia` tomada de Datos disponibles → `wf.instanceId`
+
+Resultado equivalente.
+
+Regresiones:
+- C2A Publish = `2/2`
+- C2Ab sintaxis opcional = `1/1`
+
+Runtime de Publish NO se tocó.
+
+---
+
+## 8. FIX84C2B…C2Bf — Human Task base
+
+Se trabajó mucho sobre `human.task`.
+
+Estado al cierre:
+- Nodo base por Rol: validado.
+- Nodo base por Usuario: validado.
+- Rol + Usuario simultáneos: validado como ambigüedad real que debe resolverse.
+- C2Bf regresión = `3/3`.
+
+### Por Rol
+
+Frase validada:
+`Crear una tarea. Rol = COMPRAS; Título = Revisar factura.`
+
+Resultado:
+`Inicio → Revisar factura → Fin`
+
+Inspector:
+- Título = `Revisar factura`
+- Rol = `COMPRAS`
+- Usuario vacío
+
+Debe:
+- no preguntar destino;
+- no caer en GUIADO;
+- no mandar a Paso a paso;
+- no crear `doc.load` por la palabra “factura”.
+
+### Por Usuario
+
+Nueva regla de producto:
+El usuario NO debe necesitar escribir dominio Windows.
+
+Frase validada:
+`Crear una tarea. Usuario = Usuario1; Título = Revisar factura.`
+
+El Constructor busca contra usuarios activos reales (catálogo/WF_User).
+
+Si existe una coincidencia única:
+`Usuario1` → internamente `OMARD\USUARIO1`
+
+Resultado:
+`Inicio → Revisar factura → Fin`
+
+Inspector:
+- Rol vacío
+- Usuario asignado = `OMARD\USUARIO1`
+- Título = `Revisar factura`
+
+Reglas:
+- No inventar `OMARD\`.
+- Resolver usando catálogo real.
+- Aceptar UserKey completo también.
+- Aceptar nombre visible si identifica un usuario único.
+- Si varias coincidencias: preguntar.
+- Si no existe: preguntar/ofrecer válidos.
+
+### Rol + Usuario simultáneos
+
+Ejemplo:
+`Crear una tarea. Rol = COMPRAS; Usuario = Usuario1; Título = Revisar factura.`
+
+Esto NO debe resolverse silenciosamente.
+
+Debe:
+- marcar ambigüedad real;
+- preguntar quién debe recibir la tarea;
+- mostrar destinos reales;
+- al elegir uno, dejar un único destino válido;
+- redibujar propuesta;
+- quedar aplicable.
+
+Se verificó que el diálogo funciona y permite elegir el destino real.
+
+### Correcciones importantes hechas durante C2B
+
+1. El provider dejaba `missingData["rolUsuario"]` aunque el destino explícito ya estuviera resuelto.
+   - Corregido.
+
+2. Título del nodo:
+   - antes se veía genérico `Tarea humana`;
+   - ahora el `label` visible usa el `titulo` resuelto.
+   - Ejemplo: `Revisar factura`.
+
+3. Al cambiar el label:
+   - las conexiones propuestas seguían apuntando al label viejo.
+   - corregido para actualizar referencias `from/to`.
+
+4. Validador cliente:
+   - reconocía nombres viejos de usuario pero no `usuarioAsignado`.
+   - corregido.
+
+5. UI cliente:
+   - incorporó reconocimiento de `contract_requirement_exclusive`.
+
+6. Usuario corto:
+   - `Usuario1` se resuelve por catálogo real a identidad canónica.
+
+7. Valores declarativos:
+   - `Título = Revisar factura` no debe activar otras acciones por la palabra “factura”.
+
+### Scope
+
+No tratar `scopeKey` como parámetro humano del nodo si el runtime no lo consume desde params.
+El scope real proviene del contexto/input.
+No prometer una configuración que el runtime no utiliza.
+
+### No tocar
+
+No se modificó:
+- `HHumanTask`
+- `WF_Tarea`
+- RBAC
+- motor
+- runtime
+- canvas
+- backtrack runtime
+
+---
+
+## 9. PENDIENTE PRIORITARIO — NO pasar todavía a control.if
+
+Al final de la sesión Omar recordó algo importante:
+
+`human.task` no es sólo “crear una tarea”.
+
+Hay que revisar antes de considerar C2B funcionalmente completo:
+
+1. Tarea humana simple.
+2. Resultado `APTO`.
+3. Resultado `NO_APTO`.
+4. Resultado `RECHAZADO`.
+5. Mecanismo `volver atrás` / backtrack a una tarea humana anterior.
+
+Conocimiento histórico del proyecto:
+- human.task publica resultados como `wf.tarea.resultado`
+- también existe resultado específico por nodo `wf.tarea.<nodeId>.resultado`
+- APTO / NO APTO fueron validados previamente en flujos reales.
+- Existe mecanismo `wfBack` con conceptos como:
+  - `frameId`
+  - `taskNodeId`
+  - `returnToNodeId`
+  - `cycle`
+- Objetivo del backtrack:
+  - un rechazo puede volver a una tarea humana solicitante previa;
+  - misma instancia;
+  - mismos documentos/contexto;
+  - múltiples ciclos;
+  - auditoría preservada.
+
+IMPORTANTE:
+- No asumir cómo está implementado HOY.
+- Inspeccionar ZIP nuevo.
+- No dar por hecho que `RECHAZADO` es simplemente `NO_APTO`.
+- No empujar automáticamente esta semántica a `control.if`.
+- `RECHAZADO` + volver atrás pertenece conceptualmente a semántica de tarea humana y debe estudiarse como tal.
+
+Próxima tarea recomendada:
+### `FIX84C2Bg — resultados y retroceso de human.task`
+(nombre tentativo; definir después de inspeccionar ZIP)
+
+Antes de tocar código:
+- localizar representación actual en Frase;
+- localizar representación actual en Paso a paso;
+- revisar cómo se generan ramas APTO/NO_APTO;
+- revisar cómo se representa RECHAZADO;
+- revisar backtrack actual;
+- decidir qué parte debe entrar al contrato común y qué parte debe seguir como construcción de flujo/ramas;
+- preservar comportamiento ya validado.
+
+Sólo después de cerrar esto:
+### `FIX84C2C — control.if camino común`
+
+---
+
+## 10. UX pendiente para limpieza posterior
+
+NO mezclar ahora salvo decisión explícita.
+
+### A. Finalizar flujo
+
+Paso a paso muestra:
+“Falta finalizar el flujo. Agregá ‘Finalizar flujo’ como último paso…”
+
+pero si el usuario no lo hace, luego el intérprete agrega un `Fin` técnico automáticamente.
+
+Hay contradicción UX:
+- parece obligatorio;
+- luego se resuelve solo.
+
+Revisar texto/comportamiento más adelante.
+
+### B. Frase técnica generada por Paso a paso
+
+En algunos casos la caja inferior termina mostrando una frase técnica con JSON / `${wf.instanceId}`.
+
+Funcionalmente sirve como representación intermedia,
+pero no debería ser el lenguaje principal del usuario.
+
+A futuro:
+- mantenerlo como detalle técnico;
+- privilegiar representación humana.
+
+---
+
+## 11. Áreas cerradas / preservar
+
+Mientras no haya evidencia de bug real:
+- no tocar motor;
+- no tocar handlers runtime;
+- no tocar mapa de instancia;
+- no tocar canvas/aristas/zoom;
+- no tocar Queue runtime;
+- no tocar SMTP;
+- no tocar Subflow;
+- no tocar documento NC_AR/factura ya cerrados;
+- no rediseñar DB.
+
+El canvas/aristas/zoom está considerado estable salvo bug real explícito.
+
+---
+
+## 12. Próxima sesión — orden exacto
+
+Omar entregará:
+1. este ContextPack;
+2. Prompt de arranque;
+3. ZIP completo actualizado con todos los fixes integrados.
+
+El asistente debe:
+
+### Paso 1
+Confirmar lectura completa del ContextPack.
+
+### Paso 2
+Tomar el ZIP entregado como fuente de verdad.
+
+### Paso 3
+Inspeccionar primero archivos reales.
+
+### Paso 4
+Verificar que la línea integrada contiene efectivamente:
+- C1b
+- C2A
+- C2Ab
+- C2Bf
+- regresiones correspondientes
+- 19 casos históricos intactos
+
+### Paso 5
+NO empezar por `control.if`.
+
+Primero estudiar `human.task` completo:
+- APTO
+- NO_APTO
+- RECHAZADO
+- volver atrás / backtrack
+
+### Paso 6
+Presentar diagnóstico real:
+- cómo funciona hoy por Frase;
+- cómo funciona hoy por Paso a paso;
+- qué parte debe entrar al camino común;
+- qué parte ya funciona y no debe tocarse;
+- propuesta de FIX84C2Bg o equivalente.
+
+### Paso 7
+Discutir con Omar antes de implementar.
+
+---
+
+## 13. Regla final
+
+No perseguir frases aisladas con parches.
+
+Objetivo del producto:
+**Frase natural y Paso a paso deben ser dos interfaces distintas sobre una misma semántica contractual de workflow.**
+
+El usuario expresa intención.
+El sistema conoce la implementación.
+El sistema pregunta cuando no sabe.
+El usuario no tiene que aprender propiedades internas.

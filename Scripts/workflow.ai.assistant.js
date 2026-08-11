@@ -21,6 +21,9 @@
 // fix83b: payload guiado para colas, campos navegables después de consumir y soporte de objetos en Logger.
 // fix83c: genera el contrato fix74b antes de Crear workflow desde Verificar frase y amplía frases naturales de colas.
 // fix84b: diálogo contractual genérico; las respuestas se envían estructuradas sin reescribir la frase original.
+// FIX84C2Bg2b: advertencia explícita = Logger/Warn, preserva contexto de rama y valida borrador funcional contra proyección funcional.
+// FIX84C2Bg2c: Paso a paso conserva APTO/NO APTO como estructura; no reinterpreta la frase descriptiva y colapsa Fin redundante de rama contra Fin común.
+// FIX84C2Bg2d: los valores ya elegidos en Paso a paso son datos declarativos; el fallback no reinterpreta palabras dentro de mensajes/títulos/descripciones como nuevas intenciones.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -1311,7 +1314,7 @@
 
     function findLastHumanTaskOwnerIdForResultBranch() {
         // fix25: si ya agregué una acción dentro de APROBADO, esa acción puede ser otra tarea humana.
-        // Para cargar la rama RECHAZADO de la misma tarea original, no debe tomarse esa tarea hija como dueña.
+        // Para cargar la rama NO_APTO de la misma tarea original, no debe tomarse esa tarea hija como dueña.
         for (var i = guideSteps.length - 1; i >= 0; i--) {
             var step = guideSteps[i];
             if (!step || step.type !== 'human_task') continue;
@@ -1368,8 +1371,8 @@
             items.push(['if_cond_false', 'Rama NO de la última condición']);
         }
         if (hasTask) {
-            items.push(['if_task_ok', 'Resultado APROBADO/APTO de la última tarea humana']);
-            items.push(['if_task_reject', 'Resultado RECHAZADO/NO APTO de la última tarea humana']);
+            items.push(['if_task_ok', 'Resultado APTO de la última tarea humana']);
+            items.push(['if_task_reject', 'Resultado NO APTO de la última tarea humana']);
         }
         return items.map(function (x) {
             return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '') + '>' + htmlEncode(x[1]) + '</option>';
@@ -1801,13 +1804,42 @@
         return t;
     }
 
+    // FIX84C2Bg2c: si una rama termina explícitamente en Fin y el siguiente paso
+    // común también es Fin, ambos representan el mismo cierre funcional. Mantener dos nodos
+    // Fin sólo porque el editor los mostró en dos lugares rompe la convergencia Frase ↔ Paso a paso.
+    function nextMainGuideStepIndexAfter(ownerIndex) {
+        for (var i = ownerIndex + 1; i < guideSteps.length; i++) {
+            if (guideSteps[i] && !isBranchChildStep(guideSteps[i])) return i;
+        }
+        return -1;
+    }
+
+    function isRedundantBranchEndStep(step, stepIndex) {
+        if (!step || step.type !== 'end' || !isBranchChildStep(step)) return false;
+
+        var ownerType = (step.branch === 'if_task_ok' || step.branch === 'if_task_reject')
+            ? 'human_task'
+            : ((step.branch === 'if_cond_true' || step.branch === 'if_cond_false') ? 'condition' : '');
+        if (!ownerType) return false;
+
+        var ownerIndex = findBranchOwnerIndex(step, stepIndex, ownerType);
+        if (ownerIndex < 0) return false;
+
+        var nextMainIndex = nextMainGuideStepIndexAfter(ownerIndex);
+        return nextMainIndex >= 0
+            && guideSteps[nextMainIndex]
+            && guideSteps[nextMainIndex].type === 'end';
+    }
+
     function buildIncrementalPhrase() {
         // FIX84B2: Inicio y Fin normales son estructura del workflow, no palabras que el
         // usuario deba recordar. Solo se verbaliza un Fin cuando es funcional a una rama.
         var parts = [];
         var ctx = { lastCondition: null, lastTaskRole: null, lastQueue: null, conditionsById: {}, tasksById: {}, branchesUsed: false, commonAfterBranchExplained: false };
 
-        guideSteps.forEach(function (step) {
+        guideSteps.forEach(function (step, stepIndex) {
+            // FIX84C2Bg2c: no verbalizar un Fin de rama que ya converge al Fin común.
+            if (isRedundantBranchEndStep(step, stepIndex)) return;
             var normalEnd = step && step.type === 'end' && (!step.branch || step.branch === 'main' || step.branch === 'always');
             if (normalEnd) return;
             var prefix = branchPrefix(step.branch, ctx, step);
@@ -2011,17 +2043,17 @@
                     var okHuman = firstBranchHumanDestination(taskGroups.ok);
                     var rejectHuman = firstBranchHumanDestination(taskGroups.reject);
                     if (okHuman && ownerDest && ownerDest === humanDestinationKey(okHuman)) {
-                        pushUnique(result.warnings, stepShortName(step, idx) + ': la rama APROBADO/APTO vuelve al mismo destino (' + humanDestinationText(step) + '). Es válido si representa otra etapa, pero conviene diferenciar claramente el objetivo.');
+                        pushUnique(result.warnings, stepShortName(step, idx) + ': la rama APTO vuelve al mismo destino (' + humanDestinationText(step) + '). Es válido si representa otra etapa, pero conviene diferenciar claramente el objetivo.');
                     }
                     if (rejectHuman && ownerDest && ownerDest === humanDestinationKey(rejectHuman)) {
-                        pushUnique(result.warnings, stepShortName(step, idx) + ': la rama RECHAZADO/NO APTO vuelve al mismo destino (' + humanDestinationText(step) + '). Revisá si corresponde.');
+                        pushUnique(result.warnings, stepShortName(step, idx) + ': la rama NO APTO vuelve al mismo destino (' + humanDestinationText(step) + '). Revisá si corresponde.');
                     }
 
                     if (nextSameIdx >= 0 && guideSteps[nextSameIdx] && guideSteps[nextSameIdx].type !== 'end') {
                         pushUnique(result.warnings, 'Después de ' + stepShortName(step, idx) + ', el paso común “' + createStepTitle(guideSteps[nextSameIdx]) + '” se ejecutará luego de cualquiera de los resultados humanos de esa tarea.');
                     }
                 } else if (nextSameIdx < 0) {
-                    pushUnique(result.warnings, stepShortName(step, idx) + ': la tarea humana no tiene un paso posterior ni ramas APROBADO/RECHAZADO definidas. Agregá un paso de salida o elegí una rama de resultado.');
+                    pushUnique(result.warnings, stepShortName(step, idx) + ': la tarea humana no tiene un paso posterior ni ramas APTO/NO APTO definidas. Agregá un paso de salida o elegí una rama de resultado.');
                 }
 
                 if (nextSameIdx >= 0) {
@@ -2294,7 +2326,7 @@
                 '<div class="wf-ai-guide-row"><label>Estado pendiente (opcional)</label><input id="wfAiStepTaskPendingState" class="wf-ai-input" placeholder="Si queda vacío, usa el estado normal según el destino" /></div>' +
                 '<div class="wf-ai-guide-note">El scope de la tarea se toma del contexto del workflow (input.scopeKey / sector); no se configura manualmente acá.</div>' +
                 '</details>' +
-                '<div class="wf-ai-guide-note">Después hacé clic en APROBADO/APTO o RECHAZADO/NO APTO en la columna de pasos para agregar acciones según el resultado humano.</div>';
+                '<div class="wf-ai-guide-note">Después hacé clic en APTO o NO APTO en la columna de pasos para agregar acciones según el resultado humano.</div>';
         }
         if (type === 'email_send') {
             return '' +
@@ -3255,7 +3287,7 @@
         var rejectActive = isActiveGuideTarget('if_task_reject', ownerId) ? ' is-active-target' : '';
         var html = '<div class="wf-ai-task-branches">';
 
-        html += '<div class="wf-ai-task-branch wf-ai-task-branch-ok' + okActive + '" data-guide-target-branch="if_task_ok" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">APROBADO / APTO</div>';
+        html += '<div class="wf-ai-task-branch wf-ai-task-branch-ok' + okActive + '" data-guide-target-branch="if_task_ok" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">APTO</div>';
         if (groups.ok.length) {
             html += '<ol class="wf-ai-branch-step-list">';
             groups.ok.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
@@ -3265,7 +3297,7 @@
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-task-branch wf-ai-task-branch-reject' + rejectActive + '" data-guide-target-branch="if_task_reject" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado NO APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">RECHAZADO / NO APTO</div>';
+        html += '<div class="wf-ai-task-branch wf-ai-task-branch-reject' + rejectActive + '" data-guide-target-branch="if_task_reject" data-guide-target-source-id="' + htmlEncode(ownerId) + '" data-guide-target-label="Resultado NO APTO de: ' + htmlEncode(ownerTitle) + '"><div class="wf-ai-task-branch-title">NO APTO</div>';
         if (groups.reject.length) {
             html += '<ol class="wf-ai-branch-step-list">';
             groups.reject.forEach(function (item) { html += renderGuideStepTree(item.step, item.idx, 'wf-ai-step-branch', branchMap, taskBranchMap, path); });
@@ -3275,7 +3307,7 @@
         }
         html += '</div>';
 
-        html += '<div class="wf-ai-task-branch-help">Hacé clic en APROBADO/APTO o RECHAZADO/NO APTO para agregar el próximo paso en ese resultado humano. Operativamente se usa <strong>apto</strong> para aprobado y <strong>no_apto</strong> para no aprobado.</div>';
+        html += '<div class="wf-ai-task-branch-help">Hacé clic en APTO o NO APTO para agregar el próximo paso en ese resultado humano.</div>';
         html += '</div>';
         return html;
     }
@@ -3534,7 +3566,7 @@
             '        <button type="button" class="btn" id="wfAiGuideBuildRun">Armar e interpretar</button>' +
             '        <button type="button" class="btn" id="wfAiGuideClear">Limpiar pasos</button>' +
             '      </div>' +
-            '      <div class="wf-ai-guide-note">No agrega nodos directamente: primero arma la frase y luego usa la interpretación IA local/offline.</div>' +
+            '      <div class="wf-ai-guide-note">Paso a paso conserva la estructura elegida y la normaliza por la misma capa contractual que Frase. La frase inferior queda como descripción humana, no como fuente para reconstruir las ramas.</div>' +
             '    </div>' +
             '  </div>' +
             '</div>';
@@ -4003,13 +4035,42 @@
         return uniqueArray(types);
     }
 
+    function isHumanTaskResultAction(action) {
+        if (!action || String(action.nodeType || '') !== 'control.if') return false;
+        var p = action.params || {};
+        return String(p.field || '').trim().toLowerCase() === 'wf.tarea.resultado';
+    }
+
+    function humanReadableAiActionLabel(action) {
+        if (!action) return '';
+        var label = String(action.label || visualDraftHumanType(action.nodeType) || '').trim();
+        var p = action.params || {};
+
+        // FIX84C2Bg2: el IF sobre wf.tarea.resultado es implementación interna.
+        // En la lectura funcional mostramos la tarea como una decisión APTO/NO APTO,
+        // no como un segundo paso de negocio llamado "Resultado ... aprobado".
+        if (isHumanTaskResultAction(action)) return 'Resultado APTO / NO APTO';
+
+        // El nombre contractual histórico se conserva para no romper regresiones ni JSON,
+        // pero al usuario le mostramos la acción que pidió: registrar una advertencia.
+        if (String(action.nodeType || '') === 'util.logger'
+            && String(p.level || '').toLowerCase() === 'warn'
+            && normalizePhraseForSearch(label).indexOf('registrar rechazo de ') === 0) {
+            return 'Registrar advertencia';
+        }
+
+        return label;
+    }
+
     function phraseVerificationText(plan) {
         var items = [];
         ((plan && plan.actions) || []).forEach(function (a) {
             if (!a || a.action !== 'ADD_NODE') return;
+            if (isHumanTaskResultAction(a)) return;
             var line = '';
             if (a.nodeType) line += a.nodeType;
-            if (a.label) line += (line ? ' · ' : '') + a.label;
+            var label = humanReadableAiActionLabel(a);
+            if (label) line += (line ? ' · ' : '') + label;
             if (line) items.push(line);
         });
         return items;
@@ -4356,6 +4417,111 @@
         return found;
     }
 
+    // FIX84C2Bg2b: "registrar una advertencia" ya expresa una acción de registro.
+    // No debe abrir una aclaración artificial notificación/log/tarea si el plan común ya
+    // la resolvió como util.logger Warn. La duda sigue disponible para usos realmente ambiguos
+    // de "advertencia" donde no existe ese verbo de registro.
+    function explicitWarningLoggerRequest(userText) {
+        var x = normalizePhraseForSearch(userText || '');
+        if (!x) return false;
+        if (textHasAny(x, [
+            'registrar una advertencia',
+            'registrar advertencia',
+            'registrar un warning',
+            'registrar warning',
+            'registrar un log warn',
+            'registrar log warn',
+            'registrar un log de advertencia',
+            'registrar log de advertencia',
+            'logger warn',
+            'log warn'
+        ])) return true;
+        return textHasAny(x, ['dejar constancia']) && textHasAny(x, ['advertencia', 'warning']);
+    }
+
+    function planHasWarnLogger(plan) {
+        var found = false;
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || a.action !== 'ADD_NODE' || String(a.nodeType || '') !== 'util.logger') return;
+            var p = a.params || {};
+            if (String(p.level || '').trim().toLowerCase() === 'warn') found = true;
+        });
+        return found;
+    }
+
+    function fallbackWarningOutcomeScope(plan) {
+        var actions = ((plan && plan.actions) || []).filter(function (a) {
+            return a && a.action === 'ADD_NODE' && a.nodeType;
+        });
+        var conns = (plan && plan.proposedConnections) || [];
+        var byLabel = {};
+        var warnLoggers = [];
+
+        actions.forEach(function (a) {
+            byLabel[normalizePhraseForSearch(a.label || '')] = a;
+            if (String(a.nodeType || '') === 'util.logger'
+                && String((a.params || {}).level || '').trim().toLowerCase() === 'warn') warnLoggers.push(a);
+        });
+
+        // Si hay varias advertencias no adivinamos cuál está aclarando el usuario.
+        if (warnLoggers.length !== 1) return null;
+        var warningKey = normalizePhraseForSearch(warnLoggers[0].label || '');
+        var branchEdge = null;
+        for (var i = 0; i < conns.length; i++) {
+            var c = conns[i];
+            if (!c || normalizePhraseForSearch(c.to || '') !== warningKey) continue;
+            var fromAction = byLabel[normalizePhraseForSearch(c.from || '')];
+            if (fromAction && isHumanTaskResultAction(fromAction)) {
+                branchEdge = c;
+                break;
+            }
+        }
+        if (!branchEdge) return null;
+
+        var resultKey = normalizePhraseForSearch(branchEdge.from || '');
+        var taskEdge = null;
+        for (var j = 0; j < conns.length; j++) {
+            var tc = conns[j];
+            if (!tc || normalizePhraseForSearch(tc.to || '') !== resultKey) continue;
+            var candidate = byLabel[normalizePhraseForSearch(tc.from || '')];
+            if (candidate && String(candidate.nodeType || '') === 'human.task') {
+                taskEdge = tc;
+                break;
+            }
+        }
+        if (!taskEdge) return null;
+
+        var task = byLabel[normalizePhraseForSearch(taskEdge.from || '')];
+        var taskParams = (task && task.params) || {};
+        var taskRole = String(taskParams.rol || taskParams.RolDestino || taskParams.role || '').trim();
+        var cond = fix74NormalizeCondition(branchEdge.condition);
+        return {
+            outcome: cond === 'true' ? 'APTO' : (cond === 'false' ? 'NO APTO' : ''),
+            taskRole: taskRole,
+            taskLabel: String((task && task.label) || '').trim()
+        };
+    }
+
+    function scopedWarningClarification(mode, scope, roles) {
+        if (!scope || !scope.outcome) return '';
+        var owner = scope.taskRole || scope.taskLabel || 'la tarea humana';
+        var detected = detectedRolesInText(roles || '');
+        var destination = '';
+        for (var i = 0; i < detected.length; i++) {
+            if (!scope.taskRole || normalizeKey(detected[i]) !== normalizeKey(scope.taskRole)) {
+                destination = detected[i];
+                break;
+            }
+        }
+        if (!destination && scope.taskRole) destination = scope.taskRole;
+
+        var prefix = 'en el resultado ' + scope.outcome + ' de la tarea de ' + owner + ', ';
+        if (mode === 'logger') return prefix + 'registrar un logger Warn del workflow y conservar esa acción dentro de esa misma rama.';
+        if (mode === 'human_task') return prefix + 'crear una tarea humana de revisión y conservarla dentro de esa misma rama.';
+        if (destination) return prefix + 'notificar internamente a ' + destination + ' con nivel advertencia y conservar esa acción dentro de esa misma rama.';
+        return prefix + 'usar una notificación interna de nivel advertencia y conservar esa acción dentro de esa misma rama.';
+    }
+
     function branchLooksIncomplete(plan) {
         var branches = (plan && plan.branchPlan && plan.branchPlan.branches) || [];
         for (var i = 0; i < branches.length; i++) {
@@ -4392,6 +4558,12 @@
         return roles.length ? roles.join(', ') : 'los roles mencionados';
     }
 
+    function isStructuredStepByStepResult(res) {
+        if (!res) return false;
+        if (res.structuredSource === true) return true;
+        return normalizePhraseForSearch(res.sourceKind || '') === 'step_by_step';
+    }
+
     function fallbackNeedsHelp(res, userText) {
         var plan = (res && res.plan) || {};
         var validation = (res && res.validation) || {};
@@ -4400,6 +4572,12 @@
         if (missing.length) return true;
         if ((validation.errors || []).length) return true;
         if (branchLooksIncomplete(plan)) return true;
+
+        // FIX84C2Bg2d: Paso a paso ya declaró tipo y parámetros de cada nodo.
+        // La frase inferior es sólo una descripción humana del plan y NO puede volver a
+        // convertir valores como Message=Informar, Título=Notificar..., etc. en intenciones.
+        if (isStructuredStepByStepResult(res)) return false;
+
         if (textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']) && !planHasNodeType(plan, 'util.notify')) return true;
         if (textHasAny(userText, ['advertencia', 'warning']) && !planHasNodeType(plan, 'util.logger') && !planHasNodeType(plan, 'util.notify')) return true;
         return false;
@@ -4721,8 +4899,11 @@
         var validation = (res && res.validation) || {};
         var missing = plan.missingData || [];
         var questions = [];
-        var hasNotifyWords = textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
-        var hasWarningWord = textHasAny(userText, ['advertencia', 'warning']);
+        var structuredStepByStep = isStructuredStepByStepResult(res);
+        // FIX84C2Bg2d: en Paso a paso los textos de propiedades son datos, no comandos.
+        // Las preguntas léxicas quedan reservadas al modo Frase.
+        var hasNotifyWords = !structuredStepByStep && textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
+        var hasWarningWord = !structuredStepByStep && textHasAny(userText, ['advertencia', 'warning']);
         var hasCae = textHasAny(userText, ['cae']);
         var hasProveedor = textHasAny(userText, ['proveedor']);
         var hasIt = textHasAny(userText, ['it']);
@@ -4779,18 +4960,30 @@
             questions.push(qBranch);
         }
 
-        // La forma de la advertencia se pregunta solo si realmente sigue teniendo efecto.
-        var warningQuestionUseful = hasWarningWord && !needsSpecificNoBranch && !needsGeneralBranchQuestion && (!generalBranchDecision || generalBranchUsesWarning);
+        // FIX84C2Bg2b: si el usuario ya dijo "registrar una advertencia" y el plan común
+        // produjo un logger Warn, no existe ambigüedad real y no preguntamos nada.
+        // Para los usos genuinamente ambiguos conservamos además el resultado APTO/NO APTO
+        // dentro de la aclaración para que una elección no salte al flujo principal.
+        var explicitWarningLoggerResolved = explicitWarningLoggerRequest(userText) && planHasWarnLogger(plan);
+        var warningQuestionUseful = hasWarningWord
+            && !explicitWarningLoggerResolved
+            && !needsSpecificNoBranch
+            && !needsGeneralBranchQuestion
+            && (!generalBranchDecision || generalBranchUsesWarning);
         if (warningQuestionUseful) {
+            var warningScope = fallbackWarningOutcomeScope(plan);
             var qWarn = {
                 key: 'warning-mode',
                 title: 'La palabra advertencia puede significar dos cosas',
                 detail: 'Puede ser un aviso visible para un rol, un log técnico Warn o una tarea de revisión.',
                 options: []
             };
-            addFallbackOption(qWarn, 'Advertencia como notificación', 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
-            addFallbackOption(qWarn, 'Advertencia como log Warn', 'la advertencia debe ser un logger Warn del workflow.', '');
-            addFallbackOption(qWarn, 'Advertencia como tarea', 'la advertencia debe crear una tarea humana de revisión.', '');
+            addFallbackOption(qWarn, 'Advertencia como notificación',
+                scopedWarningClarification('notify', warningScope, userText) || 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
+            addFallbackOption(qWarn, 'Advertencia como log Warn',
+                scopedWarningClarification('logger', warningScope, userText) || 'la advertencia debe ser un logger Warn del workflow.', '');
+            addFallbackOption(qWarn, 'Advertencia como tarea',
+                scopedWarningClarification('human_task', warningScope, userText) || 'la advertencia debe crear una tarea humana de revisión.', '');
             questions.push(qWarn);
         }
 
@@ -4901,11 +5094,15 @@
         });
         var nodes = [];
         actions.forEach(function (a, idx) {
+            // FIX84C2Bg2: en el borrador funcional, human.task es quien abre APTO/NO APTO.
+            // El control.if sobre wf.tarea.resultado sigue existiendo en el plan técnico y
+            // será aplicado al canvas, pero no se presenta como un paso de negocio adicional.
+            if (isHumanTaskResultAction(a)) return;
             nodes.push({
                 id: 'wf-ai-draft-action-' + idx,
                 action: a,
                 nodeType: String(a.nodeType || ''),
-                label: String(a.label || visualDraftHumanType(a.nodeType)),
+                label: humanReadableAiActionLabel(a),
                 issueKeys: [],
                 layer: idx,
                 lane: 0
@@ -4924,6 +5121,7 @@
             if (wantedType && n.nodeType !== wantedType) continue;
             if (!fallback) fallback = n;
             if (normalizePhraseForSearch(n.label) === wantedLabel) return n;
+            if (normalizePhraseForSearch(n.action && n.action.label || '') === wantedLabel) return n;
         }
         if (!wantedType) {
             for (var j = 0; j < nodes.length; j++) {
@@ -4962,13 +5160,53 @@
         var nodes = visualDraftActionNodes(plan);
         var edges = [];
         var connections = (plan && plan.proposedConnections) || [];
+        var hiddenHumanResultIf = {};
+        var humanResultParent = {};
+
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || !isHumanTaskResultAction(a)) return;
+            hiddenHumanResultIf[normalizePhraseForSearch(a.label || '')] = a;
+        });
+
+        // El plan técnico conserva human.task -> control.if(wf.tarea.resultado). Para el
+        // borrador funcional recordamos qué tarea es dueña de ese IF y luego lo colapsamos.
+        connections.forEach(function (c) {
+            if (!c) return;
+            var toKey = normalizePhraseForSearch(c.to || '');
+            if (hiddenHumanResultIf[toKey]) {
+                humanResultParent[toKey] = { label: c.from || '', nodeType: c.fromNodeType || 'human.task' };
+            }
+        });
 
         connections.forEach(function (c) {
             if (!c) return;
-            var from = visualDraftFindNode(nodes, c.from, c.fromNodeType);
-            var to = visualDraftFindNode(nodes, c.to, c.toNodeType);
+            var fromLabel = c.from || '';
+            var fromType = c.fromNodeType || '';
+            var toLabel = c.to || '';
+            var toType = c.toNodeType || '';
+            var condition = String(c.condition || 'always');
+            var displayCondition = condition;
+            var fromKey = normalizePhraseForSearch(fromLabel);
+            var toKey = normalizePhraseForSearch(toLabel);
+
+            // La arista task -> IF técnico no se dibuja: el usuario ve directamente las
+            // salidas APTO / NO APTO desde la propia tarea humana.
+            if (hiddenHumanResultIf[toKey]) return;
+
+            if (hiddenHumanResultIf[fromKey]) {
+                var parent = humanResultParent[fromKey];
+                if (!parent) return;
+                fromLabel = parent.label;
+                fromType = parent.nodeType;
+                var branch = normalizePhraseForSearch(condition);
+                if (branch === 'si' || branch === 'true') displayCondition = 'APTO';
+                else if (branch === 'no' || branch === 'false') displayCondition = 'NO APTO';
+            }
+
+            var from = visualDraftFindNode(nodes, fromLabel, fromType);
+            var to = visualDraftFindNode(nodes, toLabel, toType);
             if (!from || !to || from === to) return;
-            edges.push({ from: from, to: to, condition: String(c.condition || 'always'), issue: false });
+            edges.push({ from: from, to: to, condition: condition, displayCondition: displayCondition, issue: false });
         });
 
         if (!edges.length && nodes.length > 1) {
@@ -5159,7 +5397,7 @@
                 text.setAttribute('class', 'wf-ai-draft-edge-label' + (e.issue ? ' issue' : ''));
                 text.setAttribute('x', ((e.from.x + e.from.w + e.to.x) / 2));
                 text.setAttribute('y', ((e.from.y + e.from.h / 2 + e.to.y + e.to.h / 2) / 2) - 8);
-                text.textContent = e.condition;
+                text.textContent = e.displayCondition || e.condition;
                 svg.appendChild(text);
             }
         });
@@ -5523,6 +5761,51 @@
         }).join('');
     }
 
+    // FIX84C2C1: el mismo ConditionBuilder contractual puede resolver una condición
+    // simple, compuesta ALL/ANY o una expresión avanzada. Reutiliza Datos disponibles y
+    // los operadores del editor Paso a paso; no obliga a escribir propiedades internas.
+    function fix84c2c1ConditionRuleRowHtml(fieldPath, selectedOp, value) {
+        var path = String(fieldPath || defaultConditionField() || '').trim();
+        var meta = findAvailableField(path) || { type: 'texto' };
+        var op = String(selectedOp || '').trim();
+        return '<div class="wf-ai-queue-field-row" data-fix84b-condition-rule="1">' +
+            '<div class="wf-ai-queue-field-head"><strong>Regla</strong><button type="button" class="btn wf-ai-queue-remove" data-fix84b-condition-rule-remove="1">Quitar</button></div>' +
+            '<label class="wf-ai-queue-mini-label">Dato</label><select class="wf-ai-select" data-fix84b-condition-rule-field="1">' + availableFieldOptions(path) + '</select>' +
+            '<label class="wf-ai-queue-mini-label">Comparación</label><select class="wf-ai-select" data-fix84b-condition-rule-op="1">' + conditionOperatorOptions(meta.type, op) + '</select>' +
+            '<div data-fix84b-condition-rule-value-row="1"><label class="wf-ai-queue-mini-label">Valor</label><input class="wf-ai-input" data-fix84b-condition-rule-value="1" value="' + htmlEncode(value == null ? '' : value) + '" placeholder="Valor de comparación" /></div>' +
+            '</div>';
+    }
+
+    function fix84c2c1SyncConditionRule(row) {
+        if (!row) return;
+        var field = row.querySelector('[data-fix84b-condition-rule-field]');
+        var op = row.querySelector('[data-fix84b-condition-rule-op]');
+        var valueRow = row.querySelector('[data-fix84b-condition-rule-value-row]');
+        if (!field || !op) return;
+        var current = String(op.value || '');
+        var meta = findAvailableField(String(field.value || '')) || { type: 'texto' };
+        op.innerHTML = conditionOperatorOptions(meta.type, current);
+        if (valueRow) valueRow.style.display = operatorNeedsValue(op.value) ? '' : 'none';
+    }
+
+    function fix84c2c1SyncConditionBuilder(control) {
+        if (!control) return;
+        var mode = control.querySelector('[data-fix84b-condition-mode]');
+        var selected = String(mode && mode.value || 'simple');
+        var simple = control.querySelector('[data-fix84b-condition-simple]');
+        var compound = control.querySelector('[data-fix84b-condition-compound]');
+        var expression = control.querySelector('[data-fix84b-condition-expression-box]');
+        if (simple) simple.style.display = selected === 'simple' ? '' : 'none';
+        if (compound) compound.style.display = selected === 'compound' ? '' : 'none';
+        if (expression) expression.style.display = selected === 'expression' ? '' : 'none';
+
+        var simpleOp = control.querySelector('[data-fix84b-condition-op]');
+        var simpleValueRow = control.querySelector('[data-fix84b-condition-value-row]');
+        if (simpleValueRow && simpleOp) simpleValueRow.style.display = operatorNeedsValue(simpleOp.value) ? '' : 'none';
+
+        Array.prototype.forEach.call(control.querySelectorAll('[data-fix84b-condition-rule]'), fix84c2c1SyncConditionRule);
+    }
+
     function fix84bControlHtml(c) {
         c = c || {};
         var id = String(c.id || '');
@@ -5550,10 +5833,20 @@
             html += '<div class="wf-ai-queue-fields" data-fix84b-payload-rows="1">' + fix84bPayloadRowsHtml(current) + '</div>';
             html += '<button type="button" class="btn wf-ai-queue-add" data-fix84b-payload-add="1">Agregar campo</button>';
         } else if (kind === 'condition_builder') {
-            html += '<label class="wf-ai-fix84b-label">Dato a evaluar</label><select class="wf-ai-select" data-fix84b-condition-field="1">' + availableFieldOptions(defaultConditionField()) + '</select>';
-            html += '<label class="wf-ai-fix84b-label">Comparación</label><select class="wf-ai-select" data-fix84b-condition-op="1">' +
-                '<option value="=">igual a</option><option value="!=">distinto de</option><option value=">">mayor que</option><option value=">=">mayor o igual</option><option value="<">menor que</option><option value="<=">menor o igual</option><option value="contains">contiene</option><option value="not_contains">no contiene</option><option value="not_empty">no está vacío</option><option value="empty">está vacío</option></select>';
-            html += '<label class="wf-ai-fix84b-label">Valor</label><input class="wf-ai-input" data-fix84b-condition-value="1" placeholder="Valor de comparación" />';
+            var initialField = defaultConditionField();
+            var initialMeta = findAvailableField(initialField) || { type: 'texto' };
+            html += '<label class="wf-ai-fix84b-label">Forma de la condición</label><select class="wf-ai-select" data-fix84b-condition-mode="1"><option value="simple">Una condición</option><option value="compound">Varias reglas</option><option value="expression">Expresión avanzada</option></select>';
+            html += '<div data-fix84b-condition-simple="1">';
+            html += '<label class="wf-ai-fix84b-label">Dato a evaluar</label><select class="wf-ai-select" data-fix84b-condition-field="1">' + availableFieldOptions(initialField) + '</select>';
+            html += '<label class="wf-ai-fix84b-label">Comparación</label><select class="wf-ai-select" data-fix84b-condition-op="1">' + conditionOperatorOptions(initialMeta.type, '') + '</select>';
+            html += '<div data-fix84b-condition-value-row="1"><label class="wf-ai-fix84b-label">Valor</label><input class="wf-ai-input" data-fix84b-condition-value="1" placeholder="Valor de comparación" /></div>';
+            html += '</div>';
+            html += '<div data-fix84b-condition-compound="1" style="display:none">';
+            html += '<label class="wf-ai-fix84b-label">Cómo combinar las reglas</label><select class="wf-ai-select" data-fix84b-condition-rules-mode="1"><option value="all">Todas deben cumplirse / Y</option><option value="any">Cualquiera puede cumplirse / O</option></select>';
+            html += '<div class="wf-ai-queue-fields" data-fix84b-condition-rules="1">' + fix84c2c1ConditionRuleRowHtml(initialField, '', '') + '</div>';
+            html += '<button type="button" class="btn wf-ai-queue-add" data-fix84b-condition-rule-add="1">Agregar regla</button>';
+            html += '</div>';
+            html += '<div data-fix84b-condition-expression-box="1" style="display:none"><label class="wf-ai-fix84b-label">Expresión avanzada</label><textarea class="wf-ai-input" data-fix84b-condition-expression="1" rows="3" placeholder="Ej.: contains(lower(${input.text}), \'urgente\')"></textarea></div>';
         } else if (kind === 'boolean') {
             html += '<select class="wf-ai-select" data-fix84b-value="1"><option value="true">Sí</option><option value="false">No</option></select>';
         } else if (kind === 'number') {
@@ -5684,6 +5977,28 @@
             return String(text && text.value || '').trim();
         }
         if (kind === 'condition_builder') {
+            var modeControl = control.querySelector('[data-fix84b-condition-mode]');
+            var mode = String(modeControl && modeControl.value || 'simple');
+            if (mode === 'compound') {
+                var rulesMode = control.querySelector('[data-fix84b-condition-rules-mode]');
+                var rules = [];
+                Array.prototype.forEach.call(control.querySelectorAll('[data-fix84b-condition-rule]'), function (row) {
+                    var fieldRule = row.querySelector('[data-fix84b-condition-rule-field]');
+                    var opRule = row.querySelector('[data-fix84b-condition-rule-op]');
+                    var valueRule = row.querySelector('[data-fix84b-condition-rule-value]');
+                    var fieldValue = String(fieldRule && fieldRule.value || '').trim();
+                    var opValue = String(opRule && opRule.value || '').trim();
+                    if (!fieldValue || !opValue) return;
+                    var rule = { field: fieldValue, op: opValue };
+                    if (operatorNeedsValue(opValue)) rule.value = String(valueRule && valueRule.value || '').trim();
+                    rules.push(rule);
+                });
+                return { mode: 'compound', rulesMode: String(rulesMode && rulesMode.value || 'all'), rules: rules };
+            }
+            if (mode === 'expression') {
+                var expression = control.querySelector('[data-fix84b-condition-expression]');
+                return { mode: 'expression', expression: String(expression && expression.value || '').trim() };
+            }
             var field = control.querySelector('[data-fix84b-condition-field]');
             var op = control.querySelector('[data-fix84b-condition-op]');
             var value = control.querySelector('[data-fix84b-condition-value]');
@@ -5736,6 +6051,74 @@
                 var control = btn.closest ? btn.closest('[data-fix84b-id]') : null;
                 if (!control) return;
                 submitFix84bAnswer(control.getAttribute('data-fix84b-id'), collectFix84bAnswer(control));
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-mode]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var control = sel.closest ? sel.closest('[data-fix84b-id]') : null;
+                fix84c2c1SyncConditionBuilder(control);
+            });
+            var control = sel.closest ? sel.closest('[data-fix84b-id]') : null;
+            fix84c2c1SyncConditionBuilder(control);
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-field]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var control = sel.closest ? sel.closest('[data-fix84b-id]') : null;
+                var op = control && control.querySelector('[data-fix84b-condition-op]');
+                if (op) {
+                    var meta = findAvailableField(String(sel.value || '')) || { type: 'texto' };
+                    op.innerHTML = conditionOperatorOptions(meta.type, op.value);
+                }
+                fix84c2c1SyncConditionBuilder(control);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-op]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var control = sel.closest ? sel.closest('[data-fix84b-id]') : null;
+                fix84c2c1SyncConditionBuilder(control);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-rule-add]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var control = btn.closest ? btn.closest('[data-fix84b-id]') : null;
+                var rows = control && control.querySelector('[data-fix84b-condition-rules]');
+                if (rows) rows.insertAdjacentHTML('beforeend', fix84c2c1ConditionRuleRowHtml(defaultConditionField(), '', ''));
+                bindFix84bActions(container);
+                fix84c2c1SyncConditionBuilder(control);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-rule-remove]'), function (btn) {
+            if (btn.getAttribute('data-fix84b-bound') === '1') return;
+            btn.setAttribute('data-fix84b-bound', '1');
+            btn.addEventListener('click', function () {
+                var row = btn.closest ? btn.closest('[data-fix84b-condition-rule]') : null;
+                var rows = row && row.parentNode;
+                if (row && rows && rows.querySelectorAll('[data-fix84b-condition-rule]').length > 1) rows.removeChild(row);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-rule-field]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var row = sel.closest ? sel.closest('[data-fix84b-condition-rule]') : null;
+                fix84c2c1SyncConditionRule(row);
+            });
+        });
+        Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-condition-rule-op]'), function (sel) {
+            if (sel.getAttribute('data-fix84b-bound') === '1') return;
+            sel.setAttribute('data-fix84b-bound', '1');
+            sel.addEventListener('change', function () {
+                var row = sel.closest ? sel.closest('[data-fix84b-condition-rule]') : null;
+                var valueRow = row && row.querySelector('[data-fix84b-condition-rule-value-row]');
+                if (valueRow) valueRow.style.display = operatorNeedsValue(sel.value) ? '' : 'none';
             });
         });
         Array.prototype.forEach.call(container.querySelectorAll('[data-fix84b-payload-add]'), function (btn) {
@@ -6027,8 +6410,15 @@
         plan.contract = buildFix74PlanContract(plan, userText || '');
 
         var validation = buildFunctionalValidation();
-        var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
-        consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+
+        // FIX84C2Bg2c: APTO/NO APTO ya vienen definidos por el editor estructurado.
+        // No volvemos a inferir la rama leyendo la frase descriptiva generada por Paso a paso;
+        // esa validación legacy confundía el rol dueño de la tarea con el destinatario/contenido
+        // de una acción de rama (por ejemplo Logger Warn) y fabricaba un SI/NO faltante.
+        if (!hasHumanTaskResultBranches()) {
+            var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
+            consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+        }
 
         var serverValidation = commonResponse && commonResponse.validation || {};
         (serverValidation.errors || []).forEach(function (e) { pushUnique(validation.errors, e); });
@@ -6052,6 +6442,8 @@
         return {
             ok: true,
             provider: 'constructor-local + contract-common',
+            sourceKind: 'step_by_step',
+            structuredSource: true,
             model: 'Constructor IA estructurado FIX84C2B',
             messageToUser: plan.messageToUser,
             plan: plan,
@@ -6834,6 +7226,10 @@
         function ensureActionForIndex(idx) {
             var step = guideSteps[idx];
             if (!step) return null;
+
+            // FIX84C2Bg2c: un Fin dentro de APTO/NO APTO que desemboca inmediatamente
+            // en el Fin común no crea un segundo nodo técnico. La rama conecta al mismo Fin.
+            if (isRedundantBranchEndStep(step, idx)) return null;
             if (actionByStepId[step.id]) return actionByStepId[step.id];
 
             var action = actionForGuideStep(step, labelFor);
@@ -7366,14 +7762,74 @@
         });
         ((model && model.edges) || []).forEach(function (e) {
             if (!e || e.issue || !e.from || !e.to) return;
+            // El texto visible puede ser más humano que el label técnico (ej. "Registrar advertencia").
+            // Para validar identidad usamos siempre el action real asociado al nodo visual.
+            var fromAction = e.from.action || {};
+            var toAction = e.to.action || {};
             edges.push({
-                from: fix74LabelKey(e.from.label),
-                to: fix74LabelKey(e.to.label),
+                from: fix74LabelKey(fromAction.label || e.from.label),
+                to: fix74LabelKey(toAction.label || e.to.label),
                 condition: fix74NormalizeCondition(e.condition),
-                fromNodeType: String(e.from.nodeType || ''),
-                toNodeType: String(e.to.nodeType || '')
+                fromNodeType: String(fromAction.nodeType || e.from.nodeType || ''),
+                toNodeType: String(toAction.nodeType || e.to.nodeType || '')
             });
         });
+        nodes.sort(function (a, b) { var ak = a.key + '|' + a.nodeType, bk = b.key + '|' + b.nodeType; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        edges.sort(function (a, b) { var ak = a.from + '|' + a.condition + '|' + a.to, bk = b.from + '|' + b.condition + '|' + b.to; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
+        return { nodes: nodes, edges: edges };
+    }
+
+    // FIX84C2Bg2b: el contrato del canvas sigue siendo técnico y conserva el IF
+    // wf.tarea.resultado. El borrador funcional, en cambio, lo oculta y dibuja APTO/NO APTO
+    // directamente desde human.task. Para comprobar que el dibujo representa el mismo flujo
+    // necesitamos comparar contra una proyección funcional equivalente, no contra la huella
+    // técnica que luego recibirá el canvas.
+    function fix74FunctionalGraphSnapshotFromPlan(plan) {
+        var allNodes = fix74CanonicalNodesFromPlan(plan);
+        var allEdges = fix74CanonicalEdgesFromPlan(plan);
+        var actionByKey = {};
+        var hidden = {};
+        var parentByHidden = {};
+
+        ((plan && plan.actions) || []).forEach(function (a) {
+            if (!a || String(a.action || '').toUpperCase() !== 'ADD_NODE' || !a.nodeType) return;
+            var key = fix74LabelKey(a.label);
+            actionByKey[key] = a;
+            if (isHumanTaskResultAction(a)) hidden[key] = true;
+        });
+
+        allEdges.forEach(function (e) {
+            if (!e || !hidden[e.to]) return;
+            var parentAction = actionByKey[e.from];
+            if (parentAction && String(parentAction.nodeType || '') === 'human.task') parentByHidden[e.to] = e.from;
+        });
+
+        var nodes = allNodes.filter(function (n) { return n && !hidden[n.key]; });
+        var edges = [];
+        allEdges.forEach(function (e) {
+            if (!e) return;
+            if (hidden[e.to]) return; // human.task -> IF técnico queda colapsado visualmente.
+
+            var copy = {
+                from: e.from,
+                to: e.to,
+                condition: e.condition,
+                fromNodeType: e.fromNodeType,
+                toNodeType: e.toNodeType
+            };
+
+            if (hidden[e.from]) {
+                var parentKey = parentByHidden[e.from];
+                if (!parentKey) return;
+                copy.from = parentKey;
+                copy.fromNodeType = String((actionByKey[parentKey] && actionByKey[parentKey].nodeType) || 'human.task');
+            }
+
+            // No deberían quedar aristas hacia un nodo técnico oculto.
+            if (hidden[copy.from] || hidden[copy.to] || copy.from === copy.to) return;
+            edges.push(copy);
+        });
+
         nodes.sort(function (a, b) { var ak = a.key + '|' + a.nodeType, bk = b.key + '|' + b.nodeType; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
         edges.sort(function (a, b) { var ak = a.from + '|' + a.condition + '|' + a.to, bk = b.from + '|' + b.condition + '|' + b.to; return ak < bk ? -1 : (ak > bk ? 1 : 0); });
         return { nodes: nodes, edges: edges };
@@ -7474,7 +7930,9 @@
 
         if (includeVisual !== false) {
             var visual = fix74GraphSnapshotFromVisualModel(buildVisualDraftModel(plan, []));
-            if (fix74GraphFingerprint(visual) !== stored.graphFingerprint) errors.push('El borrador visual no coincide con el contrato del plan.');
+            var expectedVisual = fix74FunctionalGraphSnapshotFromPlan(plan);
+            if (fix74GraphFingerprint(visual) !== fix74GraphFingerprint(expectedVisual))
+                errors.push('El borrador visual funcional no coincide con la semántica del plan.');
         }
         return uniqueArray(errors);
     }
@@ -7872,8 +8330,10 @@
         plan.contract = buildFix74PlanContract(plan, userText || '');
 
         var validation = buildFunctionalValidation();
-        var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
-        consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+        if (!hasHumanTaskResultBranches()) {
+            var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
+            consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
+        }
 
         var contractErrors = validateFix74PlanContract(plan, userText || '', true);
         contractErrors.forEach(function (e) { pushUnique(validation.errors, e); });
@@ -7892,6 +8352,8 @@
         return {
             ok: true,
             provider: 'constructor-local',
+            sourceKind: 'step_by_step',
+            structuredSource: true,
             model: 'Constructor IA estructurado fix74b',
             messageToUser: plan.messageToUser,
             plan: plan,

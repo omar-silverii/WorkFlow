@@ -1,0 +1,194 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA
+
+Voy a pasarte:
+
+1. este ContextPack;
+2. este Prompt;
+3. el ZIP completo y actualizado de Workflow Studio, con todos los fixes integrados hasta el cierre del 10/08/2026.
+
+Quiero que trabajes con el método permanente acordado.
+
+## PASO 1 — Leer
+
+Leé completo el ContextPack.
+
+Confirmame que lo leíste y que entendés cuál es el pendiente real.
+
+## PASO 2 — Fuente de verdad
+
+El ZIP que te entregue es la única fuente de verdad.
+
+No asumas que los archivos quedaron exactamente como en el chat ni como en fixes anteriores.
+
+No inventes clases, controles, tablas, handlers, propiedades, endpoints o métodos.
+
+## PASO 3 — Inspección antes de proponer
+
+Antes de sugerir cambios:
+- abrí el ZIP;
+- inspeccioná archivos reales;
+- reconstruí el estado integrado;
+- verificá que los fixes hasta C2Bf estén realmente presentes;
+- verificá la regresión actual;
+- recién después proponé.
+
+Si un archivo no fue inspeccionado, no afirmes cómo está.
+
+## ESTADO ESPERADO AL CIERRE ANTERIOR
+
+La última sesión quedó validada con:
+
+- Banco histórico: 19 OK / 0 FALLA / 0 SKIP
+- Semántica fuerte = 15
+- C1b Logger + Queue Consume = 2/2
+- C2A Queue Publish = 2/2
+- C2Ab sintaxis de precisión opcional = 1/1
+- C2Bf Human Task base = 3/3
+
+Validaciones manuales cerradas:
+- Logger Frase ↔ Paso a paso.
+- Queue Consume Frase ↔ Paso a paso.
+- Queue Publish texto simple y estructurado.
+- Sintaxis opcional `Nombre = valor`.
+- Human Task por Rol.
+- Human Task por Usuario corto (`Usuario1` resuelto por catálogo real).
+- Human Task Rol + Usuario como ambigüedad real con diálogo.
+
+No des nada de esto por supuesto: comprobalo en el ZIP.
+
+## OBJETIVO PRIORITARIO DE ESTA NUEVA SESIÓN
+
+NO avanzar directamente a `control.if`.
+
+Primero debemos completar el análisis funcional de `human.task`.
+
+Omar recordó al cierre que Human Task también tiene:
+- APTO;
+- NO_APTO;
+- RECHAZADO;
+- y un mecanismo de volver atrás / backtrack a una tarea humana anterior.
+
+Quiero que inspecciones cómo está implementado HOY en el ZIP real.
+
+Necesito reconstruir:
+
+1. cómo representa Frase una tarea humana simple;
+2. cómo genera/representa ramas APTO y NO_APTO;
+3. cómo representa RECHAZADO;
+4. cómo funciona hoy volver atrás/backtrack;
+5. cómo lo hace Paso a paso;
+6. qué parte pertenece al contrato común de `human.task`;
+7. qué parte pertenece a construcción de flujo/ramas;
+8. qué partes ya funcionan y NO deben tocarse.
+
+No asumas que RECHAZADO = NO_APTO.
+
+No empujes automáticamente RECHAZADO/backtrack a `control.if`.
+
+Primero tratá esta funcionalidad como semántica de tarea humana.
+
+## POSIBLE SIGUIENTE FIX
+
+El nombre tentativo es:
+
+`FIX84C2Bg — resultados y retroceso de human.task`
+
+Pero NO lo implementes automáticamente.
+
+Primero:
+- inspección real;
+- diagnóstico;
+- propuesta profesional;
+- orden de trabajo;
+- discusión conmigo.
+
+Después decidimos el fix.
+
+## DESPUÉS
+
+Sólo cuando Human Task quede realmente cerrado, seguimos con:
+
+`FIX84C2C — control.if camino común`
+
+Ahí habrá que preservar:
+- condición simple field/op/value;
+- reglas múltiples;
+- ALL / ANY;
+- negaciones;
+- caso contrario;
+- ramas SI/NO;
+- integración con Datos disponibles;
+- comportamiento histórico validado.
+
+Pero eso NO es el primer trabajo de la sesión.
+
+## REGLAS OBLIGATORIAS
+
+- no inventar;
+- no cambiar arquitectura sin necesidad;
+- no reescribir cosas que funcionan;
+- no tocar motor/runtime/handlers/canvas salvo evidencia;
+- no modificar los 19 casos históricos para hacer pasar un fix;
+- preservar regresiones existentes;
+- no esconder errores haciendo más permisivo el test;
+- cuando un test automático pasa pero la UI real falla, confiar en la evidencia real y fortalecer la regresión;
+- seguir usando el camino común contractual, no crear otra capa paralela;
+- Paso a paso puede conservar editores especializados;
+- Frase y Paso a paso deben converger en la misma semántica resuelta;
+- `Nombre = valor` es ayuda opcional, nunca requisito;
+- el usuario no debe conocer propiedades internas ni dominio Windows;
+- los usuarios se resuelven contra catálogo real, nunca inventando prefijos;
+- si falta una decisión real, preguntar;
+- si hay ambigüedad real, no decidir silenciosamente.
+
+## FORMA DE COLABORAR
+
+Quiero método colaborativo y no burocrático.
+
+Yo puedo plantear una necesidad sin saber cómo debería resolverse técnicamente en un producto de workflows.
+
+Vos debés:
+- estudiar;
+- reconstruir;
+- detectar implicancias;
+- proponer el camino profesional;
+- marcar riesgos;
+- discutir decisiones conmigo;
+- insistir si hay una alternativa claramente mejor.
+
+No quiero que simplemente aceptes mi primera idea si ves una solución mejor.
+
+## FORMATO DE FIX
+
+Cuando implementemos:
+- ZIP de reemplazo;
+- estructura real;
+- archivos completos modificados;
+- LEEME;
+- causa;
+- fix exacto;
+- archivos tocados;
+- pruebas esperadas.
+
+No usar diff +/- salvo que yo lo pida.
+
+## RECORDATORIOS UX PENDIENTES — NO MEZCLAR AHORA
+
+1. Paso a paso avisa que falta `Finalizar flujo`, pero luego agrega Fin técnico automáticamente.
+   Hay que corregir esa contradicción de texto/UX más adelante.
+
+2. En algunos pasos, la caja inferior puede mostrar frase técnica con JSON / `${wf.instanceId}`.
+   A futuro debería quedar como detalle técnico, no como lenguaje principal.
+
+No abras esos temas salvo que afecten directamente el trabajo actual.
+
+## PRIMERA RESPUESTA QUE ESPERO
+
+Cuando te entregue los archivos:
+1. confirmá que leíste el ContextPack;
+2. confirmá que recibiste el ZIP;
+3. inspeccioná el ZIP real;
+4. decime qué encontraste sobre el estado integrado;
+5. y recién después proponé cómo estudiar/cerrar APTO / NO_APTO / RECHAZADO / volver atrás de Human Task.
+
+No empieces escribiendo código.

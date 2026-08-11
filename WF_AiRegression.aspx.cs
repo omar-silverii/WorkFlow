@@ -699,6 +699,54 @@ namespace Intranet.WorkflowStudio.WebForms
                     true));
 
                 summary.Items.Add(RunHumanTaskAmbiguityCase(catalog));
+
+                // FIX84C2Bg2: en diseño, human.task expone APTO / NO_APTO.
+                // RECHAZADO / Volver atrás queda fuera del Constructor y pertenece a la ejecución.
+                summary.Items.Add(RunC2Bg2SingleNegativeBranchCase(
+                    catalog,
+                    "C2BG2_NO_APTO_EXPLICITO",
+                    "Crear una tarea. Rol = COMPRAS; Título = Revisar factura. Si Compras indica NO APTO, registrar una advertencia indicando que debe corregirse."));
+
+                summary.Items.Add(RunC2Bg2SingleNegativeBranchCase(
+                    catalog,
+                    "C2BG2_RECHAZA_COMO_NO_APTO",
+                    "Crear una tarea. Rol = COMPRAS; Título = Revisar factura. Si Compras la rechaza, registrar una advertencia indicando que debe corregirse."));
+
+                summary.Items.Add(RunC2Bg2SiblingBranchesCase(catalog));
+
+                // FIX84C2Bg2b: "registrar una advertencia" es una intención explícita
+                // de util.logger Warn; no debe convertirse en util.notify ni requerir una
+                // segunda decisión funcional. La comprobación del fallback visual se completa
+                // manualmente en WorkflowUI porque esa capa vive en JavaScript cliente.
+                summary.Items.Add(RunC2Bg2bExplicitWarningLoggerCase(catalog));
+
+                // FIX84C2Bg2c: el contrato objetivo de Paso a paso para una Human Task con
+                // APTO/NO APTO debe converger al mismo tramo técnico que Frase y usar un solo Fin.
+                // La ausencia del falso fallback SI/NO se valida además manualmente en WorkflowUI.
+                summary.Items.Add(RunC2Bg2cStepByStepHumanBranchesCase(catalog));
+
+                // FIX84C2Bg2d: un valor ya elegido dentro de Paso a paso es dato declarativo.
+                // Message = "Informar" debe seguir siendo texto de util.logger y nunca convertirse
+                // en util.notify ni en una nueva intención al normalizar el plan.
+                summary.Items.Add(RunC2Bg2dDeclarativeMessageCase(catalog));
+
+                // FIX84C2C1: control.if entra al camino común contractual. En esta etapa no
+                // reemplazamos el parser natural histórico; verificamos que candidatos equivalentes
+                // de Frase y Paso a paso terminen en la misma definición canónica.
+                summary.Items.Add(RunC2C1ControlIfSimpleCase(catalog));
+                summary.Items.Add(RunC2C1ControlIfNoValueCase(catalog));
+                summary.Items.Add(RunC2C1ControlIfAllCase(catalog));
+                summary.Items.Add(RunC2C1ControlIfAnyCase(catalog));
+
+                // FIX84C2C2: ahora probamos Frase natural real contra el mismo contrato C2C1.
+                // No se cambian los casos históricos A-S para hacer pasar esta serie.
+                summary.Items.Add(RunC2C2NaturalTotalCase(catalog));
+                summary.Items.Add(RunC2C2NaturalNoSuperaCase(catalog));
+                summary.Items.Add(RunC2C2NaturalCaeCase(catalog));
+                summary.Items.Add(RunC2C2NaturalAllCase(catalog));
+                summary.Items.Add(RunC2C2NaturalAnyCase(catalog));
+                // FIX84C2C2b: prueba de punta a punta de acciones naturales en ambas ramas.
+                summary.Items.Add(RunC2C2bNaturalBranchActionsCase(catalog));
             }
             catch (Exception ex)
             {
@@ -985,6 +1033,854 @@ namespace Intranet.WorkflowStudio.WebForms
             return item;
         }
 
+        private static ConstructionEquivalenceItem RunC2Bg2SingleNegativeBranchCase(WfAiCatalog catalog, string id, string phrase)
+        {
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = id,
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var model = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            if (model == null || !model.Ok || model.Plan == null)
+            {
+                item.Message = "La frase no produjo un plan válido.";
+                return item;
+            }
+
+            WfAiResolvedPlanResult common = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase");
+            if (common == null || common.Plan == null || common.Errors.Count > 0)
+            {
+                item.Message = "La resolución común devolvió errores: " + (common == null ? "resultado nulo" : JoinList(common.Errors));
+                return item;
+            }
+
+            JObject plan = common.Plan;
+            JObject task = FindActionByType(plan, "human.task");
+            JObject resultIf = FindHumanResultIfAction(plan, "COMPRAS");
+            JObject negativeLogger = FindOutcomeLoggerAction(plan, "COMPRAS", false);
+            JObject end = FindActionByType(plan, "util.end");
+            WfAiValidationResult validation = new WfAiPlanValidator().Validate(plan, catalog);
+            WfAiInterpretationDraft draft = new WfAiInterpretationDraftBuilder().Build(phrase, plan, catalog);
+
+            string taskLabel = ActionLabelForRegression(task);
+            string resultLabel = ActionLabelForRegression(resultIf);
+            string loggerLabel = ActionLabelForRegression(negativeLogger);
+            string endLabel = ActionLabelForRegression(end);
+            JObject taskParams = task == null ? null : task["params"] as JObject;
+            JObject loggerParams = negativeLogger == null ? null : negativeLogger["params"] as JObject;
+            string taskTitle = Convert.ToString(taskParams == null ? "" : taskParams["titulo"] ?? "");
+            string loggerMessage = Convert.ToString(loggerParams == null ? "" : loggerParams["message"] ?? "");
+
+            bool shapeOk = task != null && resultIf != null && negativeLogger != null && end != null
+                && HasPlanConnection(plan, taskLabel, resultLabel, "")
+                && HasPlanConnection(plan, resultLabel, endLabel, "SI")
+                && HasPlanConnection(plan, resultLabel, loggerLabel, "NO")
+                && HasPlanConnection(plan, loggerLabel, endLabel, "")
+                && !HasPlanConnection(plan, resultLabel, loggerLabel, "SI")
+                && !HasPlanConnection(plan, resultLabel, endLabel, "NO");
+
+            bool contentOk = loggerMessage.IndexOf("debe corregirse", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool titleOk = string.Equals(taskTitle.Trim(), "Revisar factura", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(taskLabel, "Revisar factura", StringComparison.OrdinalIgnoreCase);
+            bool noArtificialQuestion = draft != null && draft.BlockingClarificationCount == 0;
+            bool validationOk = validation != null && validation.Ok && validation.Errors.Count == 0;
+
+            item.Ok = shapeOk && contentOk && titleOk && noArtificialQuestion && validationOk;
+            item.Message = item.Ok
+                ? "APTO continúa por la salida normal y NO APTO ejecuta la advertencia como rama hermana; no aparece una segunda pregunta SI/NO."
+                : "La tarea simple no quedó bifurcada correctamente. Forma=" + shapeOk
+                    + ", mensaje=" + contentOk
+                    + ", título=" + titleOk
+                    + ", aclaraciones=" + (draft == null ? -1 : draft.BlockingClarificationCount)
+                    + ", validación=" + validationOk;
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2Bg2SiblingBranchesCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Crear una tarea. Rol = COMPRAS; Título = Revisar factura. Si Compras la aprueba, registrar un evento informativo indicando que fue aprobada. Si Compras la rechaza, registrar una advertencia indicando que debe corregirse.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2BG2_APTO_NO_APTO_HERMANAS",
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var model = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            WfAiResolvedPlanResult common = model == null || !model.Ok || model.Plan == null
+                ? null
+                : new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase");
+            JObject plan = common == null ? null : common.Plan;
+
+            JObject task = FindActionByType(plan, "human.task");
+            JObject resultIf = FindHumanResultIfAction(plan, "COMPRAS");
+            JObject approvedLogger = FindOutcomeLoggerAction(plan, "COMPRAS", true);
+            JObject negativeLogger = FindOutcomeLoggerAction(plan, "COMPRAS", false);
+            JObject end = FindActionByType(plan, "util.end");
+            WfAiValidationResult validation = plan == null ? null : new WfAiPlanValidator().Validate(plan, catalog);
+            WfAiInterpretationDraft draft = plan == null ? null : new WfAiInterpretationDraftBuilder().Build(phrase, plan, catalog);
+
+            string taskLabel = ActionLabelForRegression(task);
+            string resultLabel = ActionLabelForRegression(resultIf);
+            string approvedLabel = ActionLabelForRegression(approvedLogger);
+            string negativeLabel = ActionLabelForRegression(negativeLogger);
+            string endLabel = ActionLabelForRegression(end);
+            JObject taskParams = task == null ? null : task["params"] as JObject;
+            string taskTitle = Convert.ToString(taskParams == null ? "" : taskParams["titulo"] ?? "");
+
+            bool siblings = task != null && resultIf != null && approvedLogger != null && negativeLogger != null && end != null
+                && HasPlanConnection(plan, taskLabel, resultLabel, "")
+                && HasPlanConnection(plan, resultLabel, approvedLabel, "SI")
+                && HasPlanConnection(plan, resultLabel, negativeLabel, "NO")
+                && HasPlanConnection(plan, approvedLabel, endLabel, "")
+                && HasPlanConnection(plan, negativeLabel, endLabel, "")
+                && !HasPlanConnection(plan, approvedLabel, negativeLabel, "")
+                && !HasPlanConnection(plan, negativeLabel, approvedLabel, "");
+
+            bool titleOk = string.Equals(taskTitle.Trim(), "Revisar factura", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(taskLabel, "Revisar factura", StringComparison.OrdinalIgnoreCase);
+            bool noArtificialQuestion = draft != null && draft.BlockingClarificationCount == 0;
+            bool validationOk = common != null && common.Errors.Count == 0
+                && validation != null && validation.Ok && validation.Errors.Count == 0;
+
+            item.Ok = siblings && titleOk && noArtificialQuestion && validationOk;
+            item.Message = item.Ok
+                ? "APTO y NO APTO son salidas hermanas de la misma tarea: ninguna acción de una rama queda en serie con la otra."
+                : "APTO/NO APTO no quedaron como ramas hermanas. Ramas=" + siblings
+                    + ", título=" + titleOk
+                    + ", aclaraciones=" + (draft == null ? -1 : draft.BlockingClarificationCount)
+                    + ", validación=" + validationOk;
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2Bg2bExplicitWarningLoggerCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Crear una tarea. Rol = COMPRAS; Título = Revisar factura. Si Compras la rechaza, registrar una advertencia indicando que debe corregirse.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2BG2B_REGISTRAR_ADVERTENCIA_WARN",
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var model = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            WfAiResolvedPlanResult common = model == null || !model.Ok || model.Plan == null
+                ? null
+                : new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase");
+            JObject plan = common == null ? null : common.Plan;
+
+            JObject task = FindActionByType(plan, "human.task");
+            JObject resultIf = FindHumanResultIfAction(plan, "COMPRAS");
+            JObject negativeLogger = FindOutcomeLoggerAction(plan, "COMPRAS", false);
+            JObject notify = FindActionByType(plan, "util.notify");
+            JObject end = FindActionByType(plan, "util.end");
+            WfAiValidationResult validation = plan == null ? null : new WfAiPlanValidator().Validate(plan, catalog);
+            WfAiInterpretationDraft draft = plan == null ? null : new WfAiInterpretationDraftBuilder().Build(phrase, plan, catalog);
+
+            JObject loggerParams = negativeLogger == null ? null : negativeLogger["params"] as JObject;
+            string level = Convert.ToString(loggerParams == null ? "" : loggerParams["level"] ?? "");
+            string message = Convert.ToString(loggerParams == null ? "" : loggerParams["message"] ?? "");
+            string taskLabel = ActionLabelForRegression(task);
+            string resultLabel = ActionLabelForRegression(resultIf);
+            string loggerLabel = ActionLabelForRegression(negativeLogger);
+            string endLabel = ActionLabelForRegression(end);
+
+            bool loggerOk = negativeLogger != null
+                && string.Equals(level.Trim(), "Warn", StringComparison.OrdinalIgnoreCase)
+                && message.IndexOf("debe corregirse", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool noNotify = notify == null;
+            bool branchOk = task != null && resultIf != null && negativeLogger != null && end != null
+                && HasPlanConnection(plan, taskLabel, resultLabel, "")
+                && HasPlanConnection(plan, resultLabel, loggerLabel, "NO")
+                && HasPlanConnection(plan, resultLabel, endLabel, "SI")
+                && HasPlanConnection(plan, loggerLabel, endLabel, "");
+            bool noContractualQuestion = draft != null && draft.BlockingClarificationCount == 0;
+            bool validationOk = common != null && common.Errors.Count == 0
+                && validation != null && validation.Ok && validation.Errors.Count == 0;
+
+            item.Ok = loggerOk && noNotify && branchOk && noContractualQuestion && validationOk;
+            item.Message = item.Ok
+                ? "'Registrar una advertencia' queda como util.logger Warn dentro de NO APTO, sin util.notify ni aclaración contractual adicional."
+                : "La advertencia explícita no quedó cerrada como Logger/Warn. Logger=" + loggerOk
+                    + ", notifyExtra=" + (!noNotify)
+                    + ", rama=" + branchOk
+                    + ", aclaraciones=" + (draft == null ? -1 : draft.BlockingClarificationCount)
+                    + ", validación=" + validationOk;
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2Bg2cStepByStepHumanBranchesCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Crear una tarea. Rol = COMPRAS; Título = Revisar factura. Si Compras la rechaza, registrar una advertencia indicando que debe corregirse.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2BG2C_PASO_A_PASO_RAMAS_HUMANAS",
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var phraseModel = new WfAiMlnetProvider().Interpret(phrase, catalog, "");
+            WfAiResolvedPlanResult phraseCommon = phraseModel == null || !phraseModel.Ok || phraseModel.Plan == null
+                ? null
+                : new WfAiResolvedNodeBuilder(catalog).ResolvePlan(phraseModel.Plan, phrase, "phrase");
+
+            var stepPlan = new JObject
+            {
+                ["intent"] = "build_workflow",
+                ["actions"] = new JArray
+                {
+                    new JObject { ["action"] = "ADD_NODE", ["nodeType"] = "util.start", ["label"] = "Inicio", ["params"] = new JObject() },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "human.task", ["label"] = "Revisar factura",
+                        ["params"] = new JObject { ["rol"] = "COMPRAS", ["titulo"] = "Revisar factura" }
+                    },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "control.if", ["label"] = "Resultado de COMPRAS aprobado",
+                        ["params"] = new JObject { ["field"] = "wf.tarea.resultado", ["op"] = "==", ["value"] = "apto" }
+                    },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "util.logger", ["label"] = "Registrar advertencia",
+                        ["params"] = new JObject { ["level"] = "Warn", ["message"] = "debe corregirse" }
+                    },
+                    new JObject { ["action"] = "ADD_NODE", ["nodeType"] = "util.end", ["label"] = "Fin", ["params"] = new JObject() }
+                },
+                ["missingData"] = new JArray(),
+                ["proposedConnections"] = new JArray
+                {
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Inicio", ["to"] = "Revisar factura", ["fromNodeType"] = "util.start", ["toNodeType"] = "human.task" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Revisar factura", ["to"] = "Resultado de COMPRAS aprobado", ["fromNodeType"] = "human.task", ["toNodeType"] = "control.if" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Resultado de COMPRAS aprobado", ["to"] = "Fin", ["fromNodeType"] = "control.if", ["toNodeType"] = "util.end", ["condition"] = "SI" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Resultado de COMPRAS aprobado", ["to"] = "Registrar advertencia", ["fromNodeType"] = "control.if", ["toNodeType"] = "util.logger", ["condition"] = "NO" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Registrar advertencia", ["to"] = "Fin", ["fromNodeType"] = "util.logger", ["toNodeType"] = "util.end" }
+                }
+            };
+
+            WfAiResolvedPlanResult stepCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(stepPlan, "", "step_by_step");
+            JObject phrasePlan = phraseCommon == null ? null : phraseCommon.Plan;
+            JObject normalizedStepPlan = stepCommon == null ? null : stepCommon.Plan;
+
+            JObject phraseTask = FindActionByType(phrasePlan, "human.task");
+            JObject stepTask = FindActionByType(normalizedStepPlan, "human.task");
+            JObject phraseLogger = FindOutcomeLoggerAction(phrasePlan, "COMPRAS", false);
+            JObject stepLogger = FindActionByType(normalizedStepPlan, "util.logger");
+            JObject stepIf = FindHumanResultIfAction(normalizedStepPlan, "COMPRAS");
+            JObject stepEnd = FindActionByType(normalizedStepPlan, "util.end");
+
+            string[] stepTypes = AddNodeTypes(normalizedStepPlan);
+            bool oneEnd = stepTypes.Count(t => string.Equals(t, "util.end", StringComparison.OrdinalIgnoreCase)) == 1;
+            bool expectedTypes = stepTypes.SequenceEqual(new[] { "util.start", "human.task", "control.if", "util.logger", "util.end" }, StringComparer.OrdinalIgnoreCase);
+
+            string taskLabel = ActionLabelForRegression(stepTask);
+            string ifLabel = ActionLabelForRegression(stepIf);
+            string loggerLabel = ActionLabelForRegression(stepLogger);
+            string endLabel = ActionLabelForRegression(stepEnd);
+            bool shapeOk = normalizedStepPlan != null && stepTask != null && stepIf != null && stepLogger != null && stepEnd != null
+                && HasPlanConnection(normalizedStepPlan, "Inicio", taskLabel, "")
+                && HasPlanConnection(normalizedStepPlan, taskLabel, ifLabel, "")
+                && HasPlanConnection(normalizedStepPlan, ifLabel, endLabel, "SI")
+                && HasPlanConnection(normalizedStepPlan, ifLabel, loggerLabel, "NO")
+                && HasPlanConnection(normalizedStepPlan, loggerLabel, endLabel, "");
+
+            bool taskEquivalent = phraseTask != null && stepTask != null
+                && JToken.DeepEquals(CanonicalResolvedAction(phraseTask, "human.task"), CanonicalResolvedAction(stepTask, "human.task"));
+            bool loggerEquivalent = phraseLogger != null && stepLogger != null
+                && JToken.DeepEquals(CanonicalResolvedAction(phraseLogger, "util.logger"), CanonicalResolvedAction(stepLogger, "util.logger"));
+
+            WfAiValidationResult stepValidation = normalizedStepPlan == null ? null : new WfAiPlanValidator().Validate(normalizedStepPlan, catalog);
+            bool validationOk = stepCommon != null && stepCommon.Errors.Count == 0
+                && stepValidation != null && stepValidation.Ok && stepValidation.Errors.Count == 0;
+
+            item.Ok = expectedTypes && oneEnd && shapeOk && taskEquivalent && loggerEquivalent && validationOk;
+            item.Message = item.Ok
+                ? "Paso a paso normaliza al mismo tramo semántico de Frase: Human Task → resultado APTO/NO APTO, Logger Warn en NO APTO y un único Fin común."
+                : "Paso a paso no converge al contrato objetivo. tipos=" + expectedTypes
+                    + ", unFin=" + oneEnd
+                    + ", forma=" + shapeOk
+                    + ", tarea=" + taskEquivalent
+                    + ", logger=" + loggerEquivalent
+                    + ", validación=" + validationOk;
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2Bg2dDeclarativeMessageCase(WfAiCatalog catalog)
+        {
+            const string phrase = "crear una tarea con Rol = COMPRAS; Título = Revisar la factura, si la tarea de COMPRAS queda no apta registrar un log Warn con mensaje Informar, si la tarea de COMPRAS queda apta finalizar.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2BG2D_PASO_A_PASO_VALORES_DECLARATIVOS",
+                NodeType = "human.task",
+                Phrase = phrase
+            };
+
+            var stepPlan = new JObject
+            {
+                ["intent"] = "build_workflow",
+                ["actions"] = new JArray
+                {
+                    new JObject { ["action"] = "ADD_NODE", ["nodeType"] = "util.start", ["label"] = "Inicio", ["params"] = new JObject() },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "human.task", ["label"] = "Revisar la factura",
+                        ["params"] = new JObject { ["rol"] = "COMPRAS", ["titulo"] = "Revisar la factura" }
+                    },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "control.if", ["label"] = "Resultado de COMPRAS aprobado",
+                        ["params"] = new JObject { ["field"] = "wf.tarea.resultado", ["op"] = "==", ["value"] = "apto" }
+                    },
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE", ["nodeType"] = "util.logger", ["label"] = "Registrar log Warn",
+                        ["params"] = new JObject { ["level"] = "Warn", ["message"] = "Informar" }
+                    },
+                    new JObject { ["action"] = "ADD_NODE", ["nodeType"] = "util.end", ["label"] = "Fin", ["params"] = new JObject() }
+                },
+                ["missingData"] = new JArray(),
+                ["proposedConnections"] = new JArray
+                {
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Inicio", ["to"] = "Revisar la factura", ["fromNodeType"] = "util.start", ["toNodeType"] = "human.task" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Revisar la factura", ["to"] = "Resultado de COMPRAS aprobado", ["fromNodeType"] = "human.task", ["toNodeType"] = "control.if" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Resultado de COMPRAS aprobado", ["to"] = "Fin", ["fromNodeType"] = "control.if", ["toNodeType"] = "util.end", ["condition"] = "SI" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Resultado de COMPRAS aprobado", ["to"] = "Registrar log Warn", ["fromNodeType"] = "control.if", ["toNodeType"] = "util.logger", ["condition"] = "NO" },
+                    new JObject { ["action"] = "CONNECT_NODES", ["from"] = "Registrar log Warn", ["to"] = "Fin", ["fromNodeType"] = "util.logger", ["toNodeType"] = "util.end" }
+                }
+            };
+
+            WfAiResolvedPlanResult common = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(stepPlan, phrase, "step_by_step");
+            JObject plan = common == null ? null : common.Plan;
+            JObject logger = FindActionByType(plan, "util.logger");
+            JObject notify = FindActionByType(plan, "util.notify");
+            JObject loggerParams = logger == null ? null : logger["params"] as JObject;
+            string level = Convert.ToString(loggerParams == null ? "" : loggerParams["level"] ?? "");
+            string message = Convert.ToString(loggerParams == null ? "" : loggerParams["message"] ?? "");
+            WfAiValidationResult validation = plan == null ? null : new WfAiPlanValidator().Validate(plan, catalog);
+
+            bool sourceOk = common != null && string.Equals(common.SourceKind, "step_by_step", StringComparison.OrdinalIgnoreCase);
+            bool loggerOk = logger != null
+                && string.Equals(level.Trim(), "Warn", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(message.Trim(), "Informar", StringComparison.Ordinal);
+            bool noNotify = notify == null;
+            bool validationOk = common != null && common.Errors.Count == 0
+                && validation != null && validation.Ok && validation.Errors.Count == 0;
+
+            item.Ok = sourceOk && loggerOk && noNotify && validationOk;
+            item.Message = item.Ok
+                ? "Paso a paso conserva Message = Informar como dato declarativo de util.logger Warn; no aparece util.notify ni se reinterpretan propiedades como nuevas intenciones."
+                : "El valor declarativo de Paso a paso fue alterado o reinterpretado. source=" + sourceOk
+                    + ", logger=" + loggerOk
+                    + ", notifyExtra=" + (!noNotify)
+                    + ", validación=" + validationOk;
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2C1ControlIfSimpleCase(WfAiCatalog catalog)
+        {
+            return RunC2C1ControlIfContractCase(
+                catalog,
+                "C2C1_IF_SIMPLE",
+                "Condición simple: Total = 200000.",
+                new JObject
+                {
+                    ["field"] = "${biz.notaCredito.total}",
+                    ["op"] = "=",
+                    ["value"] = "200000"
+                },
+                new JObject
+                {
+                    ["field"] = "biz.notaCredito.total",
+                    ["op"] = "==",
+                    ["value"] = "200000"
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C1ControlIfNoValueCase(WfAiCatalog catalog)
+        {
+            return RunC2C1ControlIfContractCase(
+                catalog,
+                "C2C1_IF_SIN_VALOR",
+                "Condición simple sin valor: CAE no está vacío.",
+                new JObject
+                {
+                    ["field"] = "${biz.notaCredito.cae}",
+                    ["op"] = "not_empty",
+                    ["value"] = "este valor debe desaparecer"
+                },
+                new JObject
+                {
+                    ["field"] = "biz.notaCredito.cae",
+                    ["op"] = "not_empty"
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C1ControlIfAllCase(WfAiCatalog catalog)
+        {
+            return RunC2C1ControlIfContractCase(
+                catalog,
+                "C2C1_IF_ALL",
+                "Condición compuesta ALL: CAE informado Y total > 200000.",
+                new JObject
+                {
+                    ["rulesMode"] = "Y",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["fieldPath"] = "${biz.notaCredito.cae}", ["operator"] = "not_empty", ["value"] = "ignorar" },
+                        new JObject { ["field"] = "biz.notaCredito.total", ["op"] = ">", ["value"] = "200000" }
+                    }
+                },
+                new JObject
+                {
+                    ["rulesMode"] = "all",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["field"] = "biz.notaCredito.cae", ["op"] = "not_empty" },
+                        new JObject { ["field"] = "biz.notaCredito.total", ["op"] = ">", ["value"] = "200000" }
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C1ControlIfAnyCase(WfAiCatalog catalog)
+        {
+            return RunC2C1ControlIfContractCase(
+                catalog,
+                "C2C1_IF_ANY",
+                "Condición compuesta ANY: CAE vacío O comprobante asociado informado.",
+                new JObject
+                {
+                    ["rulesMode"] = "OR",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["fieldPath"] = "${biz.notaCredito.cae}", ["operator"] = "empty" },
+                        new JObject { ["field"] = "biz.notaCredito.comprobanteAsociado.numero", ["op"] = "not_empty" }
+                    }
+                },
+                new JObject
+                {
+                    ["rulesMode"] = "any",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["field"] = "biz.notaCredito.cae", ["op"] = "empty" },
+                        new JObject { ["field"] = "biz.notaCredito.comprobanteAsociado.numero", ["op"] = "not_empty" }
+                    }
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C1ControlIfContractCase(
+            WfAiCatalog catalog,
+            string id,
+            string description,
+            JObject phraseParams,
+            JObject stepParams,
+            bool verifyCompoundClarification)
+        {
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = id,
+                NodeType = "control.if",
+                Phrase = description
+            };
+
+            var phrasePlan = C2C1IfPlan(phraseParams);
+            var stepPlan = C2C1IfPlan(stepParams);
+            var builder = new WfAiResolvedNodeBuilder(catalog);
+            WfAiResolvedPlanResult phraseCommon = builder.ResolvePlan(phrasePlan, description, "phrase");
+            WfAiResolvedPlanResult stepCommon = builder.ResolvePlan(stepPlan, string.Empty, "step_by_step");
+
+            JObject phraseAction = FindActionByType(phraseCommon == null ? null : phraseCommon.Plan, "control.if");
+            JObject stepAction = FindActionByType(stepCommon == null ? null : stepCommon.Plan, "control.if");
+            JObject phraseCanonical = CanonicalResolvedAction(phraseAction, "control.if");
+            JObject stepCanonical = CanonicalResolvedAction(stepAction, "control.if");
+
+            bool covered = WfAiResolvedNodeBuilder.IsCovered("control.if");
+            bool commonOk = phraseCommon != null && stepCommon != null
+                && phraseCommon.Errors.Count == 0 && stepCommon.Errors.Count == 0
+                && phraseAction != null && stepAction != null
+                && JToken.DeepEquals(phraseCanonical, stepCanonical);
+
+            bool draftOk = false;
+            if (commonOk)
+            {
+                var phraseDraft = new WfAiInterpretationDraftBuilder().Build(description, phraseCommon.Plan, catalog);
+                var stepDraft = new WfAiInterpretationDraftBuilder().Build(string.Empty, stepCommon.Plan, catalog);
+                draftOk = phraseDraft != null && stepDraft != null
+                    && phraseDraft.BlockingClarificationCount == 0
+                    && stepDraft.BlockingClarificationCount == 0;
+            }
+
+            bool clarificationOk = true;
+            if (verifyCompoundClarification)
+                clarificationOk = C2C1CompoundClarificationResolves(catalog, stepParams);
+
+            item.PhraseJson = phraseCanonical.ToString(Formatting.None);
+            item.StepJson = stepCanonical.ToString(Formatting.None);
+            item.Ok = covered && commonOk && draftOk && clarificationOk;
+            item.Message = item.Ok
+                ? "Frase y Paso a paso convergen en el mismo control.if contractual; operadores/campos/modo quedan canónicos y la definición completa no pide aclaraciones adicionales."
+                    + (verifyCompoundClarification ? " El diálogo ConditionBuilder también resuelve reglas múltiples." : string.Empty)
+                : "control.if no convergió correctamente. Cubierto=" + covered
+                    + ", común=" + commonOk
+                    + ", borrador=" + draftOk
+                    + ", aclaraciónCompuesta=" + clarificationOk
+                    + ", Frase=" + item.PhraseJson
+                    + ", Paso=" + item.StepJson
+                    + ", erroresFrase=" + (phraseCommon == null ? "n/a" : JoinList(phraseCommon.Errors))
+                    + ", erroresPaso=" + (stepCommon == null ? "n/a" : JoinList(stepCommon.Errors));
+            return item;
+        }
+
+        private static JObject C2C1IfPlan(JObject parameters)
+        {
+            return new JObject
+            {
+                ["intent"] = "build_workflow",
+                ["actions"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["action"] = "ADD_NODE",
+                        ["nodeType"] = "control.if",
+                        ["label"] = "Condición C2C1",
+                        ["params"] = parameters == null ? new JObject() : parameters.DeepClone()
+                    }
+                },
+                ["missingData"] = new JArray(),
+                ["proposedConnections"] = new JArray()
+            };
+        }
+
+        private static bool C2C1CompoundClarificationResolves(WfAiCatalog catalog, JObject expectedParams)
+        {
+            JObject basePlan = C2C1IfPlan(new JObject());
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft draft = draftBuilder.Build(string.Empty, basePlan, catalog);
+            if (draft == null || draft.Clarifications == null) return false;
+
+            WfAiClarification clarification = draft.Clarifications.FirstOrDefault(c => c != null
+                && string.Equals(c.NodeType, "control.if", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(c.Parameter, "conditionDefinition", StringComparison.OrdinalIgnoreCase));
+            if (clarification == null || string.IsNullOrWhiteSpace(clarification.Id)) return false;
+
+            JObject answer = new JObject
+            {
+                ["mode"] = "compound",
+                ["rulesMode"] = Convert.ToString(expectedParams == null ? null : expectedParams["rulesMode"]),
+                ["rules"] = expectedParams == null || expectedParams["rules"] == null
+                    ? new JArray()
+                    : expectedParams["rules"].DeepClone()
+            };
+            JObject answers = new JObject { [clarification.Id] = answer };
+            WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(basePlan, draft, answers, catalog);
+            if (resolution == null || resolution.Errors.Count > 0) return false;
+
+            WfAiResolvedPlanResult common = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(resolution.Plan, string.Empty, "phrase_resolved");
+            JObject resolvedAction = FindActionByType(common == null ? null : common.Plan, "control.if");
+            JObject expectedAction = FindActionByType(new WfAiResolvedNodeBuilder(catalog).ResolvePlan(C2C1IfPlan(expectedParams), string.Empty, "step_by_step").Plan, "control.if");
+            return common != null && common.Errors.Count == 0 && resolvedAction != null && expectedAction != null
+                && JToken.DeepEquals(CanonicalResolvedAction(resolvedAction, "control.if"), CanonicalResolvedAction(expectedAction, "control.if"));
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalTotalCase(WfAiCatalog catalog)
+        {
+            return RunC2C2NaturalConditionCase(
+                catalog,
+                "C2C2_NATURAL_TOTAL_SUPERA",
+                "Cargar una factura electrónica. Si el total supera 100000, finalizar.",
+                new JObject
+                {
+                    ["field"] = "biz.factura.total",
+                    ["op"] = ">",
+                    ["value"] = "100000"
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalNoSuperaCase(WfAiCatalog catalog)
+        {
+            return RunC2C2NaturalConditionCase(
+                catalog,
+                "C2C2_NATURAL_NO_SUPERA_CASO_CONTRARIO",
+                "Cargar una nota de crédito. Si no supera los 200000 pesos, enviarla a COMPRAS para revisar. Caso contrario, enviarla a DIR_GENERAL para aprobar. Después finalizar.",
+                new JObject
+                {
+                    ["field"] = "biz.notaCredito.total",
+                    ["op"] = ">",
+                    ["value"] = "200000"
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalCaeCase(WfAiCatalog catalog)
+        {
+            return RunC2C2NaturalConditionCase(
+                catalog,
+                "C2C2_NATURAL_CAE_INFORMADO",
+                "Cargar una nota de crédito. Si tiene CAE, finalizar.",
+                new JObject
+                {
+                    ["field"] = "biz.notaCredito.cae",
+                    ["op"] = "not_empty"
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalAllCase(WfAiCatalog catalog)
+        {
+            return RunC2C2NaturalConditionCase(
+                catalog,
+                "C2C2_NATURAL_ALL",
+                "Cargar una nota de crédito. Si tiene CAE, el total es mayor a 200000 y tiene al menos un ítem, enviarla a DIR_GENERAL para aprobar. Caso contrario, enviarla a COMPRAS para revisar. Después finalizar.",
+                new JObject
+                {
+                    ["rulesMode"] = "all",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["field"] = "biz.notaCredito.cae", ["op"] = "not_empty" },
+                        new JObject { ["field"] = "biz.notaCredito.itemsCount", ["op"] = ">", ["value"] = "0" },
+                        new JObject { ["field"] = "biz.notaCredito.total", ["op"] = ">", ["value"] = "200000" }
+                    }
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalAnyCase(WfAiCatalog catalog)
+        {
+            return RunC2C2NaturalConditionCase(
+                catalog,
+                "C2C2_NATURAL_ANY_NEGADO",
+                "Cargar una nota de crédito. Si no tiene CAE o falta el comprobante asociado, enviarla a COMPRAS para corregir. Caso contrario, enviarla a ADM_FIN para aprobar. Después finalizar.",
+                new JObject
+                {
+                    ["rulesMode"] = "any",
+                    ["rules"] = new JArray
+                    {
+                        new JObject { ["field"] = "biz.notaCredito.cae", ["op"] = "empty" },
+                        new JObject { ["field"] = "biz.notaCredito.comprobanteAsociado.numero", ["op"] = "empty" }
+                    }
+                },
+                false);
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2bNaturalBranchActionsCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Cargar una factura electrónica. Si el total supera 100000, escribir el número de factura en C:\\temp\\SalidaSI.txt. Caso contrario, escribir el CUIT del emisor en C:\\temp\\SalidaNO.txt. Después finalizar.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2C2B_RAMA_SI_NO_FILE_WRITE",
+                NodeType = "control.if",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult common = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            JObject plan = common == null ? null : common.Plan;
+            JObject condition = FindFirstBusinessIfAction(plan);
+            JObject yesWrite = FindFileWriteActionByPath(plan, @"C:\temp\SalidaSI.txt");
+            JObject noWrite = FindFileWriteActionByPath(plan, @"C:\temp\SalidaNO.txt");
+            JObject end = FindActionByType(plan, "util.end");
+
+            JObject conditionParams = condition == null ? null : condition["params"] as JObject;
+            JObject yesParams = yesWrite == null ? null : yesWrite["params"] as JObject;
+            JObject noParams = noWrite == null ? null : noWrite["params"] as JObject;
+
+            bool conditionOk = conditionParams != null
+                && string.Equals(Convert.ToString(conditionParams["field"] ?? ""), "biz.factura.total", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(conditionParams["op"] ?? ""), ">", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(conditionParams["value"] ?? ""), "100000", StringComparison.OrdinalIgnoreCase);
+
+            bool writesOk = yesParams != null && noParams != null
+                && string.Equals(Convert.ToString(yesParams["content"] ?? ""), "${biz.factura.numero}", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(noParams["content"] ?? ""), "${biz.factura.emisor.cuit}", StringComparison.OrdinalIgnoreCase);
+
+            string ifLabel = ActionLabelForRegression(condition);
+            string yesLabel = ActionLabelForRegression(yesWrite);
+            string noLabel = ActionLabelForRegression(noWrite);
+            string endLabel = ActionLabelForRegression(end);
+            bool connectionsOk = condition != null && yesWrite != null && noWrite != null && end != null
+                && HasPlanConnection(plan, ifLabel, yesLabel, "SI")
+                && HasPlanConnection(plan, ifLabel, noLabel, "NO")
+                && HasPlanConnection(plan, yesLabel, endLabel, "")
+                && HasPlanConnection(plan, noLabel, endLabel, "");
+
+            JArray missing = plan == null ? null : plan["missingData"] as JArray;
+            bool noArtificialMissing = missing == null || missing.Count == 0;
+
+            item.PhraseJson = plan == null ? "{}" : plan.ToString(Formatting.None);
+            item.StepJson = "SI => file.write C:\\temp\\SalidaSI.txt / ${biz.factura.numero}; NO => file.write C:\\temp\\SalidaNO.txt / ${biz.factura.emisor.cuit}";
+            item.Ok = model != null && model.Ok
+                && common != null && common.Errors.Count == 0
+                && conditionOk && writesOk && connectionsOk && noArtificialMissing;
+            item.Message = item.Ok
+                ? "La frase completa conserva ambas acciones: SI escribe número de factura, NO escribe CUIT del emisor y ambas ramas convergen en Fin sin preguntas SI/NO artificiales."
+                : "Falló la composición natural de ramas. Condición=" + conditionOk
+                    + ", writes=" + writesOk
+                    + ", conexiones=" + connectionsOk
+                    + ", missingVacio=" + noArtificialMissing
+                    + ", errorModelo=" + (model == null ? "n/a" : (model.ErrorMessage ?? string.Empty))
+                    + ", erroresComún=" + (common == null ? "n/a" : JoinList(common.Errors));
+            return item;
+        }
+
+        private static JObject FindFileWriteActionByPath(JObject plan, string path)
+        {
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return null;
+            foreach (JObject action in actions.OfType<JObject>())
+            {
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(action["nodeType"] ?? ""), "file.write", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                string actualPath = p == null ? string.Empty : Convert.ToString(p["path"] ?? "").Trim();
+                if (string.Equals(actualPath, path ?? string.Empty, StringComparison.OrdinalIgnoreCase)) return action;
+            }
+            return null;
+        }
+
+        private static ConstructionEquivalenceItem RunC2C2NaturalConditionCase(
+            WfAiCatalog catalog,
+            string id,
+            string phrase,
+            JObject expectedParams,
+            bool verifyNoSuperaInversion)
+        {
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = id,
+                NodeType = "control.if",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult naturalCommon = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            WfAiResolvedPlanResult expectedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                C2C1IfPlan(expectedParams),
+                string.Empty,
+                "step_by_step");
+
+            JObject naturalIf = FindFirstBusinessIfAction(naturalCommon == null ? null : naturalCommon.Plan);
+            JObject expectedIf = FindActionByType(expectedCommon == null ? null : expectedCommon.Plan, "control.if");
+            JObject naturalCanonical = CanonicalResolvedAction(naturalIf, "control.if");
+            JObject expectedCanonical = CanonicalResolvedAction(expectedIf, "control.if");
+
+            bool canonicalOk = model != null && model.Ok
+                && naturalCommon != null && naturalCommon.Errors.Count == 0
+                && expectedCommon != null && expectedCommon.Errors.Count == 0
+                && naturalIf != null && expectedIf != null
+                && JToken.DeepEquals(naturalCanonical, expectedCanonical);
+
+            bool inversionOk = true;
+            if (verifyNoSuperaInversion)
+            {
+                string ifLabel = naturalIf == null ? string.Empty : Convert.ToString(naturalIf["label"] ?? "").Trim();
+                inversionOk = HasPlanConnection(naturalCommon == null ? null : naturalCommon.Plan, ifLabel, "Aprobación Dirección", "SI")
+                    && HasPlanConnection(naturalCommon == null ? null : naturalCommon.Plan, ifLabel, "Enviar a Compras", "NO");
+            }
+
+            item.PhraseJson = naturalCanonical.ToString(Formatting.None);
+            item.StepJson = expectedCanonical.ToString(Formatting.None);
+            item.Ok = canonicalOk && inversionOk;
+            item.Message = item.Ok
+                ? "La frase natural produce el mismo control.if contractual de C2C1."
+                    + (verifyNoSuperaInversion ? " «No supera» conserva la normalización histórica: IF total > umbral, SI al caso contrario y NO a la rama expresada." : string.Empty)
+                : "La frase natural no convergió al contrato esperado. Canónico=" + canonicalOk
+                    + ", inversiónNoSupera=" + inversionOk
+                    + ", natural=" + item.PhraseJson
+                    + ", esperado=" + item.StepJson
+                    + ", errorModelo=" + (model == null ? "n/a" : (model.ErrorMessage ?? string.Empty))
+                    + ", erroresComún=" + (naturalCommon == null ? "n/a" : JoinList(naturalCommon.Errors));
+            return item;
+        }
+
+        private static JObject FindFirstBusinessIfAction(JObject plan)
+        {
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return null;
+            foreach (JObject action in actions.OfType<JObject>())
+            {
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(action["nodeType"] ?? ""), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                string field = p == null ? string.Empty : Convert.ToString(p["field"] ?? "").Trim();
+                if (string.Equals(field, "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+                return action;
+            }
+            return null;
+        }
+
+        private static JObject FindHumanResultIfAction(JObject plan, string role)
+        {
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return null;
+            foreach (JObject action in actions.OfType<JObject>())
+            {
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(action["nodeType"] ?? ""), "control.if", StringComparison.OrdinalIgnoreCase)) continue;
+                JObject p = action["params"] as JObject;
+                if (p == null) continue;
+                if (!string.Equals(Convert.ToString(p["field"] ?? ""), "wf.tarea.resultado", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(p["value"] ?? ""), "apto", StringComparison.OrdinalIgnoreCase)) continue;
+                string label = Convert.ToString(action["label"] ?? "");
+                if (string.IsNullOrWhiteSpace(role) || label.IndexOf(role, StringComparison.OrdinalIgnoreCase) >= 0) return action;
+            }
+            return null;
+        }
+
+        private static JObject FindOutcomeLoggerAction(JObject plan, string role, bool approved)
+        {
+            JArray actions = plan == null ? null : plan["actions"] as JArray;
+            if (actions == null) return null;
+            string prefix = approved ? "Registrar aprobación de " : "Registrar rechazo de ";
+            foreach (JObject action in actions.OfType<JObject>())
+            {
+                if (!string.Equals(Convert.ToString(action["action"] ?? ""), "ADD_NODE", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(action["nodeType"] ?? ""), "util.logger", StringComparison.OrdinalIgnoreCase)) continue;
+                string label = Convert.ToString(action["label"] ?? "");
+                if (label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrWhiteSpace(role) || label.IndexOf(role, StringComparison.OrdinalIgnoreCase) >= 0))
+                    return action;
+            }
+            return null;
+        }
+
+        private static string ActionLabelForRegression(JObject action)
+        {
+            return action == null ? string.Empty : Convert.ToString(action["label"] ?? "").Trim();
+        }
+
+        private static bool HasPlanConnection(JObject plan, string fromLabel, string toLabel, string condition)
+        {
+            if (plan == null || string.IsNullOrWhiteSpace(fromLabel) || string.IsNullOrWhiteSpace(toLabel)) return false;
+            JArray connections = plan["proposedConnections"] as JArray;
+            if (connections == null) return false;
+
+            foreach (JObject c in connections.OfType<JObject>())
+            {
+                if (!string.Equals(Convert.ToString(c["from"] ?? "").Trim(), fromLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(Convert.ToString(c["to"] ?? "").Trim(), toLabel, StringComparison.OrdinalIgnoreCase)) continue;
+                string actualCondition = Convert.ToString(c["condition"] ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(condition))
+                {
+                    if (string.IsNullOrWhiteSpace(actualCondition) || string.Equals(actualCondition, "always", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                else if (string.Equals(actualCondition, condition, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static string[] AddNodeTypes(JObject plan)
         {
             var result = new List<string>();
@@ -1045,6 +1941,13 @@ namespace Intranet.WorkflowStudio.WebForms
             var c1 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C1_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2ab = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2b = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2bg2 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2BG2_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2bg2b = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2BG2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2bg2c = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2BG2C_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2bg2d = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2BG2D_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2c1 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C1_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2c2 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C2_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2c2b = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2a = summary.Items.Where(x => x != null
                 && (x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -1074,11 +1977,60 @@ namespace Intranet.WorkflowStudio.WebForms
                     "Compara Frase ↔ Paso a paso para destino por Rol y por Usuario, verifica que Dibujar propuesta no pida datos ya explícitos y que Rol + Usuario simultáneos obliguen a aclarar un único destino.",
                     c2b));
 
+            if (c2bg2.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Semántica FIX84C2Bg2 — APTO / NO APTO de Human Task",
+                    "Verifica que una tarea humana simple bifurque correctamente: APTO continúa por la salida normal, NO APTO ejecuta su rama y «rechaza» en lenguaje de diseño se interpreta como resultado negativo sin introducir backtrack en el Constructor.",
+                    c2bg2));
+
+            if (c2bg2b.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Semántica FIX84C2Bg2b — advertencia explícita en rama humana",
+                    "Protege que «registrar una advertencia» se resuelva como util.logger Warn dentro de NO APTO, sin crear util.notify ni pedir una decisión contractual inexistente. La ausencia del fallback visual redundante se valida además en WorkflowUI.",
+                    c2bg2b));
+
+            if (c2bg2c.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Convergencia FIX84C2Bg2c — Paso a paso Human Task APTO / NO APTO",
+                    "Valida el contrato objetivo de Paso a paso: la estructura APTO/NO APTO no se reconstruye desde la frase descriptiva, NO APTO conserva Logger Warn y las ramas convergen en un único Fin común.",
+                    c2bg2c));
+
+            if (c2bg2d.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Convergencia FIX84C2Bg2d — valores declarativos de Paso a paso",
+                    "Protege que títulos, mensajes, descripciones y otros valores ya elegidos en editores estructurados sigan siendo datos. El caso usa Logger Warn / Message = Informar y exige que no aparezca util.notify.",
+                    c2bg2d));
+
+            if (c2c1.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Contrato común FIX84C2C1 — control.if",
+                    "Verifica convergencia Frase ↔ Paso a paso para condición simple, operador sin valor y reglas múltiples ALL/ANY. Normaliza el nodo sin tocar sus ramas SI/NO ni el runtime.",
+                    c2c1));
+
+            if (c2c2.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Interpretación natural FIX84C2C2 — control.if",
+                    "Verifica que frases naturales de total, presencia, no supera/caso contrario y reglas ALL/ANY lleguen al mismo contrato C2C1 antes de construir las ramas.",
+                    c2c2));
+
+            if (c2c2b.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Composición FIX84C2C2b — acciones naturales en ramas SI / NO",
+                    "Valida de punta a punta que una condición natural conserve las acciones escritas en cada rama, sus parámetros y la convergencia final, sin pedir completar una rama ya expresada.",
+                    c2c2b));
+
             var other = summary.Items.Where(x => x != null
                 && !(x.Id ?? string.Empty).StartsWith("C1_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)
-                && !(x.Id ?? string.Empty).StartsWith("C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+                && !(x.Id ?? string.Empty).StartsWith("C2B_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2BG2_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2BG2B_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2BG2C_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2BG2D_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2C1_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2C2_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
             if (other.Count > 0)
                 sb.AppendLine(RenderConstructionEquivalenceGroup(
                     "Equivalencia de construcción",

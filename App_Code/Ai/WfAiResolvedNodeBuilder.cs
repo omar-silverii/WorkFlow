@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// FIX84C1/FIX84C2A/FIX84C2Ab/FIX84C2B/FIX84C2Bb/FIX84C2Bc/FIX84C2Bd/FIX84C2Bf: punto común de construcción semántica para nodos cubiertos.
+    /// FIX84C1/FIX84C2A/FIX84C2Ab/FIX84C2B/FIX84C2Bb/FIX84C2Bc/FIX84C2Bd/FIX84C2Bf/FIX84C2C1: punto común de construcción semántica para nodos cubiertos.
     /// Frase y Paso a paso entregan candidatos; esta capa aplica contrato, defaults,
     /// reglas derivadas y validaciones antes de devolver el ADD_NODE normalizado.
     /// No ejecuta handlers, no toca canvas y deja nodos fuera de la cobertura sin modificar.
@@ -32,14 +32,15 @@ namespace Intranet.WorkflowStudio.WebForms
             "util.logger",
             "queue.consume",
             "queue.publish",
-            "human.task"
+            "human.task",
+            "control.if"
         };
 
         public WfAiResolvedPlanResult ResolvePlan(JObject plan, string sourceText, string sourceKind)
         {
             var result = new WfAiResolvedPlanResult
             {
-                Version = "fix84c2bf-common-node-v5",
+                Version = "fix84c2c1-common-node-v6",
                 SourceKind = string.IsNullOrWhiteSpace(sourceKind) ? "unknown" : sourceKind.Trim(),
                 Plan = plan == null ? new JObject() : (JObject)plan.DeepClone()
             };
@@ -144,6 +145,8 @@ namespace Intranet.WorkflowStudio.WebForms
                 ResolveQueueConsume(parameters, contract, sourceText, sourceKind, node);
             else if (string.Equals(nodeType, "queue.publish", StringComparison.OrdinalIgnoreCase))
                 ResolveQueuePublish(parameters, contract, sourceText, sourceKind, node);
+            else if (string.Equals(nodeType, "control.if", StringComparison.OrdinalIgnoreCase))
+                ResolveControlIf(parameters, contract, sourceText, sourceKind, node);
             else if (string.Equals(nodeType, "human.task", StringComparison.OrdinalIgnoreCase))
             {
                 ResolveHumanTask(parameters, contract, sourceText, sourceKind, node, catalog);
@@ -332,6 +335,346 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddParameter(node, debugContract, new JValue(debug), implicitDefault ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
                     implicitDefault ? "safe_default" : SourceForExplicitValue(sourceKind));
             }
+        }
+
+        // FIX84C2C1: control.if entra al mismo camino contractual que Logger/Queue/Human Task.
+        // La capa común NO decide las ramas SI/NO: solamente normaliza qué condición evalúa el nodo.
+        // HIf conserva la ejecución; acá se hace canónica la representación para Frase y Paso a paso.
+        private static void ResolveControlIf(JObject p, WfAiNodeConstructionContract contract, string sourceText, string sourceKind, WfAiResolvedNode node)
+        {
+            JToken rulesToken = FindValue(p, "rules");
+            string expression = Text(FindValue(p, "expression"));
+            string field = NormalizeIfField(Text(FindValue(p, "field")));
+            string rawOp = Text(FindValue(p, "op"));
+            JToken valueToken = FindValue(p, "value");
+
+            bool rulesDeclared = rulesToken != null && rulesToken.Type != JTokenType.Null && rulesToken.Type != JTokenType.Undefined;
+            bool simpleDeclared = field.Length > 0 || rawOp.Length > 0;
+            bool expressionDeclared = expression.Length > 0;
+
+            // El runtime ya tiene precedencia rules > simple > expression. La capa común conserva
+            // esa semántica pero elimina parámetros de modos alternativos para que quede un solo contrato.
+            if (rulesDeclared)
+            {
+                ResolveCompoundIf(p, contract, rulesToken, sourceKind, node);
+                return;
+            }
+
+            if (simpleDeclared)
+            {
+                ResolveSimpleIf(p, contract, field, rawOp, valueToken, sourceKind, node);
+                return;
+            }
+
+            if (expressionDeclared)
+            {
+                RemoveProperty(p, "field");
+                RemoveProperty(p, "op");
+                RemoveProperty(p, "value");
+                RemoveProperty(p, "transform");
+                RemoveProperty(p, "rules");
+                RemoveProperty(p, "rulesMode");
+                p["expression"] = expression;
+                AddParameter(node, contract.FindParameter("expression"), new JValue(expression), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                return;
+            }
+
+            RemoveProperty(p, "field");
+            RemoveProperty(p, "op");
+            RemoveProperty(p, "value");
+            RemoveProperty(p, "expression");
+            RemoveProperty(p, "transform");
+            RemoveProperty(p, "rules");
+            RemoveProperty(p, "rulesMode");
+            AddParameter(node, contract.FindParameter("field"), null, WfAiInterpretationStatus.Missing, "not_supplied");
+            AddParameter(node, contract.FindParameter("op"), null, WfAiInterpretationStatus.Missing, "not_supplied");
+            node.Errors.Add("control.if: indicá una condición simple, varias reglas o una expresión.");
+        }
+
+        private static void ResolveSimpleIf(
+            JObject p,
+            WfAiNodeConstructionContract contract,
+            string field,
+            string rawOp,
+            JToken valueToken,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            RemoveProperty(p, "rules");
+            RemoveProperty(p, "rulesMode");
+            RemoveProperty(p, "expression");
+
+            WfAiParameterContract fieldContract = contract.FindParameter("field");
+            WfAiParameterContract opContract = contract.FindParameter("op");
+            WfAiParameterContract valueContract = contract.FindParameter("value");
+            WfAiParameterContract transformContract = contract.FindParameter("transform");
+
+            if (field.Length == 0)
+            {
+                RemoveProperty(p, "field");
+                AddParameter(node, fieldContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                node.Errors.Add("control.if: indicá qué dato querés evaluar.");
+            }
+            else
+            {
+                p["field"] = field;
+                AddParameter(node, fieldContract, new JValue(field), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            JToken normalizedValue = valueToken == null ? null : valueToken.DeepClone();
+            string op = NormalizeIfOperator(rawOp, ref normalizedValue);
+            if (op.Length == 0)
+            {
+                RemoveProperty(p, "op");
+                AddParameter(node, opContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                node.Errors.Add("control.if: indicá cómo querés comparar el dato.");
+            }
+            else if (!AllowedIfOperator(op))
+            {
+                p["op"] = op;
+                AddParameter(node, opContract, new JValue(op), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("control.if: operador no permitido '" + op + "'.");
+            }
+            else
+            {
+                p["op"] = op;
+                AddParameter(node, opContract, new JValue(op), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            if (op.Length > 0 && AllowedIfOperator(op) && IfOperatorNeedsValue(op))
+            {
+                if (!HasIfValue(normalizedValue))
+                {
+                    RemoveProperty(p, "value");
+                    AddParameter(node, valueContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                    node.Errors.Add("control.if: el operador '" + op + "' necesita un valor de comparación.");
+                }
+                else
+                {
+                    JToken scalar = NormalizeIfScalar(normalizedValue);
+                    p["value"] = scalar;
+                    AddParameter(node, valueContract, scalar, WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                }
+            }
+            else
+            {
+                RemoveProperty(p, "value");
+                AddParameter(node, valueContract, null, WfAiInterpretationStatus.Resolved, "not_required");
+            }
+
+            string transform = Text(FindValue(p, "transform"));
+            if (transform.Length == 0 || string.Equals(transform, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                RemoveProperty(p, "transform");
+                AddParameter(node, transformContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+            }
+            else
+            {
+                transform = transform.ToLowerInvariant();
+                p["transform"] = transform;
+                AddParameter(node, transformContract, new JValue(transform), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+        }
+
+        private static void ResolveCompoundIf(
+            JObject p,
+            WfAiNodeConstructionContract contract,
+            JToken rulesToken,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            RemoveProperty(p, "field");
+            RemoveProperty(p, "op");
+            RemoveProperty(p, "value");
+            RemoveProperty(p, "expression");
+            RemoveProperty(p, "transform");
+
+            WfAiParameterContract rulesContract = contract.FindParameter("rules");
+            WfAiParameterContract modeContract = contract.FindParameter("rulesMode");
+
+            JArray sourceRules = null;
+            if (rulesToken is JArray)
+            {
+                sourceRules = (JArray)rulesToken;
+            }
+            else if (rulesToken != null && rulesToken.Type == JTokenType.String)
+            {
+                try { sourceRules = JArray.Parse(Text(rulesToken)); }
+                catch { }
+            }
+
+            if (sourceRules == null)
+            {
+                RemoveProperty(p, "rules");
+                AddParameter(node, rulesContract, null, WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("control.if: rules debe ser una lista de reglas.");
+                return;
+            }
+
+            if (sourceRules.Count == 0)
+            {
+                p["rules"] = new JArray();
+                AddParameter(node, rulesContract, new JArray(), WfAiInterpretationStatus.Missing, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("control.if: la condición compuesta debe tener al menos una regla.");
+                return;
+            }
+
+            var normalizedRules = new JArray();
+            int ruleIndex = 0;
+            foreach (JToken token in sourceRules)
+            {
+                ruleIndex++;
+                JObject sourceRule = token as JObject;
+                if (sourceRule == null)
+                {
+                    node.Errors.Add("control.if: la regla " + ruleIndex.ToString(CultureInfo.InvariantCulture) + " no es válida.");
+                    continue;
+                }
+
+                string field = NormalizeIfField(Text(FindValue(sourceRule, "field")));
+                if (field.Length == 0) field = NormalizeIfField(Text(FindValue(sourceRule, "fieldPath")));
+                string rawOp = Text(FindValue(sourceRule, "op"));
+                if (rawOp.Length == 0) rawOp = Text(FindValue(sourceRule, "operator"));
+                JToken value = FindValue(sourceRule, "value");
+                value = value == null ? null : value.DeepClone();
+                string op = NormalizeIfOperator(rawOp, ref value);
+
+                if (field.Length == 0)
+                {
+                    node.Errors.Add("control.if: la regla " + ruleIndex.ToString(CultureInfo.InvariantCulture) + " necesita un dato a evaluar.");
+                    continue;
+                }
+                if (op.Length == 0)
+                {
+                    node.Errors.Add("control.if: la regla " + ruleIndex.ToString(CultureInfo.InvariantCulture) + " necesita un operador.");
+                    continue;
+                }
+                if (!AllowedIfOperator(op))
+                {
+                    node.Errors.Add("control.if: la regla " + ruleIndex.ToString(CultureInfo.InvariantCulture) + " usa un operador no permitido '" + op + "'.");
+                    continue;
+                }
+                if (IfOperatorNeedsValue(op) && !HasIfValue(value))
+                {
+                    node.Errors.Add("control.if: la regla " + ruleIndex.ToString(CultureInfo.InvariantCulture) + " necesita un valor de comparación.");
+                    continue;
+                }
+
+                var normalized = new JObject
+                {
+                    ["field"] = field,
+                    ["op"] = op
+                };
+                if (IfOperatorNeedsValue(op)) normalized["value"] = NormalizeIfScalar(value);
+
+                string transform = Text(FindValue(sourceRule, "transform"));
+                if (transform.Length > 0 && !string.Equals(transform, "none", StringComparison.OrdinalIgnoreCase))
+                    normalized["transform"] = transform.ToLowerInvariant();
+
+                normalizedRules.Add(normalized);
+            }
+
+            p["rules"] = normalizedRules;
+            AddParameter(node, rulesContract, normalizedRules.DeepClone(), node.Errors.Count == 0 ? WfAiInterpretationStatus.Resolved : WfAiInterpretationStatus.Missing, SourceForExplicitValue(sourceKind));
+
+            string rawMode = Text(FindValue(p, "rulesMode"));
+            string mode = NormalizeIfRulesMode(rawMode);
+            if (rawMode.Length == 0)
+            {
+                mode = "all";
+                p["rulesMode"] = mode;
+                AddParameter(node, modeContract, new JValue(mode), WfAiInterpretationStatus.Inferred, "safe_default");
+            }
+            else if (mode.Length == 0)
+            {
+                p["rulesMode"] = rawMode;
+                AddParameter(node, modeContract, new JValue(rawMode), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("control.if: rulesMode debe ser all o any.");
+            }
+            else
+            {
+                p["rulesMode"] = mode;
+                AddParameter(node, modeContract, new JValue(mode), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+        }
+
+        private static string NormalizeIfField(string field)
+        {
+            field = (field ?? string.Empty).Trim();
+            if (field.StartsWith("${", StringComparison.Ordinal) && field.EndsWith("}", StringComparison.Ordinal) && field.Length > 3)
+                field = field.Substring(2, field.Length - 3).Trim();
+            return field;
+        }
+
+        private static string NormalizeIfOperator(string rawOp, ref JToken value)
+        {
+            string op = (rawOp ?? string.Empty).Trim().ToLowerInvariant();
+            if (op == "=" || op == "eq") return "==";
+            if (op == "neq") return "!=";
+            if (op == "true")
+            {
+                value = new JValue("true");
+                return "==";
+            }
+            if (op == "false")
+            {
+                value = new JValue("false");
+                return "==";
+            }
+            return op;
+        }
+
+        private static bool AllowedIfOperator(string op)
+        {
+            switch ((op ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "==":
+                case "!=":
+                case ">":
+                case ">=":
+                case "<":
+                case "<=":
+                case "contains":
+                case "not_contains":
+                case "starts_with":
+                case "ends_with":
+                case "exists":
+                case "not_exists":
+                case "empty":
+                case "not_empty":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IfOperatorNeedsValue(string op)
+        {
+            string normalized = (op ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized != "exists" && normalized != "not_exists" && normalized != "empty" && normalized != "not_empty";
+        }
+
+        private static string NormalizeIfRulesMode(string raw)
+        {
+            string mode = (raw ?? string.Empty).Trim().ToLowerInvariant();
+            if (mode.Length == 0) return string.Empty;
+            if (mode == "all" || mode == "and" || mode == "y" || mode == "todas" || mode == "todos") return "all";
+            if (mode == "any" || mode == "or" || mode == "o" || mode == "cualquiera") return "any";
+            return string.Empty;
+        }
+
+        private static bool HasIfValue(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined) return false;
+            if (token.Type == JTokenType.String) return !string.IsNullOrWhiteSpace(token.Value<string>());
+            return true;
+        }
+
+        private static JToken NormalizeIfScalar(JToken token)
+        {
+            if (token == null) return JValue.CreateNull();
+            if (token.Type == JTokenType.String) return new JValue((token.Value<string>() ?? string.Empty).Trim());
+            return token.DeepClone();
         }
 
         private static void ResolveHumanTask(JObject p, WfAiNodeConstructionContract contract, string sourceText, string sourceKind, WfAiResolvedNode node, WfAiCatalog catalog)
@@ -537,6 +880,16 @@ namespace Intranet.WorkflowStudio.WebForms
             if (!marker.Success) return string.Empty;
 
             string tail = text.Substring(marker.Index + marker.Length);
+
+            // FIX84C2Bg2: las asignaciones explícitas pertenecen al nodo human.task, no a
+            // las oraciones posteriores que describen sus resultados. Ejemplo:
+            // "Título = Revisar factura. Si Compras la rechaza, ..." debe resolver el título
+            // como "Revisar factura" y conservar la cláusula "Si Compras..." para el flujo.
+            Match resultClause = Regex.Match(tail,
+                @"[.;]\s*(?=(?:si|cuando)\b)",
+                RegexOptions.IgnoreCase);
+            if (resultClause.Success) tail = tail.Substring(0, resultClause.Index);
+
             Match nextAction = Regex.Match(tail,
                 @"(?:[.;,]\s*|\s+)(?:y\s+)?(?:luego|despues|después|finalmente)\s+(?=(?:publicar|consumir|leer|registrar|notificar|finalizar|terminar|crear\s+otra\s+tarea|mandar\s+otra\s+tarea|enviar\s+otra\s+tarea)\b)",
                 RegexOptions.IgnoreCase);

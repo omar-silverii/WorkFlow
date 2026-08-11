@@ -6,7 +6,7 @@ using Newtonsoft.Json.Linq;
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// fix84b: aplica respuestas estructuradas de aclaración sobre una copia del plan.
+    /// FIX84B/FIX84C2C1: aplica respuestas estructuradas de aclaración sobre una copia del plan.
     /// No vuelve a interpretar la frase ni toca handlers/runtime. El plan base se reconstruye
     /// en cada POST y estas decisiones se aplican de forma determinística encima.
     /// </summary>
@@ -181,9 +181,13 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 if (mode == "simple")
                 {
-                    string field = Text(condition == null ? null : condition["field"]);
-                    string op = Text(condition == null ? null : condition["op"]);
+                    string field = NormalizeIfField(Text(condition == null ? null : condition["field"]));
+                    string rawOp = Text(condition == null ? null : condition["op"]);
                     JToken value = condition == null ? null : condition["value"];
+                    value = value == null ? null : value.DeepClone();
+                    string op = NormalizeIfOperator(rawOp, ref value);
+                    string transform = Text(condition == null ? null : condition["transform"]);
+
                     if (field.Length == 0 || op.Length == 0)
                     {
                         result.Errors.Add("Elegí el dato y el operador de la condición.");
@@ -202,13 +206,97 @@ namespace Intranet.WorkflowStudio.WebForms
 
                     parameters.Remove("expression");
                     parameters.Remove("rules");
+                    parameters.Remove("rulesMode");
                     parameters["field"] = field;
                     parameters["op"] = op;
                     if (OperatorNeedsValue(op)) parameters["value"] = NormalizeScalar(value);
                     else parameters.Remove("value");
-                    RemoveMissingData(result.Plan, "campoCae", "campoImporteTotal");
+                    if (transform.Length > 0 && !string.Equals(transform, "none", StringComparison.OrdinalIgnoreCase))
+                        parameters["transform"] = transform.ToLowerInvariant();
+                    else
+                        parameters.Remove("transform");
+                    RemoveMissingData(result.Plan, "campoCae", "campoImporteTotal", "valorCondicion");
 
                     Accept(result, clarification, field + " " + op + (OperatorNeedsValue(op) ? " " + DisplayAnswer(value) : string.Empty));
+                    return;
+                }
+
+                if (mode == "compound" || mode == "rules")
+                {
+                    JArray sourceRules = condition == null ? null : condition["rules"] as JArray;
+                    if (sourceRules == null || sourceRules.Count == 0)
+                    {
+                        result.Errors.Add("Agregá al menos una regla a la condición compuesta.");
+                        return;
+                    }
+
+                    string rulesMode = NormalizeIfRulesMode(Text(condition["rulesMode"]));
+                    if (rulesMode.Length == 0)
+                    {
+                        string rawRulesMode = Text(condition["rulesMode"]);
+                        if (rawRulesMode.Length == 0) rulesMode = "all";
+                        else
+                        {
+                            result.Errors.Add("El modo de reglas debe ser Todas (ALL) o Cualquiera (ANY).");
+                            return;
+                        }
+                    }
+
+                    var normalizedRules = new JArray();
+                    int index = 0;
+                    foreach (JToken token in sourceRules)
+                    {
+                        index++;
+                        JObject rule = token as JObject;
+                        if (rule == null)
+                        {
+                            result.Errors.Add("La regla " + index.ToString(CultureInfo.InvariantCulture) + " no es válida.");
+                            return;
+                        }
+
+                        string field = NormalizeIfField(Text(rule["field"] ?? rule["fieldPath"]));
+                        string rawOp = Text(rule["op"] ?? rule["operator"]);
+                        JToken value = rule["value"] == null ? null : rule["value"].DeepClone();
+                        string op = NormalizeIfOperator(rawOp, ref value);
+                        string transform = Text(rule["transform"]);
+
+                        if (field.Length == 0 || op.Length == 0)
+                        {
+                            result.Errors.Add("La regla " + index.ToString(CultureInfo.InvariantCulture) + " necesita dato y operador.");
+                            return;
+                        }
+                        if (!AllowedIfOperator(op))
+                        {
+                            result.Errors.Add("La regla " + index.ToString(CultureInfo.InvariantCulture) + " usa un operador no válido: " + op);
+                            return;
+                        }
+                        if (OperatorNeedsValue(op) && !HasValue(value))
+                        {
+                            result.Errors.Add("La regla " + index.ToString(CultureInfo.InvariantCulture) + " necesita un valor de comparación.");
+                            return;
+                        }
+
+                        var normalized = new JObject
+                        {
+                            ["field"] = field,
+                            ["op"] = op
+                        };
+                        if (OperatorNeedsValue(op)) normalized["value"] = NormalizeScalar(value);
+                        if (transform.Length > 0 && !string.Equals(transform, "none", StringComparison.OrdinalIgnoreCase))
+                            normalized["transform"] = transform.ToLowerInvariant();
+                        normalizedRules.Add(normalized);
+                    }
+
+                    parameters.Remove("field");
+                    parameters.Remove("op");
+                    parameters.Remove("value");
+                    parameters.Remove("expression");
+                    parameters.Remove("transform");
+                    parameters["rulesMode"] = rulesMode;
+                    parameters["rules"] = normalizedRules;
+                    RemoveMissingData(result.Plan, "campoCae", "campoImporteTotal", "valorCondicion");
+
+                    Accept(result, clarification, (rulesMode == "any" ? "Cualquiera" : "Todas") + " · " + normalizedRules.Count.ToString(CultureInfo.InvariantCulture) + " regla(s)");
                     return;
                 }
 
@@ -224,12 +312,15 @@ namespace Intranet.WorkflowStudio.WebForms
                     parameters.Remove("op");
                     parameters.Remove("value");
                     parameters.Remove("rules");
+                    parameters.Remove("rulesMode");
+                    parameters.Remove("transform");
                     parameters["expression"] = expression;
+                    RemoveMissingData(result.Plan, "campoCae", "campoImporteTotal", "valorCondicion");
                     Accept(result, clarification, expression);
                     return;
                 }
 
-                result.Errors.Add("FIX84B todavía no admite ese modo de condición: " + mode);
+                result.Errors.Add("El modo de condición no es válido: " + mode);
                 return;
             }
 
@@ -399,7 +490,6 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             switch ((op ?? string.Empty).Trim().ToLowerInvariant())
             {
-                case "=":
                 case "==":
                 case "!=":
                 case ">":
@@ -408,6 +498,10 @@ namespace Intranet.WorkflowStudio.WebForms
                 case "<=":
                 case "contains":
                 case "not_contains":
+                case "starts_with":
+                case "ends_with":
+                case "exists":
+                case "not_exists":
                 case "empty":
                 case "not_empty":
                     return true;
@@ -416,10 +510,44 @@ namespace Intranet.WorkflowStudio.WebForms
             }
         }
 
+        private static string NormalizeIfOperator(string rawOp, ref JToken value)
+        {
+            string op = (rawOp ?? string.Empty).Trim().ToLowerInvariant();
+            if (op == "=" || op == "eq") return "==";
+            if (op == "neq") return "!=";
+            if (op == "true")
+            {
+                value = new JValue("true");
+                return "==";
+            }
+            if (op == "false")
+            {
+                value = new JValue("false");
+                return "==";
+            }
+            return op;
+        }
+
+        private static string NormalizeIfField(string field)
+        {
+            field = (field ?? string.Empty).Trim();
+            if (field.StartsWith("${", StringComparison.Ordinal) && field.EndsWith("}", StringComparison.Ordinal) && field.Length > 3)
+                field = field.Substring(2, field.Length - 3).Trim();
+            return field;
+        }
+
+        private static string NormalizeIfRulesMode(string raw)
+        {
+            string mode = (raw ?? string.Empty).Trim().ToLowerInvariant();
+            if (mode == "all" || mode == "and" || mode == "y" || mode == "todas" || mode == "todos") return "all";
+            if (mode == "any" || mode == "or" || mode == "o" || mode == "cualquiera") return "any";
+            return string.Empty;
+        }
+
         private static bool OperatorNeedsValue(string op)
         {
             string value = (op ?? string.Empty).Trim().ToLowerInvariant();
-            return value != "empty" && value != "not_empty";
+            return value != "exists" && value != "not_exists" && value != "empty" && value != "not_empty";
         }
 
         private static bool HasValue(JToken token)

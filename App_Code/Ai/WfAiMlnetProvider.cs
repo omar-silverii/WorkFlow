@@ -225,6 +225,11 @@ namespace Intranet.WorkflowStudio.WebForms
 
             BranchAnalysis branches = AnalyzeBranches(actionIntentNorm, catalog, amount);
             BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(actionIntentText, actionIntentNorm, amount);
+            // FIX84C2C2b: las acciones naturales expresadas dentro de una rama del IF
+            // (por ejemplo "Si el total supera..., escribir el número de factura en ...")
+            // se resuelven como acciones de esa rama. No deben perderse ni convertirse en
+            // una pregunta artificial de SI/NO.
+            List<BranchFileWriteRequest> branchFileWrites = AnalyzeBranchFileWriteRequests(actionIntentText, prefix, amount);
             ApplyPhraseSemanticHintsToLegacyGeneration(phraseEngine, branches, branchLoggerRequest, humanTaskOutcomes);
             bool branchTasksCreated = false;
 
@@ -300,12 +305,12 @@ namespace Intranet.WorkflowStudio.WebForms
             if (guidedConditions.Count > 0)
             {
                 foreach (GuidedConditionRequest condition in guidedConditions)
-                    AddGuidedConditionAction(actions, missing, condition);
+                    AddGuidedConditionAction(actions, missing, condition, actionIntentText, catalog);
             }
 
             if (hasNaturalCompositeCondition)
             {
-                AddNaturalCompositeConditionAction(actions, missing, naturalCompositeCondition);
+                AddNaturalCompositeConditionAction(actions, missing, naturalCompositeCondition, actionIntentText, catalog);
 
                 if (!string.IsNullOrWhiteSpace(naturalCompositeCondition.TrueRole))
                 {
@@ -343,7 +348,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (field.Length > 0) p["field"] = field;
                 p["op"] = "not_empty";
 
-                actions.Add(AddNode("control.if", "Validar CAE informado", p));
+                actions.Add(BuildContractualConditionNode("Validar CAE informado", p, actionIntentText, catalog));
 
                 if (field.Length == 0)
                 {
@@ -377,7 +382,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 p["op"] = ">";
                 p["value"] = amount;
 
-                actions.Add(AddNode("control.if", "Total mayor a " + amount, p));
+                actions.Add(BuildContractualConditionNode("Total mayor a " + amount, p, actionIntentText, catalog));
 
                 if (field.Length == 0)
                 {
@@ -390,6 +395,8 @@ namespace Intranet.WorkflowStudio.WebForms
 
                 string trueRole = branches.TotalTrueRole;
                 string falseRole = branches.TotalFalseRole;
+                BranchFileWriteRequest trueFileWrite = FindBranchFileWrite(branchFileWrites, "totalTrue");
+                BranchFileWriteRequest falseFileWrite = FindBranchFileWrite(branchFileWrites, "totalFalse");
 
                 if (string.IsNullOrWhiteSpace(trueRole) && !string.IsNullOrWhiteSpace(role) && HasIntent(predictions, "CONDICION_Y_TAREA"))
                     trueRole = role;
@@ -397,6 +404,12 @@ namespace Intranet.WorkflowStudio.WebForms
                 if (!string.IsNullOrWhiteSpace(trueRole))
                 {
                     EnsureHumanTaskAction(actions, trueRole, HumanTaskTitle(trueRole, ""), "Rama positiva de importe generada por el Asistente IA.");
+                    branchTasksCreated = true;
+                }
+                else if (trueFileWrite != null && trueFileWrite.Request != null && trueFileWrite.Request.WantsFileWrite)
+                {
+                    AddFileWriteAction(actions, trueFileWrite.Request);
+                    branches.TotalTrueActionLabel = trueFileWrite.Request.Label;
                     branchTasksCreated = true;
                 }
                 else
@@ -424,6 +437,12 @@ namespace Intranet.WorkflowStudio.WebForms
                         ["message"] = string.IsNullOrWhiteSpace(branchLoggerRequest.Message) ? "Evento generado por Asistente IA." : branchLoggerRequest.Message
                     }));
                     branches.TotalFalseActionLabel = loggerLabel;
+                    branchTasksCreated = true;
+                }
+                else if (falseFileWrite != null && falseFileWrite.Request != null && falseFileWrite.Request.WantsFileWrite)
+                {
+                    AddFileWriteAction(actions, falseFileWrite.Request);
+                    branches.TotalFalseActionLabel = falseFileWrite.Request.Label;
                     branchTasksCreated = true;
                 }
                 else
@@ -1339,7 +1358,7 @@ namespace Intranet.WorkflowStudio.WebForms
             return count;
         }
 
-        private static void AddNaturalCompositeConditionAction(JArray actions, JArray missing, NaturalCompositeConditionRequest request)
+        private static void AddNaturalCompositeConditionAction(JArray actions, JArray missing, NaturalCompositeConditionRequest request, string sourceText, WfAiCatalog catalog)
         {
             if (actions == null || request == null || request.Rules == null || request.Rules.Count == 0) return;
 
@@ -1368,7 +1387,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 ["rules"] = rules
             };
 
-            actions.Add(AddNode("control.if", NaturalCompositeConditionLabel(request), p));
+            actions.Add(BuildContractualConditionNode(NaturalCompositeConditionLabel(request), p, sourceText, catalog));
         }
 
         private static string NaturalCompositeConditionLabel(NaturalCompositeConditionRequest request)
@@ -1430,7 +1449,7 @@ namespace Intranet.WorkflowStudio.WebForms
             return "not_empty";
         }
 
-        private static void AddGuidedConditionAction(JArray actions, JArray missing, GuidedConditionRequest request)
+        private static void AddGuidedConditionAction(JArray actions, JArray missing, GuidedConditionRequest request, string sourceText, WfAiCatalog catalog)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Field)) return;
 
@@ -1443,7 +1462,7 @@ namespace Intranet.WorkflowStudio.WebForms
             if (GuidedOperatorNeedsValue(request.Op))
                 p["value"] = request.Value ?? "";
 
-            actions.Add(AddNode("control.if", GuidedConditionLabel(request), p));
+            actions.Add(BuildContractualConditionNode(GuidedConditionLabel(request), p, sourceText, catalog));
 
             if (GuidedOperatorNeedsValue(request.Op) && string.IsNullOrWhiteSpace(request.Value))
             {
@@ -1453,6 +1472,39 @@ namespace Intranet.WorkflowStudio.WebForms
                     ["question"] = "Falta indicar el valor para validar el campo " + request.Field + "."
                 });
             }
+        }
+
+        // FIX84C2C2: Frase natural y la representación guiada ya no entregan un control.if
+        // "especial" al resto del provider. Cada candidato de condición pasa inmediatamente por
+        // el mismo WfAiResolvedNodeBuilder validado en C2C1, antes de construir ramas/conexiones.
+        // De esta forma labels y branch planner legacy pueden seguir preservando A-S, pero la
+        // semántica del nodo (field/op/value o rules/rulesMode) tiene una sola autoridad.
+        private static JObject BuildContractualConditionNode(string label, JObject parameters, string sourceText, WfAiCatalog catalog)
+        {
+            JObject candidate = AddNode("control.if", label, parameters == null ? new JObject() : (JObject)parameters.DeepClone());
+            var miniPlan = new JObject
+            {
+                ["intent"] = "build_workflow",
+                ["actions"] = new JArray(candidate),
+                ["missingData"] = new JArray(),
+                ["proposedConnections"] = new JArray()
+            };
+
+            WfAiResolvedPlanResult resolved = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                miniPlan,
+                sourceText ?? string.Empty,
+                "phrase");
+
+            JArray resolvedActions = resolved == null || resolved.Plan == null
+                ? null
+                : resolved.Plan["actions"] as JArray;
+            JObject resolvedAction = resolvedActions != null && resolvedActions.Count > 0
+                ? resolvedActions[0] as JObject
+                : null;
+
+            // Incluso si el candidato quedó incompleto, devolvemos la versión contractual parcial:
+            // WfAiInterpretationDraftBuilder será quien pregunte lo realmente faltante.
+            return resolvedAction == null ? candidate : (JObject)resolvedAction.DeepClone();
         }
 
         private static bool GuidedOperatorNeedsValue(string op)
@@ -1646,9 +1698,41 @@ namespace Intranet.WorkflowStudio.WebForms
             JObject logger = FirstAction(actions, "util.logger");
             JObject end = FirstAction(actions, "util.end");
             JObject firstCondition = compoundIf ?? caeIf ?? totalIf;
+            List<HumanTaskOutcomeConnection> outcomeConnections = FindHumanTaskOutcomeConnections(actions);
 
+            // FIX84C2Bg2: una tarea humana simple puede ser la primera decisión del flujo.
+            // En ese caso no hay un IF de negocio (CAE/total/compuesto) antes de ella, pero sí
+            // existe el IF técnico sobre wf.tarea.resultado. No debemos caer en la conexión
+            // secuencial legacy porque convertiría APTO/NO_APTO en pasos en serie.
             if (firstCondition == null)
             {
+                if (outcomeConnections != null && outcomeConnections.Count == 1)
+                {
+                    HumanTaskOutcomeConnection outcomeConnection = outcomeConnections[0];
+                    JObject outcomeTask = outcomeConnection == null ? null : FindHumanTaskByRole(actions, outcomeConnection.TaskRole);
+                    if (outcomeTask != null)
+                    {
+                        AddSequentialConnectionsUntil(result, actions, outcomeTask);
+                        AddConnection(result, outcomeTask, outcomeConnection.ResultIf, "");
+
+                        var markers = new List<JObject>();
+                        AddUniqueAction(markers, outcomeConnection.ResultIf);
+                        AddUniqueAction(markers, outcomeConnection.ApprovedAction);
+                        AddUniqueAction(markers, outcomeConnection.ApprovedFollowUpAction);
+                        AddUniqueAction(markers, outcomeConnection.RejectedAction);
+                        AddUniqueAction(markers, outcomeConnection.RejectedFollowUpAction);
+
+                        JObject commonTarget = FirstActionAfterLast(actions, markers) ?? end;
+                        AddOutcomeBranchConnections(result, outcomeConnection.ResultIf, outcomeConnection.ApprovedAction, outcomeConnection.ApprovedFollowUpAction, commonTarget, "SI");
+                        AddOutcomeBranchConnections(result, outcomeConnection.ResultIf, outcomeConnection.RejectedAction, outcomeConnection.RejectedFollowUpAction, commonTarget, "NO");
+
+                        if (commonTarget != null)
+                            AddSequentialConnectionsFrom(result, actions, commonTarget);
+
+                        return result;
+                    }
+                }
+
                 AddSequentialConnections(result, actions);
                 return result;
             }
@@ -1682,7 +1766,6 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddConnection(result, totalIf, falseTarget, "NO");
             }
 
-            List<HumanTaskOutcomeConnection> outcomeConnections = FindHumanTaskOutcomeConnections(actions);
             if (outcomeConnections != null && outcomeConnections.Count > 0)
             {
                 // fix48: los resultados de tareas humanas pueden estar en ramas de IF compuesto,
@@ -3522,6 +3605,163 @@ namespace Intranet.WorkflowStudio.WebForms
             return result;
         }
 
+        // FIX84C2C2b: compone acciones file.write escritas en lenguaje natural dentro de
+        // ramas de una condición de total. La frase puede separar condición y acción por coma
+        // o por oración; conservamos el contexto de rama hasta encontrar la acción.
+        private static List<BranchFileWriteRequest> AnalyzeBranchFileWriteRequests(string originalText, string prefix, string amount)
+        {
+            var result = new List<BranchFileWriteRequest>();
+            if (string.IsNullOrWhiteSpace(originalText) || string.IsNullOrWhiteSpace(amount)) return result;
+
+            string pendingBranch = "";
+            string lastBranch = "";
+
+            foreach (string raw in SplitOriginalClausesForBranches(originalText))
+            {
+                string c = Normalize(raw);
+                if (string.IsNullOrWhiteSpace(c)) continue;
+
+                bool contrary = ContainsAny(c, "caso contrario", "de lo contrario", "contrario");
+                bool totalNegative = ContainsAny(c,
+                    "no supera", "no lo supera", "no la supera", "no supera ese importe", "no supera el importe", "no supera dicho importe",
+                    "no es mayor", "menor a", "menor que", "menor o igual", "no llega a", "por debajo");
+                bool totalPositive = !totalNegative && ContainsAny(c, "supera", "mayor a", "mayor que", "mas de", ">");
+
+                string branch = "";
+                if (contrary)
+                {
+                    branch = string.Equals(lastBranch, "totalFalse", StringComparison.OrdinalIgnoreCase)
+                        ? "totalTrue"
+                        : "totalFalse";
+                    pendingBranch = branch;
+                    lastBranch = branch;
+                }
+                else if (totalNegative)
+                {
+                    branch = "totalFalse";
+                    pendingBranch = branch;
+                    lastBranch = branch;
+                }
+                else if (totalPositive)
+                {
+                    branch = "totalTrue";
+                    pendingBranch = branch;
+                    lastBranch = branch;
+                }
+
+                FileWriteRequest write = ParseNaturalBranchFileWrite(raw, prefix);
+                if (write == null || !write.WantsFileWrite) continue;
+
+                string effectiveBranch = !string.IsNullOrWhiteSpace(branch) ? branch : pendingBranch;
+                if (string.IsNullOrWhiteSpace(effectiveBranch)) continue;
+
+                write.Label = BuildNaturalBranchFileWriteLabel(write.Path, effectiveBranch);
+                result.Add(new BranchFileWriteRequest
+                {
+                    BranchKind = effectiveBranch,
+                    Request = write
+                });
+                pendingBranch = "";
+            }
+
+            return result;
+        }
+
+        private static List<string> SplitOriginalClausesForBranches(string text)
+        {
+            var result = new List<string>();
+            string t = (text ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            if (t.Length == 0) return result;
+
+            // Separamos puntuación de lenguaje, no los puntos internos de nombres de archivo.
+            t = Regex.Replace(t, @"\.\s+(?=[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])", "|");
+            t = Regex.Replace(t, @"\s*,\s*", "|");
+            t = Regex.Replace(t, @"\s+y\s+si\s+", "|si ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+pero\s+si\s+", "|si ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+de\s+lo\s+contrario\s+", "|de lo contrario ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+caso\s+contrario\s+", "|caso contrario ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+(?:después|despues|luego)\s+", "|después ", RegexOptions.IgnoreCase);
+
+            foreach (string part in t.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string value = (part ?? string.Empty).Trim();
+                if (value.Length > 0) result.Add(value);
+            }
+            return result;
+        }
+
+        private static FileWriteRequest ParseNaturalBranchFileWrite(string clause, string prefix)
+        {
+            if (string.IsNullOrWhiteSpace(clause)) return null;
+
+            Match m = Regex.Match(clause,
+                @"\b(?:escribir|guardar)\s+(?<content>.+?)\s+en\s+(?<path>[A-Za-z]:\\[^,;\r\n]+?\.[A-Za-z0-9]{1,8})(?=\s*(?:\.|$))",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return null;
+
+            string contentPhrase = CleanExtractedSentence(m.Groups["content"].Value).Trim();
+            string content = ResolveNaturalFileWriteContent(contentPhrase, prefix);
+            if (string.IsNullOrWhiteSpace(content)) return null;
+
+            string path = CleanExtractedSentence(m.Groups["path"].Value).Trim();
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
+            return new FileWriteRequest
+            {
+                WantsFileWrite = true,
+                Path = path,
+                Content = content,
+                Overwrite = true,
+                Label = "Escribir archivo"
+            };
+        }
+
+        private static string ResolveNaturalFileWriteContent(string phrase, string prefix)
+        {
+            string raw = (phrase ?? string.Empty).Trim();
+            if (raw.Length == 0) return "";
+            if (Regex.IsMatch(raw, @"^\$\{[^}]+\}$")) return raw;
+
+            string n = Normalize(raw);
+            string basePath = string.IsNullOrWhiteSpace(prefix) ? "" : "biz." + prefix.Trim();
+            if (string.IsNullOrWhiteSpace(basePath)) return "";
+
+            if (ContainsAny(n, "numero de factura", "numero factura", "numero del comprobante", "numero de comprobante"))
+                return "${" + basePath + ".numero}";
+
+            if (ContainsAny(n, "cuit del emisor", "cuit emisor", "cuit de emisor"))
+                return "${" + basePath + ".emisor.cuit}";
+
+            if (ContainsAny(n, "total de factura", "total factura", "importe total", "el total", "total"))
+                return "${" + basePath + ".total}";
+
+            if (ContainsToken(n, "cae"))
+                return "${" + basePath + ".cae}";
+
+            return "";
+        }
+
+        private static string BuildNaturalBranchFileWriteLabel(string path, string branchKind)
+        {
+            string fileName = "";
+            try { fileName = Path.GetFileName(path ?? string.Empty); } catch { fileName = ""; }
+            if (string.IsNullOrWhiteSpace(fileName))
+                fileName = string.Equals(branchKind, "totalFalse", StringComparison.OrdinalIgnoreCase) ? "rama NO" : "rama SI";
+            return "Escribir " + fileName;
+        }
+
+        private static BranchFileWriteRequest FindBranchFileWrite(List<BranchFileWriteRequest> requests, string branchKind)
+        {
+            if (requests == null || string.IsNullOrWhiteSpace(branchKind)) return null;
+            foreach (BranchFileWriteRequest request in requests)
+            {
+                if (request == null) continue;
+                if (string.Equals(request.BranchKind ?? "", branchKind, StringComparison.OrdinalIgnoreCase))
+                    return request;
+            }
+            return null;
+        }
+
         private static BranchLoggerRequest AnalyzeBranchLoggerRequest(string userText, string normalizedText, string amount)
         {
             var request = new BranchLoggerRequest();
@@ -3614,7 +3854,9 @@ namespace Intranet.WorkflowStudio.WebForms
                 {
                     ["condition"] = "Total mayor a " + amount,
                     ["fieldKind"] = "total",
-                    ["truePath"] = string.IsNullOrWhiteSpace(branches.TotalTrueRole) ? "pendiente de definir" : "human.task:" + branches.TotalTrueRole,
+                    ["truePath"] = !string.IsNullOrWhiteSpace(branches.TotalTrueRole)
+                        ? "human.task:" + branches.TotalTrueRole
+                        : (!string.IsNullOrWhiteSpace(branches.TotalTrueActionLabel) ? branches.TotalTrueActionLabel : "pendiente de definir"),
                     ["falsePath"] = !string.IsNullOrWhiteSpace(branches.TotalFalseRole)
                         ? "human.task:" + branches.TotalFalseRole
                         : (!string.IsNullOrWhiteSpace(branches.TotalFalseActionLabel) ? branches.TotalFalseActionLabel : "pendiente de definir")
@@ -4110,6 +4352,12 @@ namespace Intranet.WorkflowStudio.WebForms
             public string Content { get; set; }
             public string Label { get; set; }
             public bool Overwrite { get; set; }
+        }
+
+        private class BranchFileWriteRequest
+        {
+            public string BranchKind { get; set; }
+            public FileWriteRequest Request { get; set; }
         }
 
         private class FileReadRequest
@@ -6440,6 +6688,7 @@ namespace Intranet.WorkflowStudio.WebForms
             public string CaeFalseRole { get; set; }
             public string TotalTrueRole { get; set; }
             public string TotalFalseRole { get; set; }
+            public string TotalTrueActionLabel { get; set; }
             public string TotalFalseActionLabel { get; set; }
 
             public BranchAnalysis()
@@ -6447,6 +6696,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 CaeFalseRole = "";
                 TotalTrueRole = "";
                 TotalFalseRole = "";
+                TotalTrueActionLabel = "";
                 TotalFalseActionLabel = "";
             }
 
@@ -6457,6 +6707,7 @@ namespace Intranet.WorkflowStudio.WebForms
                     return !string.IsNullOrWhiteSpace(CaeFalseRole)
                         || !string.IsNullOrWhiteSpace(TotalTrueRole)
                         || !string.IsNullOrWhiteSpace(TotalFalseRole)
+                        || !string.IsNullOrWhiteSpace(TotalTrueActionLabel)
                         || !string.IsNullOrWhiteSpace(TotalFalseActionLabel);
                 }
             }
