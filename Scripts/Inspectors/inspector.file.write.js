@@ -20,7 +20,7 @@
 
         // 2) Ruta de salida
         const inpPath = el('input', 'input');
-        inpPath.value = p.path || tpl.path || 'C:/data/salida.json';
+        inpPath.value = p.path || '';
         const sPath = section('Ruta del archivo (servidor)', inpPath);
 
         // 3) Encoding
@@ -37,7 +37,7 @@
 
         // 5) Origen en contexto (qué se guarda en el archivo)
         const inpOrigen = el('input', 'input');
-        inpOrigen.value = p.origen || 'archivo';
+        inpOrigen.value = p.origen || '';
         const sOrigen = section('Origen en contexto (key, ej: payload, archivo, solicitud)', inpOrigen);
 
         // 6) Contenido (opcional) - plantilla con ${...}
@@ -65,8 +65,7 @@
             node.params = {
                 path: inpPath.value || '',
                 encoding: inpEnc.value || 'utf-8',
-                overwrite: !!chkOv.checked,
-                origen: inpOrigen.value || 'archivo'
+                overwrite: !!chkOv.checked
             };
 
             ensurePosition(node);
@@ -78,7 +77,14 @@
             }
 
             const content = (taContent.value || '').trim();
-            if (content) node.params.content = content; // solo si hay contenido
+            const origen = (inpOrigen.value || '').trim();
+            if (content) node.params.content = content; // content tiene precedencia real en HFileWrite
+            else if (origen) node.params.origen = origen;
+
+            // El inspector no edita todavía las opciones ZIP, pero no debe perderlas al guardar.
+            if (p.zipMode != null) node.params.zipMode = p.zipMode;
+            if (p.entryName != null) node.params.entryName = p.entryName;
+            if (p.zipEntryName != null) node.params.zipEntryName = p.zipEntryName;
 
 
             window.WF_Inspector.render({ type: 'node', id: node.id }, ctx, dom);

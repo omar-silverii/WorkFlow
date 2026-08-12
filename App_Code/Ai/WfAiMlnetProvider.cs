@@ -136,30 +136,61 @@ namespace Intranet.WorkflowStudio.WebForms
             string actionIntentText = StripExplicitHumanTaskAssignmentsForIntent(userText);
             string actionIntentNorm = Normalize(actionIntentText);
             bool hasPrecisionHumanAssignments = !string.Equals(actionIntentText, userText ?? string.Empty, StringComparison.Ordinal);
-            string docTipo = ResolveDocTipo(actionIntentNorm, catalog);
+
+            // FIX84C2D2: file.write también contiene datos declarativos. Primero extraemos su
+            // intención real sobre la frase completa y después retiramos path/content de la vista
+            // usada para detectar OTROS nodos. Así "con contenido Notificar a COMPRAS" sigue
+            // siendo texto del archivo y no se convierte en util.notify/human.task.
+            FileWriteRequest fileWriteRequest = AnalyzeFileWriteRequest(actionIntentText, actionIntentNorm);
+            string nonFileIntentNorm = fileWriteRequest.WantsFileWrite
+                ? StripFileWriteDeclaredValuesForIntent(actionIntentNorm, fileWriteRequest)
+                : actionIntentNorm;
+
+            // FIX84C2D3: file.read también consume valores declarativos (path y salida).
+            // Los extraemos antes de buscar otras intenciones y los retiramos sólo de esa vista,
+            // para que una ruta o una clave de salida no fabrique doc.load, tarea o notificación.
+            FileReadRequest fileReadRequest = AnalyzeFileReadRequest(actionIntentText, nonFileIntentNorm);
+            string nonFileReadIntentNorm = fileReadRequest.WantsFileRead
+                ? StripFileReadDeclaredValuesForIntent(nonFileIntentNorm, fileReadRequest)
+                : nonFileIntentNorm;
+
+            // FIX84C2D4: state.vars también contiene datos declarativos: nombre de variable y valor.
+            // Los extraemos antes de detectar otros nodos y retiramos la cláusula consumida de esa vista.
+            // Así guardar el texto "Notificar internamente al rol COMPRAS" no fabrica util.notify.
+            StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(actionIntentText);
+            string nonStateIntentNorm = stateVarsRequest.WantsStateVars
+                ? StripStateVarsDeclaredValuesForIntent(nonFileReadIntentNorm, stateVarsRequest)
+                : nonFileReadIntentNorm;
+
+            // FIX84C2D1b: una notificación interna explícita tiene valores declarativos propios
+            // (destinatario, asunto y mensaje). Esos valores NO son nuevas intenciones del workflow.
+            // La frase completa sigue llegando a AnalyzeNotifyRequest para extraer los valores reales;
+            // para detectar OTROS nodos usamos una vista semántica donde esos valores ya fueron consumidos.
+            NotifyRequest notifyRequest = AnalyzeNotifyRequest(actionIntentText, nonStateIntentNorm);
+            string otherIntentNorm = notifyRequest.WantsNotify
+                ? StripNotifyDeclaredValuesForIntent(nonStateIntentNorm, notifyRequest)
+                : nonStateIntentNorm;
+
+            string docTipo = ResolveDocTipo(otherIntentNorm, catalog);
             string prefix = ResolvePrefix(docTipo, catalog);
-            string role = ResolveRole(actionIntentNorm, catalog);
-            string userKey = ResolveUser(actionIntentNorm, catalog);
-            string amount = ExtractAmount(actionIntentNorm);
+            string role = ResolveRole(otherIntentNorm, catalog);
+            string userKey = ResolveUser(otherIntentNorm, catalog);
+            string amount = ExtractAmount(otherIntentNorm);
             List<GuidedConditionRequest> guidedConditions = AnalyzeGuidedConditions(actionIntentText);
             bool hasGuidedConditions = guidedConditions.Count > 0;
-            NaturalCompositeConditionRequest naturalCompositeCondition = AnalyzeNaturalCompositeCondition(actionIntentText, actionIntentNorm, catalog, prefix, amount);
+            NaturalCompositeConditionRequest naturalCompositeCondition = AnalyzeNaturalCompositeCondition(actionIntentText, otherIntentNorm, catalog, prefix, amount);
             bool hasNaturalCompositeCondition = naturalCompositeCondition != null && naturalCompositeCondition.IsDetected;
-            List<HumanTaskOutcomeRequest> humanTaskOutcomes = AnalyzeHumanTaskOutcomeRequests(actionIntentText, actionIntentNorm, catalog);
+            List<HumanTaskOutcomeRequest> humanTaskOutcomes = AnalyzeHumanTaskOutcomeRequests(actionIntentText, otherIntentNorm, catalog);
             bool hasHumanTaskOutcome = humanTaskOutcomes != null && humanTaskOutcomes.Count > 0;
-            List<EmailRequest> emailRequests = AnalyzeEmailRequests(actionIntentText, actionIntentNorm, catalog);
+            List<EmailRequest> emailRequests = AnalyzeEmailRequests(actionIntentText, otherIntentNorm, catalog);
             EmailRequest emailRequest = emailRequests.Count > 0 ? emailRequests[0] : new EmailRequest();
-            NotifyRequest notifyRequest = AnalyzeNotifyRequest(actionIntentText, actionIntentNorm);
-            StateVarsRequest stateVarsRequest = AnalyzeStateVarsRequest(actionIntentText);
-            DelayRequest delayRequest = AnalyzeDelayRequest(actionIntentNorm);
-            HttpRequestRequest httpRequest = AnalyzeHttpRequestRequest(actionIntentText, actionIntentNorm);
-            SqlRequest sqlRequest = AnalyzeSqlRequest(actionIntentText, actionIntentNorm);
-            FileWriteRequest fileWriteRequest = AnalyzeFileWriteRequest(actionIntentText, actionIntentNorm);
-            FileReadRequest fileReadRequest = AnalyzeFileReadRequest(actionIntentText, actionIntentNorm);
-            QueuePublishRequest queuePublishRequest = AnalyzeQueuePublishRequest(actionIntentText, actionIntentNorm);
-            QueueConsumeRequest queueConsumeRequest = AnalyzeQueueConsumeRequest(actionIntentText, actionIntentNorm);
-            StandaloneLoggerRequest standaloneLoggerRequest = AnalyzeStandaloneLoggerRequest(actionIntentText, actionIntentNorm);
-            string preBranchRole = ExtractPreBranchHumanTaskRole(actionIntentNorm, catalog);
+            DelayRequest delayRequest = AnalyzeDelayRequest(otherIntentNorm);
+            HttpRequestRequest httpRequest = AnalyzeHttpRequestRequest(actionIntentText, otherIntentNorm);
+            SqlRequest sqlRequest = AnalyzeSqlRequest(actionIntentText, otherIntentNorm);
+            QueuePublishRequest queuePublishRequest = AnalyzeQueuePublishRequest(actionIntentText, otherIntentNorm);
+            QueueConsumeRequest queueConsumeRequest = AnalyzeQueueConsumeRequest(actionIntentText, otherIntentNorm);
+            StandaloneLoggerRequest standaloneLoggerRequest = AnalyzeStandaloneLoggerRequest(actionIntentText, otherIntentNorm);
+            string preBranchRole = ExtractPreBranchHumanTaskRole(otherIntentNorm, catalog);
             if (!string.IsNullOrWhiteSpace(preBranchRole))
             {
                 role = preBranchRole;
@@ -175,7 +206,7 @@ namespace Intranet.WorkflowStudio.WebForms
                 userKey = "";
             }
 
-            bool wantsCaeValidation = !hasGuidedConditions && !hasNaturalCompositeCondition && (ContainsToken(actionIntentNorm, "cae") || ContainsToken(actionIntentNorm, "cai"));
+            bool wantsCaeValidation = !hasGuidedConditions && !hasNaturalCompositeCondition && (ContainsToken(otherIntentNorm, "cae") || ContainsToken(otherIntentNorm, "cai"));
             if (hasGuidedConditions || hasNaturalCompositeCondition)
             {
                 // Si el constructor guiado o la frase libre armó un IF explícito por campo, evitamos duplicar
@@ -194,26 +225,45 @@ namespace Intranet.WorkflowStudio.WebForms
             // "Crear una tarea. Rol = COMPRAS; Título = Revisar factura."
             // no debe crear doc.load solamente porque el título contiene "factura".
             bool hasExplicitDocumentSignal = docTipo.Length > 0
-                || ContainsAny(actionIntentNorm, "cargar", "subir", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
+                || ContainsAny(otherIntentNorm, "cargar", "subir", "documento", "factura", "nota credito", "nota de credito", " nc ", "comprobante");
             bool wantsDocument = hasExplicitDocumentSignal;
             if ((fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead)
                 && string.IsNullOrWhiteSpace(docTipo)
-                && !ContainsAny(actionIntentNorm, "nota credito", "nota de credito", "factura", "documento"))
+                && !ContainsAny(otherIntentNorm, "nota credito", "nota de credito", "factura", "documento"))
             {
                 // fix64: frases como "leer archivo" o "escribir archivo" son file.read/file.write,
                 // no doc.load. Evitamos que la palabra "leer" dispare carga documental.
                 wantsDocument = false;
             }
 
-            bool wantsHumanTask = role.Length > 0 || userKey.Length > 0 || HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA") || HasExplicitHumanTaskSignal(actionIntentNorm);
-            if (emailRequest.WantsEmail && !HasExplicitHumanTaskSignal(actionIntentNorm))
+            bool explicitHumanTaskSignal = HasExplicitHumanTaskSignal(otherIntentNorm);
+            bool wantsHumanTask = role.Length > 0 || userKey.Length > 0
+                || (!notifyRequest.WantsNotify && (HasIntent(predictions, "CREAR_TAREA_ROL") || HasIntent(predictions, "CONDICION_Y_TAREA")))
+                || explicitHumanTaskSignal;
+            if (emailRequest.WantsEmail && !explicitHumanTaskSignal)
+                wantsHumanTask = false;
+            // FIX84C2D1b: cuando hay una intención explícita de notificación, la clasificación ML
+            // del mismo texto no puede fabricar una human.task. Si además existe una tarea real,
+            // debe estar expresada fuera de los valores consumidos por la notificación.
+            if (notifyRequest.WantsNotify && !explicitHumanTaskSignal && role.Length == 0 && userKey.Length == 0)
                 wantsHumanTask = false;
             if ((httpRequest.WantsHttp || sqlRequest.WantsSql
                     || fileWriteRequest.WantsFileWrite || fileReadRequest.WantsFileRead
+                    || stateVarsRequest.WantsStateVars
                     || queuePublishRequest.WantsQueuePublish || queueConsumeRequest.WantsQueueConsume)
-                && !HasExplicitHumanTaskSignal(actionIntentNorm))
+                && !explicitHumanTaskSignal)
                 wantsHumanTask = false;
-            bool wantsLogger = (!hasPrecisionHumanAssignments && HasIntent(predictions, "REGISTRAR_LOG")) || ContainsAny(actionIntentNorm, "log", "registrar", "dejar constancia");
+            // FIX84C2D3b: dentro de file.read, palabras declarativas como "guardar el contenido en datos.archivo"
+            // pueden sesgar el modelo ML hacia REGISTRAR_LOG. Una predicción sola no debe fabricar un Logger.
+            // Si el usuario realmente pide registrar/loguear además de leer, las señales explícitas permanecen
+            // en otherIntentNorm y conservan el comportamiento histórico (por ejemplo K_FILE_READ_LOGGER).
+            bool explicitLoggerSignal = ContainsAny(otherIntentNorm, "log", "registrar", "dejar constancia");
+            bool wantsLogger = explicitLoggerSignal
+                || (!hasPrecisionHumanAssignments
+                    && !notifyRequest.WantsNotify
+                    && !fileReadRequest.WantsFileRead
+                    && !stateVarsRequest.WantsStateVars
+                    && HasIntent(predictions, "REGISTRAR_LOG"));
             if (hasHumanTaskOutcome)
             {
                 // fix45: si la frase ya pidió qué registrar al aprobar/rechazar una tarea humana,
@@ -221,10 +271,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 // que mezcle las ramas y oculte la decisión APTO/NO APTO.
                 wantsLogger = false;
             }
-            bool wantsEnd = (!hasPrecisionHumanAssignments && HasIntent(predictions, "FINALIZAR_FLUJO")) || ContainsAny(actionIntentNorm, "finalizar", "terminar", "fin del flujo");
+            bool wantsEnd = (!hasPrecisionHumanAssignments && !notifyRequest.WantsNotify && HasIntent(predictions, "FINALIZAR_FLUJO"))
+                || ContainsAny(otherIntentNorm, "finalizar", "terminar", "fin del flujo");
 
-            BranchAnalysis branches = AnalyzeBranches(actionIntentNorm, catalog, amount);
-            BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(actionIntentText, actionIntentNorm, amount);
+            BranchAnalysis branches = AnalyzeBranches(otherIntentNorm, catalog, amount);
+            BranchLoggerRequest branchLoggerRequest = AnalyzeBranchLoggerRequest(actionIntentText, otherIntentNorm, amount);
             // FIX84C2C2b: las acciones naturales expresadas dentro de una rama del IF
             // (por ejemplo "Si el total supera..., escribir el número de factura en ...")
             // se resuelven como acciones de esa rama. No deben perderse ni convertirse en
@@ -236,7 +287,7 @@ namespace Intranet.WorkflowStudio.WebForms
             var actions = new JArray();
             var missing = new JArray();
             var warnings = new JArray();
-            string unknownRoleMention = DetectUnknownRoleMention(actionIntentNorm, catalog);
+            string unknownRoleMention = DetectUnknownRoleMention(otherIntentNorm, catalog);
 
             if (!string.IsNullOrWhiteSpace(unknownRoleMention))
             {
@@ -289,7 +340,7 @@ namespace Intranet.WorkflowStudio.WebForms
             if (emailRequests.Count > 0)
                 AddEmailRequestAction(actions, missing, emailRequests[0], emailRequests.Count > 1 ? 1 : 0);
 
-            if (stateVarsRequest.HasChanges)
+            if (stateVarsRequest.WantsStateVars)
                 AddStateVarsAction(actions, stateVarsRequest);
 
             if (notifyRequest.WantsNotify)
@@ -1556,7 +1607,7 @@ namespace Intranet.WorkflowStudio.WebForms
 
         private static void AddStateVarsAction(JArray actions, StateVarsRequest request)
         {
-            if (actions == null || request == null || !request.HasChanges) return;
+            if (actions == null || request == null || !request.WantsStateVars) return;
 
             var p = new JObject();
             if (request.Set.Count > 0)
@@ -1570,7 +1621,11 @@ namespace Intranet.WorkflowStudio.WebForms
             if (request.Remove.Count > 0)
                 p["remove"] = JArray.FromObject(request.Remove);
 
-            actions.Add(AddNode("state.vars", "Definir variables", p));
+            string label = request.HasChanges
+                ? "Definir variables"
+                : (request.WantsRemove && !request.WantsSet ? "Quitar variable"
+                    : (request.WantsSet && !request.WantsRemove ? "Guardar variable" : "Definir variables"));
+            actions.Add(AddNode("state.vars", label, p));
         }
 
         private static void AddDelayAction(JArray actions, DelayRequest request)
@@ -2480,14 +2535,22 @@ namespace Intranet.WorkflowStudio.WebForms
             string t = Normalize(normalizedText);
             if (string.IsNullOrWhiteSpace(t)) return request;
 
-            bool wants = ContainsAny(t, "escribir archivo", "guardar archivo", "crear archivo", "generar archivo", "file write", "archivo escribir");
-            if (!wants) return request;
+            bool explicitFileWrite = ContainsAny(t,
+                "escribir archivo", "guardar archivo", "crear archivo", "generar archivo", "file write", "archivo escribir");
+
+            // FIX84C2D2: soporta también la forma humana "escribir <dato> en C:\..." cuando
+            // es una acción standalone. Las acciones dentro de un IF siguen siendo responsabilidad
+            // del compositor C2C2b para no duplicar nodos ni perder el contexto de rama.
+            bool hasConditionalContext = ContainsAny(t, "si ", "caso contrario", "de lo contrario", "cuando ");
+            bool naturalDataToPath = !hasConditionalContext && Regex.IsMatch(originalText ?? string.Empty,
+                @"\b(?:escribir|guardar)\s+.+?\s+en\s+(?:[A-Za-z]:\\|/)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!explicitFileWrite && !naturalDataToPath) return request;
 
             request.WantsFileWrite = true;
             request.Path = ExtractFilePath(originalText);
-            if (string.IsNullOrWhiteSpace(request.Path)) request.Path = @"C:\temp\wf_ai_regression.txt";
             request.Content = ExtractFileContent(originalText);
-            if (string.IsNullOrWhiteSpace(request.Content)) request.Content = "Contenido generado por Asistente IA";
             request.Overwrite = true;
             request.Label = "Escribir archivo";
             return request;
@@ -2504,9 +2567,9 @@ namespace Intranet.WorkflowStudio.WebForms
 
             request.WantsFileRead = true;
             request.Path = ExtractFilePath(originalText);
-            if (string.IsNullOrWhiteSpace(request.Path)) request.Path = @"C:\temp\wf_ai_regression.txt";
-            request.Salida = "archivo";
-            request.AsJson = false;
+            request.Salida = ExtractFileReadOutput(originalText);
+            request.AsJson = ContainsAny(t,
+                "como json", "en json", "interpretar como json", "parsear como json", "leer json");
             request.Label = "Leer archivo";
             return request;
         }
@@ -2515,12 +2578,28 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (string.IsNullOrWhiteSpace(originalText)) return "";
 
+            var token = Regex.Match(originalText,
+                @"\b(?:leer|abrir)\s+(?:el\s+)?archivo\s+(?<path>\$\{[^}]+\})",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (token.Success) return CleanExtractedSentence(token.Groups["path"].Value).Trim();
+
             var m = Regex.Match(originalText,
-                @"(?<path>[A-Za-z]:\\[^\r\n,;]+?|/[^\r\n,;]+?)(?=(?:\s+con\s+contenido\b|\s+contenido\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
+                @"(?<path>[A-Za-z]:\\[^\r\n,;]+?|/[^\r\n,;]+?)(?=(?:\s+y\s+(?:guardar|dejar|poner|almacenar)\b|\s+como\s+json\b|\s+en\s+json\b|\s+con\s+contenido\b|\s+contenido\b|\.\s|\s+registrar\b|\s+despues\b|\s+después\b|\s+finalizar\b|$))",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (!m.Success) return "";
 
             return CleanExtractedSentence(m.Groups["path"].Value).Trim();
+        }
+
+        private static string ExtractFileReadOutput(string originalText)
+        {
+            if (string.IsNullOrWhiteSpace(originalText)) return "";
+
+            var m = Regex.Match(originalText,
+                @"\b(?:guardar|dejar|poner|almacenar)\s+(?:el\s+)?contenido\s+en\s+(?<output>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!m.Success) return "";
+            return CleanExtractedSentence(m.Groups["output"].Value).Trim();
         }
 
         private static string ExtractFileContent(string originalText)
@@ -2539,26 +2618,33 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             if (actions == null || request == null || !request.WantsFileWrite) return;
 
-            actions.Add(AddNode("file.write", string.IsNullOrWhiteSpace(request.Label) ? "Escribir archivo" : request.Label, new JObject
-            {
-                ["path"] = string.IsNullOrWhiteSpace(request.Path) ? @"C:\temp\wf_ai_regression.txt" : request.Path,
-                ["content"] = string.IsNullOrWhiteSpace(request.Content) ? "Contenido generado por Asistente IA" : request.Content,
-                ["encoding"] = "utf-8",
-                ["overwrite"] = request.Overwrite
-            }));
+            // FIX84C2D2: no completar decisiones de negocio con valores de regresión. La capa
+            // contractual común decidirá defaults técnicos y pedirá path/content cuando falten.
+            var parameters = new JObject();
+            if (!string.IsNullOrWhiteSpace(request.Path)) parameters["path"] = request.Path;
+            if (!string.IsNullOrWhiteSpace(request.Content)) parameters["content"] = request.Content;
+
+            actions.Add(AddNode(
+                "file.write",
+                string.IsNullOrWhiteSpace(request.Label) ? "Escribir archivo" : request.Label,
+                parameters));
         }
 
         private static void AddFileReadAction(JArray actions, FileReadRequest request)
         {
             if (actions == null || request == null || !request.WantsFileRead) return;
 
-            actions.Add(AddNode("file.read", string.IsNullOrWhiteSpace(request.Label) ? "Leer archivo" : request.Label, new JObject
-            {
-                ["path"] = string.IsNullOrWhiteSpace(request.Path) ? @"C:\temp\wf_ai_regression.txt" : request.Path,
-                ["salida"] = string.IsNullOrWhiteSpace(request.Salida) ? "archivo" : request.Salida,
-                ["encoding"] = "utf-8",
-                ["asJson"] = request.AsJson
-            }));
+            // FIX84C2D3: el provider sólo aporta datos realmente expresados. salida, encoding,
+            // asJson, zipMode y useCache se completan en el contrato común cuando corresponde.
+            var parameters = new JObject();
+            if (!string.IsNullOrWhiteSpace(request.Path)) parameters["path"] = request.Path;
+            if (!string.IsNullOrWhiteSpace(request.Salida)) parameters["salida"] = request.Salida;
+            if (request.AsJson) parameters["asJson"] = true;
+
+            actions.Add(AddNode(
+                "file.read",
+                string.IsNullOrWhiteSpace(request.Label) ? "Leer archivo" : request.Label,
+                parameters));
         }
 
         private static QueuePublishRequest AnalyzeQueuePublishRequest(string originalText, string normalizedText)
@@ -2921,7 +3007,16 @@ namespace Intranet.WorkflowStudio.WebForms
             var request = new StateVarsRequest();
             if (string.IsNullOrWhiteSpace(originalText)) return request;
 
-            string setPattern = @"\b(?:guardar|setear|definir|crear|asignar|poner)\s+(?:la\s+)?variable\s+(?<key>[A-Z0-9_\.]+)\s+(?:con\s+valor|como|en|=)\s+(?<value>.+?)(?=(?:,|\.)?\s*\b(?:luego|despues|después|registrar|finalizar|terminar|esperar|demorar|pausar|mandar|enviar|derivar|pasar|validar|si)\b|[\r\n]|$)";
+            request.WantsSet = Regex.IsMatch(originalText,
+                @"\b(?:guardar|setear|definir|crear|asignar|poner)\s+(?:la\s+)?variable\b",
+                RegexOptions.IgnoreCase);
+            request.WantsRemove = Regex.IsMatch(originalText,
+                @"\b(?:quitar|eliminar|borrar|remover)\s+(?:la\s+)?variable\b",
+                RegexOptions.IgnoreCase);
+
+            // El final de la cláusula se reconoce por separador real + nueva acción. Esto evita
+            // que palabras como "Notificar" o "Registrar" dentro del VALOR se vuelvan intenciones.
+            string setPattern = @"\b(?:guardar|setear|definir|crear|asignar|poner)\s+(?:la\s+)?variable\s+(?<key>[A-Z0-9_\.]+)\s+(?:con\s+valor|como|en|=)\s+(?<value>.+?)(?=(?:(?:\s*[\.;]\s*|\s*,\s*)\b(?:luego|despues|después|registrar|finalizar|terminar|esperar|demorar|pausar|mandar|enviar|derivar|pasar|validar|si)\b)|[\r\n]|$)";
             foreach (Match m in Regex.Matches(originalText, setPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
             {
                 string key = CleanVariableKey(m.Groups["key"].Value);
@@ -2940,6 +3035,26 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             return request;
+        }
+
+        private static string StripStateVarsDeclaredValuesForIntent(string normalizedText, StateVarsRequest request)
+        {
+            string result = normalizedText ?? string.Empty;
+            if (request == null || !request.WantsStateVars || result.Length == 0) return result;
+
+            if (request.WantsSet)
+            {
+                string setClause = @"\b(?:guardar|setear|definir|crear|asignar|poner)\s+(?:la\s+)?variable\s+[a-z0-9_\.]+\s+(?:con\s+valor|como|en|=)\s+.+?(?=(?:(?:\s*[\.;]\s*|\s*,\s*)\b(?:luego|despues|registrar|finalizar|terminar|esperar|demorar|pausar|mandar|enviar|derivar|pasar|validar|si)\b)|[\r\n]|$)";
+                result = Regex.Replace(result, setClause, " guardar variable ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
+
+            if (request.WantsRemove)
+            {
+                string removeClause = @"\b(?:quitar|eliminar|borrar|remover)\s+(?:la\s+)?variable\s+[a-z0-9_\.]+";
+                result = Regex.Replace(result, removeClause, " quitar variable ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
+
+            return Regex.Replace(result, @"\s+", " ").Trim();
         }
 
         private static DelayRequest AnalyzeDelayRequest(string normalizedText)
@@ -4155,6 +4270,131 @@ namespace Intranet.WorkflowStudio.WebForms
         }
 
         /// <summary>
+        /// FIX84C2D2: path y content de file.write son datos ya consumidos por esa acción.
+        /// Se retiran únicamente de la vista de detección de otras intenciones; la extracción
+        /// y los parámetros reales de file.write conservan el texto original.
+        /// </summary>
+        private static string StripFileWriteDeclaredValuesForIntent(string normalizedText, FileWriteRequest request)
+        {
+            string text = Normalize(normalizedText);
+            if (request == null || !request.WantsFileWrite) return text;
+
+            int start = IndexOfFileWriteStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Path, start);
+            start = IndexOfFileWriteStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Content, start);
+            return Normalize(text);
+        }
+
+        private static int IndexOfFileWriteStart(string normalizedText)
+        {
+            string text = Normalize(normalizedText);
+            string[] markers = new[]
+            {
+                "escribir archivo", "guardar archivo", "crear archivo", "generar archivo",
+                "archivo escribir", "file write", "escribir", "guardar"
+            };
+
+            int best = -1;
+            foreach (string marker in markers)
+            {
+                string needle = Normalize(marker).Trim();
+                int idx = text.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+            }
+            return best < 0 ? 0 : best;
+        }
+
+        /// <summary>
+        /// FIX84C2D3: path y salida de file.read son datos de la acción de lectura.
+        /// Se retiran sólo de la vista que detecta OTROS nodos; el file.read conserva
+        /// los valores extraídos desde la frase original.
+        /// </summary>
+        private static string StripFileReadDeclaredValuesForIntent(string normalizedText, FileReadRequest request)
+        {
+            string text = Normalize(normalizedText);
+            if (request == null || !request.WantsFileRead) return text;
+
+            int start = IndexOfFileReadStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Path, start);
+            start = IndexOfFileReadStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Salida, start);
+            return Normalize(text);
+        }
+
+        private static int IndexOfFileReadStart(string normalizedText)
+        {
+            string text = Normalize(normalizedText);
+            string[] markers = new[] { "leer archivo", "abrir archivo", "file read", "archivo leer" };
+            int best = -1;
+            foreach (string marker in markers)
+            {
+                string needle = Normalize(marker).Trim();
+                int idx = text.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+            }
+            return best < 0 ? 0 : best;
+        }
+
+        /// <summary>
+        /// FIX84C2D1b: elimina de la vista usada para detectar OTROS nodos solamente los
+        /// valores ya consumidos por una notificación interna explícita. La extracción real
+        /// de util.notify se hace antes sobre la frase completa; acá evitamos que destino,
+        /// asunto o mensaje vuelvan a disparar doc.load, human.task u otra intención legacy.
+        /// </summary>
+        private static string StripNotifyDeclaredValuesForIntent(string normalizedText, NotifyRequest request)
+        {
+            string text = Normalize(normalizedText);
+            if (request == null || !request.WantsNotify) return text;
+
+            int notifyStart = IndexOfExplicitInternalNotifyStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Destination, notifyStart);
+
+            notifyStart = IndexOfExplicitInternalNotifyStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Title, notifyStart);
+
+            notifyStart = IndexOfExplicitInternalNotifyStart(text);
+            text = RemoveNormalizedPhraseAfter(text, request.Message, notifyStart);
+
+            return Normalize(text);
+        }
+
+        private static int IndexOfExplicitInternalNotifyStart(string normalizedText)
+        {
+            string text = Normalize(normalizedText);
+            string[] markers = new[]
+            {
+                "notificar internamente", "notificacion interna", "notificar por sistema",
+                "notificacion por sistema", "notificar en el sistema", "aviso interno",
+                "aviso por sistema", "aviso en el sistema", "avisar por sistema",
+                "mostrar notificacion", "agregar notificacion", "crear notificacion"
+            };
+
+            int best = -1;
+            foreach (string marker in markers)
+            {
+                string needle = Normalize(marker).Trim();
+                int idx = text.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+            }
+            return best < 0 ? 0 : best;
+        }
+
+        private static string RemoveNormalizedPhraseAfter(string normalizedText, string value, int startIndex)
+        {
+            string text = normalizedText ?? string.Empty;
+            string needle = Normalize(value).Trim();
+            if (needle.Length == 0) return text;
+
+            string pattern = @"(?<![a-z0-9_])" + Regex.Escape(needle).Replace(@"\ ", @"\s+") + @"(?![a-z0-9_])";
+            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+            Match match = regex.Match(text, Math.Max(0, startIndex));
+            if (!match.Success) return text;
+
+            return text.Substring(0, match.Index) + " " + text.Substring(match.Index + match.Length);
+        }
+
+        /// <summary>
         /// FIX84C2B: elimina solamente los pares Nombre = valor que siguen a una intención
         /// explícita de tarea humana para que sus valores no se interpreten como otras
         /// acciones del workflow. La frase original sigue usándose para resolver rol,
@@ -4416,16 +4656,25 @@ namespace Intranet.WorkflowStudio.WebForms
         {
             public Dictionary<string, object> Set { get; private set; }
             public List<string> Remove { get; private set; }
+            public bool WantsSet { get; set; }
+            public bool WantsRemove { get; set; }
 
             public StateVarsRequest()
             {
                 Set = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 Remove = new List<string>();
+                WantsSet = false;
+                WantsRemove = false;
             }
 
             public bool HasChanges
             {
                 get { return Set.Count > 0 || Remove.Count > 0; }
+            }
+
+            public bool WantsStateVars
+            {
+                get { return WantsSet || WantsRemove || HasChanges; }
             }
         }
 
@@ -5184,8 +5433,8 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 ["clauseIndex"] = clause.Index,
                 ["check"] = "file_write",
-                ["expectedPath"] = string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path,
-                ["expectedContent"] = string.IsNullOrWhiteSpace(expected.Content) ? "Contenido generado por Asistente IA" : expected.Content,
+                ["expectedPath"] = expected.Path ?? string.Empty,
+                ["expectedContent"] = expected.Content ?? string.Empty,
                 ["expectedEncoding"] = "utf-8",
                 ["expectedOverwrite"] = true,
                 ["result"] = exists ? "ok" : "missing_action"
@@ -5204,7 +5453,9 @@ namespace Intranet.WorkflowStudio.WebForms
             checks.Add(check);
 
             if (!exists)
-                errors.Add("Cláusula " + clause.Index + ": esperaba file.write path " + (string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path) + ", pero no existe en actions o no coinciden parámetros.");
+                errors.Add("Cláusula " + clause.Index + ": esperaba file.write"
+                    + (string.IsNullOrWhiteSpace(expected.Path) ? string.Empty : " path " + expected.Path)
+                    + ", pero no existe en actions o no coinciden los datos explícitos.");
         }
 
         private static void CheckSemanticFileRead(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
@@ -5219,10 +5470,10 @@ namespace Intranet.WorkflowStudio.WebForms
             {
                 ["clauseIndex"] = clause.Index,
                 ["check"] = "file_read",
-                ["expectedPath"] = string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path,
+                ["expectedPath"] = expected == null ? "" : (expected.Path ?? ""),
                 ["expectedSalida"] = string.IsNullOrWhiteSpace(expected.Salida) ? "archivo" : expected.Salida,
                 ["expectedEncoding"] = "utf-8",
-                ["expectedAsJson"] = false,
+                ["expectedAsJson"] = expected != null && expected.AsJson,
                 ["result"] = exists ? "ok" : "missing_action"
             };
 
@@ -5239,7 +5490,9 @@ namespace Intranet.WorkflowStudio.WebForms
             checks.Add(check);
 
             if (!exists)
-                errors.Add("Cláusula " + clause.Index + ": esperaba file.read path " + (string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path) + ", pero no existe en actions o no coinciden parámetros.");
+                errors.Add("Cláusula " + clause.Index + ": esperaba file.read"
+                    + (expected == null || string.IsNullOrWhiteSpace(expected.Path) ? string.Empty : " path " + expected.Path)
+                    + ", pero no existe en actions o no coinciden los datos explícitos.");
         }
 
         private static void CheckSemanticStateVars(PhraseClauseDiagnostic clause, string fullText, JArray actions, JArray checks, JArray warnings, JArray errors)
@@ -5357,22 +5610,27 @@ namespace Intranet.WorkflowStudio.WebForms
         private static JObject FindFileWriteAction(JArray actions, FileWriteRequest expected)
         {
             if (actions == null) return null;
-            string expectedPath = expected == null || string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path;
-            string expectedContent = expected == null || string.IsNullOrWhiteSpace(expected.Content) ? "Contenido generado por Asistente IA" : expected.Content;
+            string expectedPath = expected == null ? string.Empty : (expected.Path ?? string.Empty).Trim();
+            string expectedContent = expected == null ? string.Empty : (expected.Content ?? string.Empty).Trim();
 
             foreach (JObject action in actions)
             {
                 if (!string.Equals(Convert.ToString(action["nodeType"]), "file.write", StringComparison.OrdinalIgnoreCase)) continue;
                 JObject p = action["params"] as JObject;
                 if (p == null) continue;
-                string path = Convert.ToString(p["path"]);
-                string content = Convert.ToString(p["content"]);
-                string encoding = Convert.ToString(p["encoding"]);
-                string overwrite = Convert.ToString(p["overwrite"]);
-                if (!FilePathSemanticEquals(path, expectedPath)) continue;
-                if (!string.Equals(NormalizeSemanticText(content), NormalizeSemanticText(expectedContent), StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
-                if (!BoolTextEquals(overwrite, true)) continue;
+                string path = Convert.ToString(p["path"] ?? "");
+                string content = Convert.ToString(p["content"] ?? "");
+                string encoding = Convert.ToString(p["encoding"] ?? "");
+                string overwrite = Convert.ToString(p["overwrite"] ?? "");
+
+                if (expectedPath.Length > 0 && !FilePathSemanticEquals(path, expectedPath)) continue;
+                if (expectedContent.Length > 0
+                    && !string.Equals(NormalizeSemanticText(content), NormalizeSemanticText(expectedContent), StringComparison.OrdinalIgnoreCase)) continue;
+
+                // FIX84C2D2: antes del contrato común estos defaults pueden no estar materializados.
+                // Ausencia equivale al default seguro; si el provider sí los escribió deben ser válidos.
+                if (encoding.Length > 0 && !string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
+                if (overwrite.Length > 0 && !BoolTextEquals(overwrite, true)) continue;
                 return action;
             }
             return null;
@@ -5381,7 +5639,7 @@ namespace Intranet.WorkflowStudio.WebForms
         private static JObject FindFileReadAction(JArray actions, FileReadRequest expected)
         {
             if (actions == null) return null;
-            string expectedPath = expected == null || string.IsNullOrWhiteSpace(expected.Path) ? @"C:\temp\wf_ai_regression.txt" : expected.Path;
+            string expectedPath = expected == null ? string.Empty : (expected.Path ?? string.Empty).Trim();
             string expectedSalida = expected == null || string.IsNullOrWhiteSpace(expected.Salida) ? "archivo" : expected.Salida;
 
             foreach (JObject action in actions)
@@ -5393,10 +5651,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 string salida = Convert.ToString(p["salida"]);
                 string encoding = Convert.ToString(p["encoding"]);
                 string asJson = Convert.ToString(p["asJson"]);
-                if (!FilePathSemanticEquals(path, expectedPath)) continue;
-                if (!string.Equals(salida, expectedSalida, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
-                if (!BoolTextEquals(asJson, false)) continue;
+                if (expectedPath.Length > 0 && !FilePathSemanticEquals(path, expectedPath)) continue;
+                if (salida.Length > 0 && !string.Equals(salida, expectedSalida, StringComparison.OrdinalIgnoreCase)) continue;
+                if (encoding.Length > 0 && !string.Equals(encoding, "utf-8", StringComparison.OrdinalIgnoreCase)) continue;
+                if (asJson.Length > 0 && !BoolTextEquals(asJson, expected != null && expected.AsJson)) continue;
+                if (asJson.Length == 0 && expected != null && expected.AsJson) continue;
                 return action;
             }
             return null;

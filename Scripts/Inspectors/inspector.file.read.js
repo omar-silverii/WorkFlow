@@ -2,6 +2,27 @@
     const { register, helpers } = window.WF_Inspector;
     const { el, section, rowButtons, btn } = helpers;
 
+    const asBool = (value, fallback) => {
+        if (value === undefined || value === null || value === '') return !!fallback;
+        if (typeof value === 'boolean') return value;
+        const text = String(value).trim().toLowerCase();
+        if (text === 'true' || text === '1' || text === 'si' || text === 'sí') return true;
+        if (text === 'false' || text === '0' || text === 'no') return false;
+        return !!fallback;
+    };
+
+    const selectWithOptions = (items, value) => {
+        const sel = el('select', 'input');
+        items.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.value;
+            opt.textContent = item.label;
+            sel.appendChild(opt);
+        });
+        sel.value = value;
+        return sel;
+    };
+
     register('file.read', (node, ctx, dom) => {
         const { ensurePosition, nodeEl } = ctx;
         const { body, title, sub } = dom;
@@ -13,48 +34,34 @@
         const p = node.params || {};
         const tpl = (window.PARAM_TEMPLATES && window.PARAM_TEMPLATES['file.read']) || {};
 
-        // =======================
-        // 1) Etiqueta
-        // =======================
         const inpLbl = el('input', 'input');
         inpLbl.value = node.label || '';
         const sLbl = section('Etiqueta (label)', inpLbl);
 
-        // =======================
-        // 2) Ruta del archivo (textarea grande)
-        // =======================
         const inpPath = el('textarea', 'input');
         inpPath.rows = 5;
         inpPath.style.resize = 'vertical';
         inpPath.style.fontFamily = 'monospace';
         inpPath.style.fontSize = '12px';
         inpPath.value = (p.path != null ? String(p.path) : (tpl.path != null ? String(tpl.path) : ''));
-        inpPath.placeholder = 'Ej: \\\\SERVIDOR\\carpeta\\archivo.txt';
+        inpPath.placeholder = 'Ej: \\SERVIDOR\\carpeta\\archivo.txt';
         const sPath = section('Ruta del archivo (servidor)', inpPath);
 
-        // =======================
-        // 3) Encoding
-        // =======================
         const inpEnc = el('input', 'input');
         inpEnc.value = (p.encoding || tpl.encoding || 'utf-8');
         inpEnc.placeholder = 'utf-8 / latin1 / windows-1252';
         const sEnc = section('Encoding', inpEnc);
 
-        // =======================
-        // 4) Salida (key)
-        // Compat: acepta p.output, guardamos siempre "salida"
-        // =======================
+        // Compatibilidad: HFileRead acepta output, pero el Constructor D3 guarda canónicamente salida.
         const inpSalida = el('input', 'input');
         inpSalida.value = (p.salida || p.output || 'archivo');
-        inpSalida.placeholder = 'Ej: input.raw o file.text';
+        inpSalida.placeholder = 'Ej: archivo.texto o biz.archivo.texto';
 
         const btnPickSalida = btn('Elegir…');
         btnPickSalida.style.marginTop = '6px';
-
         const salidaWrap = el('div');
         salidaWrap.appendChild(inpSalida);
         salidaWrap.appendChild(btnPickSalida);
-
         const sSalida = section('Salida (key en contexto)', salidaWrap);
 
         btnPickSalida.onclick = () => {
@@ -66,18 +73,29 @@
             });
         };
 
-
-        // =======================
-        // 5) asJson (checkbox)
-        // =======================
         const inpAsJson = el('input', 'input');
         inpAsJson.type = 'checkbox';
-        inpAsJson.checked = !!p.asJson;
+        inpAsJson.checked = asBool(p.asJson, false);
         const sAsJson = section('Interpretar contenido como JSON (asJson)', inpAsJson);
 
-        // =======================
-        // Botones
-        // =======================
+        const inpZipMode = selectWithOptions([
+            { value: 'auto', label: 'Auto' },
+            { value: 'none', label: 'Sin compresión' },
+            { value: 'zip', label: 'ZIP' },
+            { value: 'gzip', label: 'GZIP' }
+        ], String(p.zipMode || 'auto').toLowerCase());
+        const sZipMode = section('Compresión', inpZipMode);
+
+        const inpZipEntry = el('input', 'input');
+        inpZipEntry.value = p.zipEntry || '';
+        inpZipEntry.placeholder = 'Opcional. Ej: datos.json';
+        const sZipEntry = section('Entrada ZIP', inpZipEntry);
+
+        const inpUseCache = el('input', 'input');
+        inpUseCache.type = 'checkbox';
+        inpUseCache.checked = asBool(p.useCache, true);
+        const sUseCache = section('Usar caché al reanudar', inpUseCache);
+
         const bSave = btn('Guardar');
         const bDel = btn('Eliminar nodo');
 
@@ -86,10 +104,13 @@
 
             node.params = {
                 path: inpPath.value || '',
-                encoding: (inpEnc.value || 'utf-8'),
-                salida: (inpSalida.value || 'archivo'),
-                asJson: !!inpAsJson.checked
+                salida: inpSalida.value || 'archivo',
+                asJson: !!inpAsJson.checked,
+                encoding: inpEnc.value || 'utf-8',
+                zipMode: inpZipMode.value || 'auto',
+                useCache: !!inpUseCache.checked
             };
+            if ((inpZipEntry.value || '').trim()) node.params.zipEntry = inpZipEntry.value.trim();
 
             ensurePosition(node);
 
@@ -129,14 +150,14 @@
             ctx.select(null);
         };
 
-        // =======================
-        // Render
-        // =======================
         body.appendChild(sLbl);
         body.appendChild(sPath);
-        body.appendChild(sEnc);
         body.appendChild(sSalida);
         body.appendChild(sAsJson);
+        body.appendChild(sEnc);
+        body.appendChild(sZipMode);
+        body.appendChild(sZipEntry);
+        body.appendChild(sUseCache);
         body.appendChild(rowButtons(bSave, bDel));
     });
 })();

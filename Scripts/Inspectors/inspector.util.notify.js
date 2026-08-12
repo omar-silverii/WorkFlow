@@ -143,7 +143,7 @@
 
         // Asunto
         const inpAsunto = el('input', 'input');
-        inpAsunto.value = getParam(p, 'asunto', 'titulo', getParam(p, 'title', null, 'Aviso Workflow Studio')) || '';
+        inpAsunto.value = getParam(p, 'asunto', 'titulo', getParam(p, 'title', null, 'Notificación')) || '';
         const sAsunto = section('Asunto / título', inpAsunto);
 
         // Mensaje

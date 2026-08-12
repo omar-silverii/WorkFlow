@@ -1,0 +1,552 @@
+# PROMPT DE ARRANQUE — Workflow Studio / Constructor IA
+
+## Continuación posterior al cierre del 12/08/2026
+
+Voy a pasarte:
+
+1. el ContextPack de cierre del 12/08/2026;
+2. este Prompt;
+3. un ZIP completo y actualizado de Workflow Studio con todos los fixes integrados hasta el cierre de esa sesión.
+
+Quiero que trabajes con nuestro método permanente colaborativo y no burocrático.
+
+---
+
+# PASO 1 — LEER TODO
+
+Leé COMPLETO el ContextPack y este Prompt.
+
+Antes de trabajar confirmame que entendés:
+
+* qué estaba cerrado antes del 12/08;
+* qué hicimos durante el 12/08;
+* cuáles fueron los defects reales encontrados por pruebas manuales;
+* qué correcciones quedaron integradas;
+* qué decisiones son generales y no parches para frases concretas;
+* qué áreas están cerradas;
+* cuál es el método para decidir el próximo trabajo.
+
+---
+
+# PASO 2 — ZIP = ÚNICA FUENTE DE VERDAD
+
+El ZIP que te entregue es la **única fuente de verdad**.
+
+No asumas que los archivos quedaron exactamente como aparecen en este Prompt, ContextPack, memoria o chat.
+
+No uses nombres de fixes como prueba de integración.
+
+Abrí el ZIP y comprobalo.
+
+No inventes:
+
+* clases;
+* métodos;
+* handlers;
+* propiedades;
+* controles;
+* tablas;
+* endpoints;
+* parámetros;
+* estructuras.
+
+Si no inspeccionaste un archivo, no afirmes cómo está.
+
+---
+
+# PASO 3 — INSPECCIÓN ANTES DE PROPONER
+
+Antes de sugerir un nuevo fix:
+
+1. abrir ZIP;
+2. inspeccionar archivos reales;
+3. reconstruir estado integrado;
+4. verificar línea de fixes;
+5. verificar regresiones presentes;
+6. verificar cobertura contractual;
+7. verificar qué sigue legacy;
+8. recién después proponer.
+
+No escribas código en la primera respuesta.
+
+---
+
+# ESTADO ESPERADO AL CIERRE DEL 12/08/2026
+
+Última evidencia manual/automática validada:
+
+### Histórico
+
+* 19 OK
+* 0 FALLA
+* 0 SKIP
+* Semántica fuerte = 15
+
+### Línea anterior preservada
+
+* C1b Logger + Queue Consume = 2/2
+* C2A Queue Publish = 2/2
+* C2Ab sintaxis opcional = 1/1
+* C2Bf Human Task = 3/3
+* C2Bg2 Human Task APTO/NO_APTO = 3/3
+* C2Bg2b = 1/1
+* C2Bg2c = 1/1
+* C2Bg2d = 1/1
+* C2C1 control.if contrato común = 4/4
+* C2C2 control.if natural = 5/5
+* C2C2b ramas SI/NO file.write = 1/1
+
+### Línea nueva del 12/08
+
+* FIX84C2D1 util.notify = 3/3
+* FIX84C2D2 file.write = 4/4
+* FIX84C2D3 file.read = 4/4
+* FIX84C2D4 state.vars = 4/4
+
+No des nada por supuesto.
+
+Verificalo en el ZIP.
+
+---
+
+# FIX84C2D1 — util.notify
+
+Línea integrada:
+
+* D1
+* D1b
+* D1c
+
+Estado funcional esperado:
+
+Frase y Paso a paso convergen al mismo `util.notify`.
+
+Defaults técnicos seguros:
+
+* canal interno;
+* Info;
+* prioridad Normal;
+* asunto `Notificación` si el usuario no especifica uno.
+
+No inventar:
+
+* rol;
+* usuario;
+* mensaje.
+
+Un destinatario, mensaje o asunto ya absorbido por `util.notify` es dato declarativo.
+
+No debe volver a disparar:
+
+* Human Task;
+* Doc Load;
+* Logger;
+* otra notificación.
+
+Prueba manual validada:
+
+`Notificar internamente al rol COMPRAS con mensaje factura aprobada. Después finalizar.`
+
+Resultado:
+
+Inicio → Notificar a COMPRAS → Fin
+
+Inspector final:
+
+* Rol COMPRAS
+* Asunto Notificación
+* Mensaje factura aprobada
+* Sistema / interno
+* Info
+* Normal
+
+---
+
+# FIX84C2D2 — file.write
+
+Estado esperado:
+
+Frase y Paso a paso convergen al mismo `file.write`.
+
+No inventar:
+
+* path;
+* archivo;
+* contenido.
+
+Defaults técnicos seguros conocidos:
+
+* utf-8;
+* overwrite true;
+* ZIP desactivado/equivalente real existente.
+
+Path y contenido son datos declarativos.
+
+No reinterpretar contenido como intención.
+
+Prueba manual validada:
+
+`Escribir archivo en C:\temp\D2_manual.txt con contenido Prueba manual D2. Después finalizar.`
+
+Resultado:
+
+Inicio → Escribir archivo → Fin
+
+Path y contenido conservados.
+
+---
+
+# FIX84C2D3 — file.read
+
+Línea integrada:
+
+* D3
+* D3b
+
+Estado esperado:
+
+Frase y Paso a paso convergen al mismo `file.read`.
+
+No inventar path.
+
+Defaults técnicos seguros conocidos:
+
+* salida archivo;
+* JSON No;
+* utf-8;
+* compresión Auto;
+* cache Sí.
+
+Path/salida/zipEntry son datos declarativos.
+
+D3b evita que la palabra `guardar` dentro de una frase de File Read fabrique un Logger por una predicción ML aislada.
+
+Logger real sigue funcionando cuando el usuario pide explícitamente registrar/log/dejar constancia.
+
+Prueba manual validada:
+
+`Leer archivo C:\temp\D3_manual.txt. Después finalizar.`
+
+Resultado:
+
+Inicio → Leer archivo → Fin
+
+---
+
+# FIX84C2D4 — state.vars
+
+Línea integrada:
+
+* D4
+* D4b
+* D4c
+* D4d
+
+Operaciones contractuales:
+
+* set
+* remove
+
+Regla central:
+
+clave y valor de variable son datos declarativos.
+
+Caso crítico validado:
+
+`Guardar variable biz.prueba.mensaje como Notificar internamente al rol COMPRAS. Después finalizar.`
+
+Debe generar únicamente:
+
+Inicio → Definir variables → Fin
+
+y conservar:
+
+* variable = `biz.prueba.mensaje`
+* valor = `Notificar internamente al rol COMPRAS`
+
+Sin:
+
+* util.notify;
+* human.task;
+* Logger;
+* IF;
+* preguntas artificiales.
+
+### D4b
+
+Corrigió `buildFallbackQuestions()` para no reinterpretar valores ya absorbidos.
+
+### D4c
+
+Corrigió `fallbackNeedsHelp()` para que tampoco mantenga artificialmente el modo GUIADO.
+
+### D4d
+
+Corrigió la validación de consistencia de Paso a paso.
+
+Regla permanente:
+
+**las validaciones de lenguaje libre no deben reconstruir intención desde la frase auxiliar generada por Paso a paso.**
+
+Paso a paso se valida desde:
+
+* estructura;
+* parámetros;
+* contrato común.
+
+---
+
+# PRINCIPIO GENERAL REFORZADO EL 12/08
+
+Esta regla es muy importante para próximos nodos:
+
+**Cuando un fragmento de texto ya fue absorbido como propiedad de un nodo resuelto, deja de ser lenguaje libre para detectar otras acciones.**
+
+Ejemplos:
+
+* mensaje de Notify;
+* contenido de File Write;
+* path de File Read;
+* valor de State Vars;
+* título/mensaje de Human Task;
+* payload;
+* parámetros elegidos por Paso a paso.
+
+No arreglar futuros problemas agregando excepciones para palabras concretas.
+
+Resolverlos en la capa semántica correcta.
+
+---
+
+# CAMINO CONTRACTUAL ESPERADO
+
+Al cierre debería haber al menos 9 nodos cubiertos por el camino común:
+
+1. util.logger
+2. queue.consume
+3. queue.publish
+4. human.task
+5. control.if
+6. util.notify
+7. file.write
+8. file.read
+9. state.vars
+
+Comprobá la lista exacta en:
+
+* `WfAiConstructionContractRegistry`
+* `WfAiResolvedNodeBuilder`
+* y cualquier pieza real que intervenga en el ZIP nuevo.
+
+No afirmes cobertura hasta inspeccionarlo.
+
+---
+
+# BANCO HISTÓRICO
+
+Los 19 casos A–S deben continuar intactos.
+
+Regla:
+
+**No modificar tests históricos para hacer pasar un fix nuevo.**
+
+Si un test automático pasa pero la UI real falla:
+
+la UI real es evidencia válida.
+
+Corregir la causa.
+
+No hacer más permisiva la prueba.
+
+---
+
+# PASO A PASO — REGLA OBLIGATORIA
+
+Paso a paso puede generar una frase auxiliar visible.
+
+Pero esa frase:
+
+* no reconstruye nodos;
+* no genera ramas;
+* no genera nuevas intenciones;
+* no decide ambigüedades;
+* no vuelve a procesar mensajes, paths, valores o payloads.
+
+Los valores elegidos en el editor estructurado son declarativos.
+
+Esta regla ya corrigió defectos reales de:
+
+* Human Task;
+* util.notify;
+* state.vars.
+
+Preservarla.
+
+---
+
+# HUMAN TASK
+
+No reabrir salvo bug real.
+
+En diseño:
+
+* APTO
+* NO_APTO
+
+En runtime puede existir además:
+
+* RECHAZAR / volver atrás.
+
+Backtrack NO es una tercera rama de diseño.
+
+No mezclarlo con Constructor IA.
+
+---
+
+# CONTROL.IF
+
+No reabrir salvo bug real.
+
+Contrato común ya soporta:
+
+* field/op/value;
+* operadores sin valor;
+* ALL;
+* ANY;
+* expresión avanzada.
+
+SI/NO son conexiones de flujo, no parámetros del nodo.
+
+---
+
+# UX PENDIENTE
+
+Continúa la contradicción:
+
+Paso a paso puede advertir:
+
+`Falta finalizar el flujo`
+
+y luego el sistema agrega un Fin técnico.
+
+No mezclar automáticamente este tema con el próximo nodo.
+
+También sigue pudiendo mostrarse una frase auxiliar de Paso a paso.
+
+No convertirla nuevamente en fuente de intención.
+
+---
+
+# ÁREAS A PRESERVAR
+
+Mientras no haya evidencia de bug:
+
+* motor;
+* runtime;
+* handlers;
+* mapa;
+* canvas/aristas/zoom;
+* Queue runtime;
+* SMTP;
+* Subflow;
+* documentos NC_AR/factura cerrados;
+* DB;
+* backtrack;
+* HIf.cs.
+
+No tocar componentes cerrados sólo porque resulte más fácil implementar algo nuevo.
+
+---
+
+# OBJETIVO DE LA PRÓXIMA SESIÓN
+
+NO empieces automáticamente por un nodo.
+
+Primero inspeccioná el ZIP.
+
+Después reconstruí:
+
+1. qué está realmente integrado;
+2. qué regresiones están presentes;
+3. cuáles son los nodos del camino común;
+4. qué nodos continúan legacy;
+5. qué de D1–D4 está realmente cerrado;
+6. si hay inconsistencias entre C# y JavaScript;
+7. cuál debería ser el próximo bloque.
+
+Después presentame tu recomendación.
+
+Quiero discutirla antes de implementar.
+
+---
+
+# CANDIDATO PRELIMINAR
+
+Al cierre del 12/08 se consideró como siguiente candidato:
+
+`control.delay`
+
+posible bloque:
+
+**FIX84C2D5 — control.delay camino contractual común Frase ↔ Paso a paso**
+
+Pero esto NO es una orden automática.
+
+Primero inspeccioná el ZIP y confirmá que sigue siendo el candidato correcto.
+
+Evaluá:
+
+* impacto;
+* riesgo;
+* dependencias;
+* soporte actual por Frase;
+* editor Paso a paso;
+* runtime;
+* regresiones existentes;
+* capacidad de validar de punta a punta.
+
+Si encontrás un candidato mejor, proponelo y explicá por qué.
+
+---
+
+# PRIMERA RESPUESTA QUE ESPERO
+
+Cuando te entregue ContextPack + Prompt + ZIP:
+
+1. confirmá lectura completa del ContextPack;
+2. confirmá recepción del ZIP;
+3. inspeccioná el ZIP real;
+4. reconstruí la línea integrada;
+5. verificá presencia de D1/D1b/D1c, D2, D3/D3b, D4/D4b/D4c/D4d;
+6. verificá 19 casos históricos;
+7. reconstruí cobertura contractual;
+8. identificá pendientes;
+9. recomendame el próximo bloque;
+10. explicá riesgos y orden;
+11. **NO escribas código todavía.**
+
+Después lo discutimos.
+
+---
+
+# REGLA FINAL
+
+Frase natural y Paso a paso son interfaces distintas sobre una única semántica contractual.
+
+El usuario expresa intención.
+
+El sistema conoce la implementación.
+
+El sistema pregunta solamente cuando realmente no sabe.
+
+El usuario no debe aprender propiedades internas.
+
+Y una funcionalidad se considera cerrada solamente cuando:
+
+* la regresión pasa;
+* la UI real representa correctamente la intención;
+* no aparecen preguntas falsas;
+* la propuesta es correcta;
+* se aplica correctamente al canvas;
+* los parámetros llegan intactos al nodo final;
+* Frase y Paso a paso producen semántica equivalente.

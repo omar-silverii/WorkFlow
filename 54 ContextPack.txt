@@ -1,0 +1,1036 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA
+
+## Cierre de sesión — 12/08/2026
+
+## 1. Proyecto y fuente de verdad
+
+Proyecto principal: **Workflow Studio / Workflow Studio WebForms**.
+
+Stack conocido:
+
+* ASP.NET WebForms .NET Framework 4.8
+* C#
+* Visual Studio 2022
+* SQL Server
+* Aplicación intranet
+* Debe funcionar sin depender de Internet ni CDNs
+* Una base / una conexión principal: `DefaultConnection`
+
+### Regla permanente y obligatoria
+
+La fuente de verdad es **SIEMPRE el ZIP completo más reciente que Omar entregue**.
+
+No asumir que los archivos quedaron exactamente como en el chat o como en fixes parciales anteriores.
+
+No inventar:
+
+* tablas;
+* handlers;
+* clases;
+* controles;
+* propiedades;
+* endpoints;
+* métodos;
+* parámetros runtime.
+
+Si un archivo no fue inspeccionado, no afirmar cómo está.
+
+Antes de proponer cambios:
+
+1. abrir el ZIP real;
+2. inspeccionar archivos reales;
+3. reconstruir el estado integrado;
+4. verificar qué fixes están realmente presentes;
+5. verificar regresiones;
+6. recién después proponer.
+
+No reescribir arquitectura ni tocar áreas que ya funcionan sin evidencia.
+
+Cambios mínimos, precisos y profesionales.
+
+Si algo no cierra, decirlo.
+
+Si existe un camino mejor, insistir y explicarlo.
+
+El asistente debe actuar como **ingeniero del sistema**, no como ejecutor pasivo.
+
+---
+
+## 2. Método permanente de colaboración
+
+Método colaborativo y no burocrático.
+
+Omar puede plantear solamente una necesidad o una idea mínima aunque no conozca cómo debería resolverse internamente un producto de workflows.
+
+El asistente debe:
+
+1. estudiar el sistema real;
+2. reconstruir el estado;
+3. comprender para qué se usará;
+4. detectar implicancias operativas y de producto;
+5. proponer el camino profesional;
+6. explicar decisiones importantes;
+7. discutirlas con Omar;
+8. insistir cuando exista una alternativa claramente mejor;
+9. implementar recién después de acordar;
+10. preservar todo lo validado.
+
+### Formato de fix
+
+Preferido:
+
+* ZIP de reemplazo;
+* estructura real del proyecto;
+* archivos completos modificados;
+* `LEEME`;
+* causa;
+* fix exacto;
+* archivos afectados;
+* pruebas esperadas.
+
+Si no se entrega ZIP:
+
+`DONDE DICE → REEMPLAZAR POR`
+
+Evitar diff `+/-`.
+
+---
+
+# 3. Filosofía oficial del Constructor IA
+
+Decisión permanente:
+
+**Frase natural + diálogo de aclaración.**
+
+El usuario no debe aprender:
+
+* JSON;
+* nombres internos de propiedades;
+* variables técnicas;
+* nombres técnicos de nodos;
+* sintaxis rígidas del parser.
+
+El sistema debe:
+
+1. interpretar lo seguro;
+2. inferir solamente lo razonable;
+3. mostrar qué entendió;
+4. preguntar cuando exista ambigüedad real;
+5. permitir revisar;
+6. confirmar;
+7. aplicar al canvas.
+
+No continuar construyendo un parser rígido frase por frase.
+
+### Frase y Paso a paso
+
+Pueden tener interfaces diferentes, pero deben terminar en:
+
+* la misma semántica;
+* la misma capa contractual;
+* el mismo nodo técnico válido;
+* los mismos parámetros normalizados.
+
+### Regla crítica de Paso a paso
+
+**Paso a paso NO vuelve a interpretar como lenguaje natural los valores que el usuario ya eligió mediante controles estructurados.**
+
+Una vez elegido un valor, es un dato declarativo.
+
+Aplica a:
+
+* mensajes;
+* títulos;
+* paths;
+* payloads;
+* nombres de variables;
+* valores de variables;
+* contenidos;
+* roles;
+* usuarios;
+* parámetros de nodos.
+
+La frase inferior generada por Paso a paso es sólo una descripción auxiliar.
+
+**No es fuente de verdad para reconstruir el workflow.**
+
+---
+
+# 4. Estado heredado al comenzar la sesión del 12/08/2026
+
+Al inicio de hoy estaban cerrados y validados:
+
+### Banco histórico
+
+* `19 OK`
+* `0 FALLA`
+* `0 SKIP`
+* `Semántica fuerte = 15`
+
+### Equivalencias anteriores
+
+* C1b Logger + Queue Consume = `2/2`
+* C2A Queue Publish = `2/2`
+* C2Ab sintaxis opcional = `1/1`
+* C2Bf Human Task base = `3/3`
+* C2Bg2 Human Task APTO/NO_APTO = `3/3`
+* C2Bg2b Advertencia explícita = `1/1`
+* C2Bg2c Paso a paso Human Task = `1/1`
+* C2Bg2d valores declarativos = `1/1`
+* C2C1 control.if contrato común = `4/4`
+* C2C2 control.if interpretación natural = `5/5`
+* C2C2b acciones naturales SI/NO = `1/1`
+
+### Camino común al comenzar hoy
+
+Estaban cubiertos:
+
+1. `util.logger`
+2. `queue.consume`
+3. `queue.publish`
+4. `human.task`
+5. `control.if`
+
+---
+
+# 5. Trabajo de hoy — FIX84C2D1 / D1b / D1c — util.notify
+
+## Objetivo
+
+Integrar `util.notify` al camino contractual común:
+
+**Frase ↔ Paso a paso → misma semántica → mismo nodo `util.notify`.**
+
+### Decisiones de producto
+
+El Constructor NO debe inventar decisiones de negocio.
+
+Para `util.notify`:
+
+Defaults técnicos seguros:
+
+* tipo/canal interno;
+* nivel `info`;
+* prioridad `normal`.
+
+Datos reales:
+
+* destino;
+* rol/usuario;
+* mensaje.
+
+El asunto puede usar el default contractual:
+
+`Notificación`
+
+si el usuario no especifica uno.
+
+---
+
+## FIX84C2D1 inicial
+
+Se agregó el contrato común de `util.notify`.
+
+Regresión inicial:
+
+`1/3`
+
+Fallaban:
+
+* notificación por rol;
+* notificación por usuario corto.
+
+El histórico permaneció:
+
+`19 / 0 / 0`.
+
+### Defecto encontrado
+
+El provider legacy volvía a interpretar datos internos de la notificación como nuevas intenciones.
+
+Ejemplos:
+
+* `rol COMPRAS` podía disparar Human Task;
+* `revisión disponible` podía generar señales de tarea;
+* contenido como `factura aprobada` podía contaminar otros detectores.
+
+---
+
+## FIX84C2D1b
+
+Se corrigió el problema general:
+
+**los datos declarados dentro de una notificación no vuelven a participar en la detección de otros nodos.**
+
+El fix no modificó los tests que habían fallado.
+
+Resultado:
+
+### FIX84C2D1
+
+`3/3`
+
+Casos validados:
+
+* `C2D1_NOTIFY_ROLE`
+* `C2D1_NOTIFY_USUARIO_CORTO`
+* `C2D1_NOTIFY_DATOS_FALTANTES`
+
+Histórico:
+
+* `19 OK`
+* `0 FALLA`
+* `0 SKIP`
+* Semántica fuerte `15`
+
+---
+
+## Prueba manual util.notify
+
+Frase validada:
+
+`Notificar internamente al rol COMPRAS con mensaje factura aprobada. Después finalizar.`
+
+Resultado:
+
+Inicio
+→ Notificar a COMPRAS
+→ Fin
+
+Parámetros validados:
+
+* Destino: Rol
+* Rol: COMPRAS
+* Canal: Sistema / interno
+* Nivel: Info
+* Prioridad: Normal
+* Mensaje: `factura aprobada`
+
+---
+
+## Defecto detectado en aplicación al canvas
+
+En Paso a paso, dejando Asunto vacío:
+
+la propuesta contractual usaba:
+
+`Notificación`
+
+pero el inspector final mostraba:
+
+`Aviso Workflow Studio`
+
+### Causa
+
+Paso a paso no estaba enviando `util.notify` por el mismo `normalize_plan`.
+
+Al llegar al canvas sin asunto, el inspector aplicaba un fallback legacy.
+
+---
+
+## FIX84C2D1c
+
+Se corrigió:
+
+1. `util.notify` de Paso a paso atraviesa la normalización contractual común;
+2. el fallback legacy del inspector quedó alineado con:
+   `Notificación`.
+
+Prueba manual final:
+
+Frase y Paso a paso generan:
+
+Inicio
+→ Notificar a COMPRAS
+→ Fin
+
+Inspector final:
+
+* Rol = COMPRAS
+* Mensaje = `factura aprobada`
+* Asunto = `Notificación`
+* Canal = interno
+* Nivel = Info
+* Prioridad = Normal
+
+### Conclusión
+
+**util.notify queda cerrado.**
+
+---
+
+# 6. FIX84C2D2 — file.write
+
+## Objetivo
+
+Integrar `file.write` al camino contractual común.
+
+### Reglas
+
+No inventar:
+
+* path;
+* nombre de archivo;
+* contenido.
+
+El handler admite contenido mediante:
+
+* `content`;
+* `origen`.
+
+Defaults técnicos seguros:
+
+* `encoding = utf-8`
+* `overwrite = true`
+* ZIP desactivado / modo equivalente existente.
+
+`path`, `content` y `origen` son datos declarativos.
+
+Un contenido con palabras que normalmente representarían otras acciones NO se vuelve a interpretar.
+
+Ejemplo protegido:
+
+`Notificar internamente al rol COMPRAS`
+
+puede ser simplemente contenido de archivo.
+
+---
+
+## Regresión D2
+
+Resultado:
+
+**FIX84C2D2 = 4/4**
+
+Casos:
+
+* `C2D2_FILE_WRITE_TEXTO_LITERAL`
+* `C2D2_FILE_WRITE_DATO_DISPONIBLE`
+* `C2D2_FILE_WRITE_CONTENIDO_DECLARATIVO`
+* `C2D2_FILE_WRITE_DATOS_FALTANTES`
+
+Se preservó C2C2b y los 19 históricos.
+
+---
+
+## Prueba manual D2
+
+Frase:
+
+`Escribir archivo en C:\temp\D2_manual.txt con contenido Prueba manual D2. Después finalizar.`
+
+Resultado:
+
+Inicio
+→ Escribir archivo
+→ Fin
+
+Inspector:
+
+* Path: `C:\temp\D2_manual.txt`
+* Encoding: `utf-8`
+* Sobrescribir: Sí
+* Contenido: `Prueba manual D2`
+
+Paso a paso produjo la misma estructura y parámetros.
+
+### Conclusión
+
+**file.write queda cerrado.**
+
+---
+
+# 7. FIX84C2D3 / D3b — file.read
+
+## Objetivo
+
+Integrar `file.read` al camino común.
+
+### Reglas contractuales
+
+`path` es decisión real y obligatorio.
+
+No inventar una ruta ficticia.
+
+Defaults técnicos seguros:
+
+* salida = `archivo`
+* JSON = No
+* encoding = `utf-8`
+* compresión = Auto
+* cache = Sí
+
+`path`, `salida` y `zipEntry` son datos declarativos.
+
+Una ruta puede contener palabras que coincidan con nombres de acciones y sigue siendo solamente una ruta.
+
+Ejemplo:
+
+`C:\temp\Notificar_COMPRAS.txt`
+
+no debe crear una notificación.
+
+---
+
+## Primera regresión D3
+
+Resultado:
+
+`3/4`
+
+Falló:
+
+`C2D3_FILE_READ_JSON_SALIDA`
+
+Frase:
+
+`Leer archivo C:\temp\D3_datos.json como JSON y guardar el contenido en datos.archivo. Después finalizar.`
+
+Error:
+
+se generaba una aclaración de `util.logger`.
+
+### Causa
+
+La palabra humana `guardar` era clasificada por el modelo ML legacy como posible `REGISTRAR_LOG`.
+
+El `file.read` estaba correctamente extraído, pero se agregaba además un Logger vacío.
+
+---
+
+## FIX84C2D3b
+
+Regla aplicada:
+
+Si existe un `file.read`, una predicción ML aislada de Logger no alcanza para crear un `util.logger`.
+
+Logger sigue creándose cuando existen señales explícitas como:
+
+* registrar;
+* log;
+* dejar constancia.
+
+Esto preserva el histórico que realmente pide Logger después de File Read.
+
+### Resultado
+
+**FIX84C2D3 = 4/4**
+
+Casos:
+
+* `C2D3_FILE_READ_TEXTO`
+* `C2D3_FILE_READ_JSON_SALIDA`
+* `C2D3_FILE_READ_PATH_DECLARATIVO`
+* `C2D3_FILE_READ_RUTA_FALTANTE`
+
+Histórico continúa:
+
+`19 / 0 / 0`
+
+Semántica fuerte:
+
+`15`
+
+---
+
+## Prueba manual D3
+
+Frase:
+
+`Leer archivo C:\temp\D3_manual.txt. Después finalizar.`
+
+Resultado:
+
+Inicio
+→ Leer archivo
+→ Fin
+
+Inspector:
+
+* Ruta: `C:\temp\D3_manual.txt`
+* Encoding: `utf-8`
+* Salida: `archivo`
+* JSON: No
+
+Paso a paso validado con:
+
+* Compresión: Auto
+* Cache: Sí
+* misma ruta;
+* misma salida;
+* misma estructura.
+
+### Conclusión
+
+**file.read queda cerrado.**
+
+---
+
+# 8. FIX84C2D4 / D4b / D4c / D4d — state.vars
+
+## Objetivo
+
+Integrar `state.vars` al camino contractual común.
+
+Operaciones reales cubiertas:
+
+* `set`
+* `remove`
+
+No inventar otra abstracción.
+
+### Regla central
+
+Clave y valor son datos declarativos.
+
+Ejemplo crítico:
+
+`Guardar variable biz.prueba.mensaje como Notificar internamente al rol COMPRAS. Después finalizar.`
+
+Debe significar:
+
+Inicio
+→ Definir variables
+→ Fin
+
+y almacenar exactamente:
+
+Variable:
+
+`biz.prueba.mensaje`
+
+Valor:
+
+`Notificar internamente al rol COMPRAS`
+
+NO debe crear:
+
+* `util.notify`;
+* `human.task`;
+* Logger;
+* IF;
+* dudas artificiales.
+
+---
+
+## Regresión D4
+
+Resultado contractual:
+
+**FIX84C2D4 = 4/4**
+
+Casos:
+
+* `C2D4_STATE_SET_SIMPLE`
+* `C2D4_STATE_REMOVE`
+* `C2D4_STATE_VALOR_DECLARATIVO`
+* `C2D4_STATE_DATOS_FALTANTES`
+
+El histórico `L_STATE_VARS_LOGGER` se preservó:
+
+si la frase realmente pide después `Registrar un evento`, Logger continúa existiendo.
+
+---
+
+## Primera prueba real de UI
+
+A pesar del `4/4`, la UI mostraba una duda roja:
+
+`Cuando decís notificar / avisar / informar`
+
+### Causa
+
+`buildFallbackQuestions()` volvía a leer el valor de `state.vars` desde la frase original y lo interpretaba como intención.
+
+---
+
+## FIX84C2D4b
+
+Se hizo que el fallback descuente claves y valores ya absorbidos por `state.vars`.
+
+Resultado parcial:
+
+desapareció la pregunta concreta, pero la UI todavía quedaba en estado:
+
+`GUIADO`
+
+y bloqueaba Crear workflow.
+
+---
+
+## FIX84C2D4c
+
+### Causa
+
+`fallbackNeedsHelp()` seguía evaluando la frase original sin filtrar.
+
+### Corrección
+
+Usa la misma representación filtrada que `buildFallbackQuestions()`.
+
+Prueba por Frase final:
+
+* sin GUIADO;
+* sin tarjeta roja;
+* Crear workflow habilitado;
+* Inicio → Definir variables → Fin;
+* valor conservado;
+* sin Notify;
+* sin Human Task.
+
+---
+
+## Defecto posterior detectado en Paso a paso
+
+Paso a paso armaba correctamente:
+
+`state.vars`
+
+pero al presionar **Armar e interpretar** aparecía:
+
+`Falta completar una rama SI/NO`
+
+### Causa
+
+`guidedDecisionConsistencyErrors()` seguía leyendo la frase auxiliar generada por Paso a paso:
+
+`guardar variable ... con valor Notificar internamente al rol COMPRAS`
+
+y reinterpretaba sus palabras como decisiones de flujo.
+
+---
+
+## FIX84C2D4d
+
+Se reforzó la regla general:
+
+**Las validaciones de intención basadas en lenguaje libre no deben aplicarse a la frase descriptiva de Paso a paso.**
+
+Paso a paso usa:
+
+* estructura elegida;
+* parámetros elegidos;
+* contrato común.
+
+No reconstruye intención desde la frase auxiliar.
+
+### Prueba final Paso a paso
+
+Variable:
+
+`biz.prueba.mensaje`
+
+Valor:
+
+`Notificar internamente al rol COMPRAS`
+
+Resultado:
+
+Inicio
+→ Definir variables
+→ Fin
+
+Sin:
+
+* util.notify;
+* human.task;
+* IF artificial;
+* pregunta SI/NO;
+* estado GUIADO.
+
+Inspector final conserva exactamente:
+
+* `biz.prueba.mensaje`
+* `Notificar internamente al rol COMPRAS`
+
+### Conclusión
+
+**state.vars queda cerrado.**
+
+---
+
+# 9. Estado de regresión al cierre del 12/08/2026
+
+Última evidencia validada durante la sesión:
+
+### Banco histórico
+
+* `19 OK`
+* `0 FALLA`
+* `0 SKIP`
+* Semántica fuerte = `15`
+
+### Grupos previos preservados
+
+* C1b = `2/2`
+* C2A = `2/2`
+* C2Ab = `1/1`
+* C2Bf = `3/3`
+* C2Bg2 = `3/3`
+* C2Bg2b = `1/1`
+* C2Bg2c = `1/1`
+* C2Bg2d = `1/1`
+* C2C1 = `4/4`
+* C2C2 = `5/5`
+* C2C2b = `1/1`
+
+### Nuevos grupos de hoy
+
+* FIX84C2D1 util.notify = `3/3`
+* FIX84C2D2 file.write = `4/4`
+* FIX84C2D3 file.read = `4/4`
+* FIX84C2D4 state.vars = `4/4`
+
+### Regla reafirmada hoy
+
+Un test verde no alcanza.
+
+Si la regresión automática pasa pero la UI real falla:
+
+**la evidencia real tiene prioridad.**
+
+No hacer el test más permisivo.
+
+Corregir la causa real.
+
+---
+
+# 10. Camino contractual común al cierre de hoy
+
+Al cierre del 12/08/2026 están cubiertos al menos estos **9 nodos**:
+
+1. `util.logger`
+2. `queue.consume`
+3. `queue.publish`
+4. `human.task`
+5. `control.if`
+6. `util.notify`
+7. `file.write`
+8. `file.read`
+9. `state.vars`
+
+Verificar esta lista nuevamente en el ZIP completo de la próxima sesión antes de afirmarla como estado integrado definitivo.
+
+Principio:
+
+**Frase y Paso a paso son dos interfaces sobre la misma semántica contractual.**
+
+---
+
+# 11. Lecciones arquitectónicas reforzadas hoy
+
+Durante D1, D3 y especialmente D4 apareció repetidamente el mismo tipo de defecto:
+
+un nodo se resolvía correctamente, pero capas posteriores volvían a interpretar sus valores como nuevas intenciones.
+
+Se detectaron distintas capas:
+
+* provider ML legacy;
+* fallback visual;
+* `fallbackNeedsHelp`;
+* validaciones de consistencia guiada;
+* normalización previa al canvas.
+
+Regla general que debe preservarse:
+
+## Una vez que un fragmento de lenguaje fue absorbido como propiedad de un nodo resuelto, deja de ser texto libre para detectar otras intenciones.
+
+Esto aplica especialmente a:
+
+* mensajes de Notify;
+* contenidos de File Write;
+* paths de File Read;
+* valores de State Vars;
+* títulos y mensajes de Human Task;
+* propiedades estructuradas de Paso a paso.
+
+No resolver esto agregando excepciones frase por frase.
+
+Resolverlo por responsabilidad semántica.
+
+---
+
+# 12. Áreas cerradas / preservar
+
+Mientras no haya evidencia real de bug:
+
+* no tocar motor;
+* no tocar handlers runtime;
+* no tocar mapa de instancia;
+* no tocar canvas/aristas/zoom;
+* no tocar Queue runtime;
+* no tocar SMTP;
+* no tocar Subflow;
+* no tocar documentos NC_AR/factura ya cerrados;
+* no rediseñar DB;
+* no tocar backtrack;
+* no tocar `HIf.cs`.
+
+Durante los fixes de hoy se preservaron los handlers runtime correspondientes, incluyendo File Read / Write / State Vars / Notify salvo evidencia contraria que deberá verificarse en el ZIP final.
+
+---
+
+# 13. UX pendiente conocida — no mezclar automáticamente
+
+Continúa pendiente la contradicción:
+
+Paso a paso puede advertir:
+
+`Falta finalizar el flujo`
+
+mientras después el sistema agrega un Fin técnico automáticamente.
+
+Esto volvió a verse durante las pruebas de hoy.
+
+No es parte de D1/D2/D3/D4.
+
+Dejarlo como limpieza UX futura salvo que afecte directamente el siguiente trabajo.
+
+También permanece visible la frase técnica/descriptiva de Paso a paso.
+
+Regla:
+
+**esa frase no es fuente de verdad.**
+
+---
+
+# 14. Próximo candidato al cierre de hoy
+
+Al terminar D4 se propuso como siguiente candidato:
+
+`control.delay`
+
+posible nombre de bloque:
+
+**FIX84C2D5 — control.delay camino contractual común Frase ↔ Paso a paso**
+
+Razones preliminares:
+
+* nodo relativamente simple;
+* buen candidato para continuar la expansión contractual;
+* permite avanzar por nodos de menor riesgo antes de capacidades más complejas.
+
+### IMPORTANTE
+
+Esto es solamente una recomendación de cierre.
+
+En la próxima sesión:
+
+**NO comenzar D5 automáticamente.**
+
+Primero inspeccionar el ZIP completo nuevo y comprobar que contiene realmente toda la línea integrada de hoy.
+
+---
+
+# 15. Próxima sesión — orden obligatorio
+
+Omar entregará:
+
+1. este ContextPack;
+2. el Prompt de arranque;
+3. ZIP completo actualizado con todos los fixes integrados hasta el cierre del 12/08/2026.
+
+El asistente debe:
+
+### Paso 1
+
+Leer completo ContextPack y Prompt.
+
+### Paso 2
+
+Confirmar recepción del ZIP.
+
+### Paso 3
+
+Tomar el ZIP nuevo como única fuente de verdad.
+
+### Paso 4
+
+Inspeccionar archivos reales.
+
+### Paso 5
+
+Verificar físicamente la integración de:
+
+* línea previa C1/C2;
+* D1;
+* D1b;
+* D1c;
+* D2;
+* D3;
+* D3b;
+* D4;
+* D4b;
+* D4c;
+* D4d;
+* regresiones;
+* 19 históricos A–S.
+
+No inferirlo por nombre del ZIP.
+
+### Paso 6
+
+Reconstruir cobertura real del camino común.
+
+Esperado al cierre:
+
+* util.logger
+* queue.consume
+* queue.publish
+* human.task
+* control.if
+* util.notify
+* file.write
+* file.read
+* state.vars
+
+Pero comprobarlo en código.
+
+### Paso 7
+
+Verificar que las correcciones generales de valores declarativos estén integradas y no hayan dejado capas paralelas inconsistentes.
+
+### Paso 8
+
+Presentar a Omar:
+
+* estado real encontrado;
+* cobertura;
+* regresiones;
+* áreas cerradas;
+* próximo candidato;
+* riesgos.
+
+### Paso 9
+
+Discutir el próximo bloque.
+
+### Paso 10
+
+Implementar recién después de acordarlo.
+
+---
+
+# 16. Regla final de producto
+
+Objetivo permanente:
+
+**El usuario expresa intención. El sistema conoce la implementación.**
+
+Frase natural y Paso a paso pueden verse diferentes, pero deben producir el mismo workflow válido.
+
+El usuario no debe aprender propiedades internas para trabajar.
+
+El sistema debe preguntar sólo cuando realmente no sabe.
+
+Y una capacidad no queda cerrada simplemente porque un test dé verde.
+
+Debe:
+
+* entender bien la intención;
+* verse bien;
+* no crear dudas artificiales;
+* aplicar correctamente al canvas;
+* conservar todos sus parámetros;
+* producir el nodo técnico correcto;
+* y funcionar de manera equivalente por Frase y Paso a paso.

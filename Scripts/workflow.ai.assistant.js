@@ -24,6 +24,7 @@
 // FIX84C2Bg2b: advertencia explícita = Logger/Warn, preserva contexto de rama y valida borrador funcional contra proyección funcional.
 // FIX84C2Bg2c: Paso a paso conserva APTO/NO APTO como estructura; no reinterpreta la frase descriptiva y colapsa Fin redundante de rama contra Fin común.
 // FIX84C2Bg2d: los valores ya elegidos en Paso a paso son datos declarativos; el fallback no reinterpreta palabras dentro de mensajes/títulos/descripciones como nuevas intenciones.
+// FIX84C2D4: state.vars se normaliza por el contrato común; claves y valores estructurados siguen siendo datos declarativos.
 (function () {
     var lastPlan = null;
     var importedRegressionPhrase = false;
@@ -1720,11 +1721,12 @@
         }
         if (step.type === 'notify') {
             var dest = step.destType === 'usuario'
-                ? 'al usuario ' + (step.user || 'OMARD\\OMARD')
-                : 'al rol ' + (step.role || 'COMPRAS');
-            return 'notificar internamente ' + dest +
-                ' con asunto ' + (step.title || 'Aviso interno') +
-                ' y mensaje ' + (step.message || 'Hay una novedad pendiente en el workflow');
+                ? 'al usuario ' + String(step.user || '').trim()
+                : 'al rol ' + String(step.role || '').trim();
+            var notifyPhrase = 'notificar internamente ' + dest;
+            if (String(step.title || '').trim()) notifyPhrase += ' con asunto ' + String(step.title).trim();
+            notifyPhrase += ' y mensaje ' + String(step.message || '').trim();
+            return notifyPhrase;
         }
         if (step.type === 'http_request') {
             return 'hacer solicitud HTTP ' + (step.method || 'GET') + ' a ' + (step.url || '/Api/Ping.ashx');
@@ -1733,7 +1735,11 @@
             return 'ejecutar consulta SQL ' + sqlShortText(step.query || '');
         }
         if (step.type === 'file_read') {
-            return 'leer archivo ' + (step.path || 'C:\\Temp\\entrada.txt') + ' y guardar el contenido en ' + (step.output || 'archivo');
+            var readPhrase = 'leer archivo ' + (step.path || '(sin ruta)');
+            if (step.asJson) readPhrase += ' como JSON';
+            if (String(step.output || '').trim() && String(step.output || '').trim() !== 'archivo')
+                readPhrase += ' y guardar el contenido en ' + String(step.output).trim();
+            return readPhrase;
         }
         if (step.type === 'file_write') {
             return 'escribir archivo ' + (step.path || 'C:\\Temp\\salida.txt');
@@ -2339,10 +2345,11 @@
             return '' +
                 guideBranchRowHtml('then') +
                 '<div class="wf-ai-guide-row"><label>Destino</label><select id="wfAiStepDestType" class="wf-ai-select"><option value="rol">Rol</option><option value="usuario">Usuario</option></select></div>' +
-                '<div class="wf-ai-guide-row" id="wfAiStepRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select">' + roleOptions(firstRole(['COMPRAS'])) + '</select></div>' +
-                '<div class="wf-ai-guide-row" id="wfAiStepUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepUser', firstUser(['OMARD\\OMARD'])) + '</div>' +
-                '<div class="wf-ai-guide-row"><label>Asunto</label><input id="wfAiStepTitle" class="wf-ai-input" value="Aviso interno" /></div>' +
-                '<div class="wf-ai-guide-row"><label>Mensaje</label><input id="wfAiStepMessage" class="wf-ai-input" value="Hay una novedad pendiente en el workflow" /></div>';
+                '<div class="wf-ai-guide-row" id="wfAiStepRoleRow"><label>Rol</label><select id="wfAiStepRole" class="wf-ai-select"><option value="">— elegir rol —</option>' + roleOptions('') + '</select></div>' +
+                '<div class="wf-ai-guide-row" id="wfAiStepUserRow" style="display:none"><label>Usuario</label>' + userInputHtml('wfAiStepUser', '', false) + '</div>' +
+                '<div class="wf-ai-guide-row"><label>Asunto (opcional)</label><input id="wfAiStepTitle" class="wf-ai-input" placeholder="Si queda vacío, se usa Notificación" /></div>' +
+                '<div class="wf-ai-guide-row"><label>Mensaje</label><input id="wfAiStepMessage" class="wf-ai-input" placeholder="Ej.: La factura quedó aprobada. Podés usar ${wf.instanceId}." /></div>' +
+                '<div class="wf-ai-guide-note">El Constructor no inventa destinatario ni mensaje. Canal interno, nivel Info y prioridad Normal son defaults técnicos seguros.</div>';
         }
         if (type === 'http_request') {
             return '' +
@@ -2373,7 +2380,8 @@
                 '<div class="wf-ai-guide-row"><label>Encoding</label><input id="wfAiStepFileReadEncoding" class="wf-ai-input" value="utf-8" /></div>' +
                 '<div class="wf-ai-guide-row"><label>Compresión</label><select id="wfAiStepFileReadZipMode" class="wf-ai-select"><option value="auto">Auto</option><option value="none">Sin compresión</option><option value="zip">ZIP</option><option value="gzip">GZIP</option></select></div>' +
                 '<div class="wf-ai-guide-row"><label>Entrada ZIP</label><input id="wfAiStepFileReadZipEntry" class="wf-ai-input" placeholder="Opcional. Ej.: datos.json" /></div>' +
-                '<div class="wf-ai-guide-note">Usa el handler real file.read. Deja disponible el contenido en la variable que indiques y metadatos como file.read.lastPath y file.read.lastLength.</div>';
+                '<div class="wf-ai-guide-row"><label>Usar caché al reanudar</label><select id="wfAiStepFileReadUseCache" class="wf-ai-select"><option value="true">Sí</option><option value="false">No</option></select></div>' +
+                '<div class="wf-ai-guide-note">Usa el handler real file.read y normaliza por el mismo contrato que Frase. La ruta es una decisión real; salida archivo, texto, UTF-8, compresión Auto y caché activa son defaults técnicos seguros.</div>';
         }
         if (type === 'file_write') {
             return '' +
@@ -2387,7 +2395,7 @@
                 '<div class="wf-ai-guide-row"><label>Encoding</label><input id="wfAiStepFileWriteEncoding" class="wf-ai-input" value="utf-8" /></div>' +
                 '<div class="wf-ai-guide-row"><label>ZIP</label><select id="wfAiStepFileWriteZipMode" class="wf-ai-select"><option value="none">No</option><option value="zip">Sí, escribir ZIP</option></select></div>' +
                 '<div class="wf-ai-guide-row"><label>Entrada ZIP</label><input id="wfAiStepFileWriteEntry" class="wf-ai-input" placeholder="Opcional. Ej.: salida.txt" /></div>' +
-                '<div class="wf-ai-guide-note">Usa el handler real file.write. Si elegís variable de DatosContexto, el sistema escribe el valor de esa variable; si es objeto, lo serializa como JSON.</div>';
+                '<div class="wf-ai-guide-note">Usa el handler real file.write y normaliza por el mismo contrato que Frase. Ruta y contenido/origen son decisiones tuyas; encoding UTF-8, sobrescritura y ZIP desactivado son defaults técnicos seguros.</div>';
         }
         if (type === 'queue_publish') {
             return '' +
@@ -2611,11 +2619,11 @@
             setControlValue('wfAiStepSubject', step.subject || 'Aviso Workflow Studio');
             setControlValue('wfAiStepBody', step.body || 'Se generó un aviso desde Workflow Studio');
         } else if (step.type === 'notify') {
-            setControlValue('wfAiStepDestType', step.destType || 'rol');
-            setControlValue('wfAiStepRole', step.role || firstRole(['COMPRAS']));
-            setControlValue('wfAiStepUser', step.user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD');
-            setControlValue('wfAiStepTitle', step.title || 'Aviso interno');
-            setControlValue('wfAiStepMessage', step.message || 'Hay una novedad pendiente en el workflow');
+            setControlValue('wfAiStepDestType', step.destType || (step.user ? 'usuario' : 'rol'));
+            setControlValue('wfAiStepRole', step.role || '');
+            setControlValue('wfAiStepUser', step.user || '');
+            setControlValue('wfAiStepTitle', step.title || '');
+            setControlValue('wfAiStepMessage', step.message || '');
         } else if (step.type === 'http_request') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepHttpMethod', step.method || 'GET');
@@ -2638,6 +2646,7 @@
             setControlValue('wfAiStepFileReadEncoding', step.encoding || 'utf-8');
             setControlValue('wfAiStepFileReadZipMode', step.zipMode || 'auto');
             setControlValue('wfAiStepFileReadZipEntry', step.zipEntry || '');
+            setControlValue('wfAiStepFileReadUseCache', step.useCache === false ? 'false' : 'true');
         } else if (step.type === 'file_write') {
             setControlValue('wfAiStepBranch', step.branch || 'then');
             setControlValue('wfAiStepFileWritePath', step.path || '');
@@ -2819,14 +2828,26 @@
             }
         }
 
-        if (type === 'notify' && selectedText('wfAiStepDestType') === 'usuario') {
-            var notifyUser = resolveUserSelection(selectedText('wfAiStepUser'));
-            if (!notifyUser) {
-                var nf = $('wfAiStepUser');
-                if (nf && nf.focus) nf.focus();
-                return 'Seleccioná un usuario válido de la lista para la notificación interna.';
+        if (type === 'notify') {
+            var notifyDestType = selectedText('wfAiStepDestType') || 'rol';
+            if (notifyDestType === 'usuario') {
+                var notifyUser = resolveUserSelection(selectedText('wfAiStepUser'));
+                if (!notifyUser) {
+                    var nf = $('wfAiStepUser');
+                    if (nf && nf.focus) nf.focus();
+                    return 'Seleccioná un usuario válido de la lista para la notificación interna.';
+                }
+                setControlValue('wfAiStepUser', notifyUser);
+            } else if (!selectedText('wfAiStepRole')) {
+                var nr = $('wfAiStepRole');
+                if (nr && nr.focus) nr.focus();
+                return 'Seleccioná un rol real para la notificación interna.';
             }
-            setControlValue('wfAiStepUser', notifyUser);
+            if (!selectedText('wfAiStepMessage')) {
+                var nm = $('wfAiStepMessage');
+                if (nm && nm.focus) nm.focus();
+                return 'Indicá qué mensaje querés enviar en la notificación interna.';
+            }
         }
 
         if (type === 'human_task') {
@@ -3099,10 +3120,10 @@
         } else if (type === 'notify') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.destType = selectedText('wfAiStepDestType') || 'rol';
-            step.role = selectedText('wfAiStepRole') || firstRole(['COMPRAS']);
-            step.user = selectedText('wfAiStepUser') || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD';
-            step.title = selectedText('wfAiStepTitle') || 'Aviso interno';
-            step.message = selectedText('wfAiStepMessage') || 'Hay una novedad pendiente en el workflow';
+            step.role = step.destType === 'rol' ? (selectedText('wfAiStepRole') || '') : '';
+            step.user = step.destType === 'usuario' ? (selectedText('wfAiStepUser') || '') : '';
+            step.title = selectedText('wfAiStepTitle') || '';
+            step.message = selectedText('wfAiStepMessage') || '';
         } else if (type === 'http_request') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.method = selectedText('wfAiStepHttpMethod') || 'GET';
@@ -3125,6 +3146,7 @@
             step.encoding = selectedText('wfAiStepFileReadEncoding') || 'utf-8';
             step.zipMode = selectedText('wfAiStepFileReadZipMode') || 'auto';
             step.zipEntry = selectedText('wfAiStepFileReadZipEntry') || '';
+            step.useCache = selectedText('wfAiStepFileReadUseCache') !== 'false';
         } else if (type === 'file_write') {
             step.branch = selectedText('wfAiStepBranch') || 'then';
             step.path = selectedText('wfAiStepFileWritePath') || '';
@@ -4578,8 +4600,14 @@
         // convertir valores como Message=Informar, Título=Notificar..., etc. en intenciones.
         if (isStructuredStepByStepResult(res)) return false;
 
-        if (textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']) && !planHasNodeType(plan, 'util.notify')) return true;
-        if (textHasAny(userText, ['advertencia', 'warning']) && !planHasNodeType(plan, 'util.logger') && !planHasNodeType(plan, 'util.notify')) return true;
+        // FIX84C2D4c: fallbackNeedsHelp debe mirar la MISMA frase semántica
+        // que buildFallbackQuestions. Si state.vars ya absorbió una clave/valor,
+        // ese dato declarativo no puede mantener activo el fallback GUIADO.
+        // Ej.: valor = "Notificar internamente al rol COMPRAS" sigue siendo valor,
+        // no una intención pendiente de util.notify.
+        var fallbackIntentText = stripResolvedStateVarsValuesForFallback(plan, userText);
+        if (textHasAny(fallbackIntentText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']) && !planHasNodeType(plan, 'util.notify')) return true;
+        if (textHasAny(fallbackIntentText, ['advertencia', 'warning']) && !planHasNodeType(plan, 'util.logger') && !planHasNodeType(plan, 'util.notify')) return true;
         return false;
     }
 
@@ -4894,20 +4922,64 @@
         question.options.push({ label: label, clarification: clarification, css: css || '' });
     }
 
+    // FIX84C2D4b: el fallback visual no puede volver a interpretar como intención
+    // las claves/valores que el plan común ya resolvió dentro de state.vars.
+    // El servidor ya aplica esta regla al construir el plan; acá alineamos la capa UI
+    // para que una variable cuyo valor sea, por ejemplo, "Notificar internamente..."
+    // no abra una duda artificial de Notify / Human Task / Logger.
+    function stripResolvedStateVarsValuesForFallback(plan, userText) {
+        var text = String(userText || '');
+        var actions = (plan && plan.actions) || [];
+
+        function removeLiteral(value) {
+            var needle = String(value == null ? '' : value).trim();
+            if (!needle) return;
+            var lowerNeedle = needle.toLowerCase();
+            var lowerText = text.toLowerCase();
+            var idx = lowerText.indexOf(lowerNeedle);
+            while (idx >= 0) {
+                text = text.substring(0, idx) + ' ' + text.substring(idx + needle.length);
+                lowerText = text.toLowerCase();
+                idx = lowerText.indexOf(lowerNeedle);
+            }
+        }
+
+        actions.forEach(function (a) {
+            if (!a || String(a.action || '').toUpperCase() !== 'ADD_NODE' || String(a.nodeType || '') !== 'state.vars') return;
+            var p = a.params || {};
+            var set = p.set || {};
+
+            if (set && typeof set === 'object' && !Array.isArray(set)) {
+                Object.keys(set).forEach(function (key) {
+                    removeLiteral(key);
+                    if (typeof set[key] === 'string') removeLiteral(set[key]);
+                });
+            }
+
+            var remove = p.remove || [];
+            if (!Array.isArray(remove)) remove = [remove];
+            remove.forEach(function (key) { removeLiteral(key); });
+        });
+
+        return text;
+    }
+
     function buildFallbackQuestions(res, userText) {
         var plan = (res && res.plan) || {};
         var validation = (res && res.validation) || {};
         var missing = plan.missingData || [];
         var questions = [];
         var structuredStepByStep = isStructuredStepByStepResult(res);
+        var fallbackIntentText = stripResolvedStateVarsValuesForFallback(plan, userText);
         // FIX84C2Bg2d: en Paso a paso los textos de propiedades son datos, no comandos.
         // Las preguntas léxicas quedan reservadas al modo Frase.
-        var hasNotifyWords = !structuredStepByStep && textHasAny(userText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
-        var hasWarningWord = !structuredStepByStep && textHasAny(userText, ['advertencia', 'warning']);
-        var hasCae = textHasAny(userText, ['cae']);
-        var hasProveedor = textHasAny(userText, ['proveedor']);
-        var hasIt = textHasAny(userText, ['it']);
-        var roles = friendlyRoleList(userText);
+        // FIX84C2D4b: en Frase también descontamos claves/valores de state.vars ya resueltos.
+        var hasNotifyWords = !structuredStepByStep && textHasAny(fallbackIntentText, ['notificar', 'notificacion', 'notificación', 'avisar', 'informar']);
+        var hasWarningWord = !structuredStepByStep && textHasAny(fallbackIntentText, ['advertencia', 'warning']);
+        var hasCae = textHasAny(fallbackIntentText, ['cae']);
+        var hasProveedor = textHasAny(fallbackIntentText, ['proveedor']);
+        var hasIt = textHasAny(fallbackIntentText, ['it']);
+        var roles = friendlyRoleList(fallbackIntentText);
         var missingText = normalizePhraseForSearch(missing.map(function (m) {
             return String((m && (m.question || m.key || m.message)) || m || '');
         }).join(' '));
@@ -4964,7 +5036,7 @@
         // produjo un logger Warn, no existe ambigüedad real y no preguntamos nada.
         // Para los usos genuinamente ambiguos conservamos además el resultado APTO/NO APTO
         // dentro de la aclaración para que una elección no salte al flujo principal.
-        var explicitWarningLoggerResolved = explicitWarningLoggerRequest(userText) && planHasWarnLogger(plan);
+        var explicitWarningLoggerResolved = explicitWarningLoggerRequest(fallbackIntentText) && planHasWarnLogger(plan);
         var warningQuestionUseful = hasWarningWord
             && !explicitWarningLoggerResolved
             && !needsSpecificNoBranch
@@ -4979,11 +5051,11 @@
                 options: []
             };
             addFallbackOption(qWarn, 'Advertencia como notificación',
-                scopedWarningClarification('notify', warningScope, userText) || 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
+                scopedWarningClarification('notify', warningScope, fallbackIntentText) || 'la advertencia debe ser una notificación interna de nivel advertencia al rol indicado.', 'primary');
             addFallbackOption(qWarn, 'Advertencia como log Warn',
-                scopedWarningClarification('logger', warningScope, userText) || 'la advertencia debe ser un logger Warn del workflow.', '');
+                scopedWarningClarification('logger', warningScope, fallbackIntentText) || 'la advertencia debe ser un logger Warn del workflow.', '');
             addFallbackOption(qWarn, 'Advertencia como tarea',
-                scopedWarningClarification('human_task', warningScope, userText) || 'la advertencia debe crear una tarea humana de revisión.', '');
+                scopedWarningClarification('human_task', warningScope, fallbackIntentText) || 'la advertencia debe crear una tarea humana de revisión.', '');
             questions.push(qWarn);
         }
 
@@ -6385,7 +6457,7 @@
             });
     }
 
-    // FIX84C1/FIX84C2A/FIX84C2B: el Paso a paso no interpreta lenguaje natural, pero sí entrega su
+    // FIX84C1/FIX84C2A/FIX84C2B/FIX84C2D1c/FIX84C2D2/FIX84C2D3/FIX84C2D4: Paso a paso no interpreta lenguaje natural, pero sí entrega su
     // plan candidato al mismo resolved-node builder C# que usa la ruta por frase.
     function callAiPlanNormalizer(plan, userText, done, fail, always) {
         fetch('Api/WF_AiAssistant.ashx', {
@@ -6411,14 +6483,10 @@
 
         var validation = buildFunctionalValidation();
 
-        // FIX84C2Bg2c: APTO/NO APTO ya vienen definidos por el editor estructurado.
-        // No volvemos a inferir la rama leyendo la frase descriptiva generada por Paso a paso;
-        // esa validación legacy confundía el rol dueño de la tarea con el destinatario/contenido
-        // de una acción de rama (por ejemplo Logger Warn) y fabricaba un SI/NO faltante.
-        if (!hasHumanTaskResultBranches()) {
-            var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
-            consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
-        }
+        // FIX84C2D4d: Paso a paso ya declaró explícitamente nodos, parámetros y ramas.
+        // La frase inferior es sólo una descripción auxiliar y NO puede volver a inferir
+        // decisiones de notificación, roles ni ramas mediante guidedDecisionConsistencyErrors().
+        // La consistencia del modo estructurado se valida contra el plan + contrato común.
 
         var serverValidation = commonResponse && commonResponse.validation || {};
         (serverValidation.errors || []).forEach(function (e) { pushUnique(validation.errors, e); });
@@ -6459,7 +6527,7 @@
         var actions = plan && plan.actions || [];
         for (var i = 0; i < actions.length; i++) {
             var nodeType = String(actions[i] && actions[i].nodeType || '').toLowerCase();
-            if (nodeType === 'util.logger' || nodeType === 'queue.consume' || nodeType === 'queue.publish' || nodeType === 'human.task') return true;
+            if (nodeType === 'util.logger' || nodeType === 'queue.consume' || nodeType === 'queue.publish' || nodeType === 'human.task' || nodeType === 'util.notify' || nodeType === 'file.write' || nodeType === 'file.read' || nodeType === 'state.vars') return true;
         }
         return false;
     }
@@ -6585,7 +6653,7 @@
         if (step.type === 'condition') return 'Validar condición: ' + conditionInfo(step).text;
         if (step.type === 'notify') {
             var level = normalizeKey(step.level || step.nivel || 'info') === 'WARN' ? 'advertencia' : 'informativa';
-            return 'Notificar a ' + notifyDestinationText(step) + ' (' + level + '): ' + (step.title || 'Aviso interno');
+            return 'Notificar a ' + notifyDestinationText(step) + ' (' + level + '): ' + (step.title || 'Notificación');
         }
         if (step.type === 'human_task') return 'Crear tarea humana para ' + taskDestinationForPlan(step) + ': ' + (step.title || step.purpose || humanTaskTitleForPlan(step));
         if (step.type === 'logger') return 'Registrar log ' + (step.level || 'Info') + ': ' + (step.message || '');
@@ -6924,22 +6992,22 @@
 
         if (step.type === 'notify') {
             var destinoTipo = step.destType === 'usuario' ? 'usuario' : 'rol';
-            var usuarioDestino = destinoTipo === 'usuario' ? (step.user || firstUser(['OMARD\\OMARD']) || 'OMARD\\OMARD') : '';
-            var rolDestino = destinoTipo === 'rol' ? (step.role || firstRole(['COMPRAS'])) : '';
-            var destinoLabel = usuarioDestino || rolDestino || 'destino';
+            var usuarioDestino = destinoTipo === 'usuario' ? String(step.user || '').trim() : '';
+            var rolDestino = destinoTipo === 'rol' ? String(step.role || '').trim() : '';
+            var destinoLabel = usuarioDestino || rolDestino;
             var notifyLabel = destinoLabel ? ('Notificar a ' + destinoLabel) : 'Notificar';
-            return makePlanAction('util.notify', labelFor(notifyLabel), {
+            var notifyParams = {
                 tipo: 'sistema',
                 canal: 'sistema',
                 nivel: step.level || step.nivel || 'info',
                 destinoTipo: destinoTipo,
-                usuarioDestino: usuarioDestino,
-                rolDestino: rolDestino,
-                destino: usuarioDestino || rolDestino,
                 prioridad: 'normal',
-                asunto: step.title || 'Aviso interno',
-                mensaje: step.message || 'Hay una novedad pendiente en el workflow'
-            });
+                mensaje: String(step.message || '').trim()
+            };
+            if (usuarioDestino) notifyParams.usuarioDestino = usuarioDestino;
+            if (rolDestino) notifyParams.rolDestino = rolDestino;
+            if (String(step.title || '').trim()) notifyParams.asunto = String(step.title).trim();
+            return makePlanAction('util.notify', labelFor(notifyLabel), notifyParams);
         }
 
         if (step.type === 'http_request') {
@@ -6970,28 +7038,28 @@
         }
 
         if (step.type === 'file_read') {
-            return makePlanAction('file.read', labelFor('Archivo: Leer'), {
-                path: step.path || '',
-                salida: step.output || 'archivo',
-                output: step.output || 'archivo',
-                asJson: !!step.asJson,
-                encoding: step.encoding || 'utf-8',
-                zipMode: step.zipMode || 'auto',
-                zipEntry: step.zipEntry || '',
-                useCache: true
-            });
+            // FIX84C2D3: Paso a paso entrega las elecciones de la persona; los defaults
+            // técnicos seguros se materializan en el contrato común C#.
+            var readParams = { path: step.path || '' };
+            if (String(step.output || '').trim() && String(step.output || '').trim() !== 'archivo') readParams.salida = String(step.output).trim();
+            if (step.asJson) readParams.asJson = true;
+            if (step.encoding && String(step.encoding).toLowerCase() !== 'utf-8') readParams.encoding = step.encoding;
+            if (step.zipMode && String(step.zipMode).toLowerCase() !== 'auto') readParams.zipMode = step.zipMode;
+            if (step.zipEntry) readParams.zipEntry = step.zipEntry;
+            if (step.useCache === false) readParams.useCache = false;
+            return makePlanAction('file.read', labelFor('Archivo: Leer'), readParams);
         }
 
         if (step.type === 'file_write') {
-            var params = {
-                path: step.path || '',
-                encoding: step.encoding || 'utf-8',
-                overwrite: step.overwrite !== false,
-                zipMode: step.zipMode || 'none'
-            };
-            if (step.entryName) params.entryName = step.entryName;
-            if (step.sourceMode === 'context') params.origen = step.origen || 'archivo';
+            // FIX84C2D2: Paso a paso aporta sólo las decisiones elegidas por la persona.
+            // Los defaults técnicos seguros se aplican después en el contrato común C#.
+            var params = { path: step.path || '' };
+            if (step.sourceMode === 'context') params.origen = step.origen || '';
             else params.content = step.content || '';
+            if (step.encoding && String(step.encoding).toLowerCase() !== 'utf-8') params.encoding = step.encoding;
+            if (step.overwrite === false) params.overwrite = false;
+            if (step.zipMode && String(step.zipMode).toLowerCase() !== 'none') params.zipMode = step.zipMode;
+            if (step.entryName) params.entryName = step.entryName;
             return makePlanAction('file.write', labelFor('Archivo: Escribir'), params);
         }
 
@@ -8330,10 +8398,10 @@
         plan.contract = buildFix74PlanContract(plan, userText || '');
 
         var validation = buildFunctionalValidation();
-        if (!hasHumanTaskResultBranches()) {
-            var consistencyErrors = guidedDecisionConsistencyErrors(plan, userText || '');
-            consistencyErrors.forEach(function (e) { pushUnique(validation.errors, e); });
-        }
+        // FIX84C2D4d: en Paso a paso la estructura elegida es la fuente de verdad.
+        // No releer userText para inferir notify/roles/ramas: puede contener valores
+        // declarativos como "Notificar internamente al rol COMPRAS" dentro de state.vars.
+        // La validación funcional y el contrato determinístico controlan el plan real.
 
         var contractErrors = validateFix74PlanContract(plan, userText || '', true);
         contractErrors.forEach(function (e) { pushUnique(validation.errors, e); });

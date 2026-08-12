@@ -1,0 +1,313 @@
+# PROMPT DE ARRANQUE — Próxima sesión Workflow Studio / Constructor IA
+## Continuación posterior al cierre del 11/08/2026
+
+Voy a pasarte:
+
+1. este ContextPack;
+2. este Prompt;
+3. el ZIP completo y actualizado de Workflow Studio, con todos los fixes integrados hasta el cierre del 11/08/2026.
+
+Quiero que trabajes con el método permanente acordado.
+
+
+## PASO 1 — LEER
+
+Leé COMPLETO el ContextPack.
+
+Confirmame que lo leíste y que entendés:
+- qué se cerró hoy;
+- qué decisiones conceptuales son permanentes;
+- qué fixes quedaron supersedidos;
+- y cuál es el método para elegir el próximo trabajo.
+
+
+## PASO 2 — FUENTE DE VERDAD
+
+El ZIP que te entregue es la única fuente de verdad.
+
+No asumas que los archivos quedaron exactamente como en el chat o como en fixes parciales anteriores.
+
+No inventes:
+- clases;
+- controles;
+- tablas;
+- handlers;
+- propiedades;
+- endpoints;
+- métodos;
+- parámetros runtime.
+
+
+## PASO 3 — INSPECCIÓN ANTES DE PROPONER
+
+Antes de sugerir cambios:
+
+- abrí el ZIP;
+- inspeccioná archivos reales;
+- reconstruí el estado integrado;
+- verificá los fixes que realmente están presentes;
+- verificá la regresión actual;
+- recién después proponé.
+
+Si un archivo no fue inspeccionado, no afirmes cómo está.
+
+
+## ESTADO ESPERADO AL CIERRE ANTERIOR
+
+La sesión del 11/08/2026 terminó con la siguiente evidencia validada en la UI real:
+
+Banco histórico:
+- 19 OK
+- 0 FALLA
+- 0 SKIP
+- Semántica fuerte = 15
+
+Equivalencias / regresiones:
+- C1b Logger + Queue Consume = 2/2
+- C2A Queue Publish = 2/2
+- C2Ab sintaxis opcional = 1/1
+- C2Bf Human Task base = 3/3
+- C2Bg2 Human Task APTO/NO_APTO = 3/3
+- C2Bg2b advertencia explícita = 1/1
+- C2Bg2c Paso a paso Human Task = 1/1
+- C2Bg2d valores declarativos Paso a paso = 1/1
+- C2C1 control.if contrato común = 4/4
+- C2C2 control.if interpretación natural = 5/5
+- C2C2b acciones naturales SI/NO = 1/1
+
+No des nada por supuesto: comprobalo en el ZIP nuevo.
+
+
+## DECISIÓN IMPORTANTE — HUMAN TASK
+
+NO reabrir la discusión salvo evidencia de bug:
+
+En el Constructor / diseño:
+- APTO
+- NO_APTO
+
+En ejecución de la tarea:
+- existe además RECHAZAR / volver atrás.
+
+RECHAZADO/backtrack NO es una tercera rama de diseño de Human Task.
+Pertenece a la operación de una instancia en ejecución.
+
+Frases de diseño como:
+“si Compras la rechaza”
+
+se interpretan como resultado negativo del flujo:
+`NO_APTO`.
+
+El mecanismo operativo de volver atrás permanece en la UI/runtime existente.
+No meterlo en el contrato de construcción de Human Task.
+
+
+## HUMAN TASK — ESTADO CERRADO
+
+Validado por Frase y Paso a paso:
+
+Human Task
+- APTO → continuación normal
+- NO APTO → rama negativa
+
+La representación funcional puede ocultar el `control.if` técnico interno.
+
+Al crear workflow, el sistema puede construir internamente:
+- human.task
+- control.if `wf.tarea.resultado == apto`
+- true / false
+
+pero el usuario no tiene que pensar en esa implementación.
+
+También quedó validado:
+- `registrar una advertencia` → util.logger Warn;
+- Message = `Informar` en Paso a paso permanece dato;
+- valores ya elegidos en editores estructurados NO se reinterpretan como nuevas intenciones.
+
+
+## CONTROL.IF — ESTADO CERRADO
+
+### C2C1
+
+El camino contractual común soporta:
+- simple field/op/value;
+- operadores sin valor;
+- ALL;
+- ANY;
+- expresión avanzada.
+
+SI/NO pertenecen a conexiones del flujo, no a params del nodo.
+
+### C2C2
+
+Frase natural converge al mismo contrato C2C1 conservando:
+- total;
+- CAE;
+- presencia;
+- no supera;
+- caso contrario;
+- negaciones;
+- ALL;
+- ANY.
+
+### C2C2b
+
+Se validó de punta a punta:
+
+`Cargar una factura electrónica. Si el total supera 100000, escribir el número de factura en C:\temp\SalidaSI.txt. Caso contrario, escribir el CUIT del emisor en C:\temp\SalidaNO.txt. Después finalizar.`
+
+Resultado:
+- doc.load;
+- control.if `biz.factura.total > 100000`;
+- SI → file.write SalidaSI con `${biz.factura.numero}`;
+- NO → file.write SalidaNO con `${biz.factura.emisor.cuit}`;
+- ambas ramas → Fin.
+
+No reabrir control.if salvo bug real o nuevo requisito.
+
+
+## PRINCIPIO REFORZADO PARA PASO A PASO
+
+Paso a paso NO debe volver a parsear como lenguaje libre lo que el usuario ya eligió estructuradamente.
+
+Ejemplo:
+- Nodo: Logger
+- Level: Warn
+- Message: Informar
+
+`Informar` es texto.
+No debe crear notificación, tarea ni pregunta.
+
+La frase inferior generada por Paso a paso puede ser una descripción auxiliar, pero NO es la fuente de verdad de la estructura.
+
+
+## OBJETIVO DE LA NUEVA SESIÓN
+
+NO quiero que empieces automáticamente por un nodo específico.
+
+Primero:
+1. inspeccioná el ZIP nuevo;
+2. reconstruí la cobertura real del camino común;
+3. identificá qué nodos/capacidades ya convergen Frase ↔ Paso a paso;
+4. identificá cuáles siguen con caminos paralelos/legacy;
+5. proponeme cuál debería ser el próximo bloque y por qué.
+
+Quiero que lo discutamos antes de implementar.
+
+
+## CANDIDATOS
+
+Puede haber nodos pendientes de integrar al mismo camino común, pero NO elijas por memoria.
+
+Revisá el ZIP real y el catálogo actual.
+
+Proponé el próximo candidato considerando:
+- impacto de producto;
+- riesgo;
+- dependencias;
+- regresiones existentes;
+- facilidad de validar de punta a punta;
+- cuánto código legacy puede eliminarse o aislarse sin reescribir arquitectura.
+
+
+## UX PENDIENTE — NO MEZCLAR AUTOMÁTICAMENTE
+
+Sigue pendiente una contradicción conocida:
+
+Paso a paso puede avisar:
+“Falta Finalizar flujo”
+
+pero luego el sistema agrega un Fin técnico automáticamente.
+
+Es una limpieza UX pendiente.
+No mezclarla con el próximo nodo salvo que afecte directamente la implementación que estemos trabajando.
+
+También puede existir una frase técnica/descriptiva debajo de Paso a paso.
+No convertirla nuevamente en fuente de intención.
+
+
+## REGLAS OBLIGATORIAS
+
+- no inventar;
+- no cambiar arquitectura sin necesidad;
+- no reescribir cosas que funcionan;
+- no tocar motor/runtime/handlers/canvas salvo evidencia;
+- no modificar los 19 casos históricos para hacer pasar un fix;
+- preservar regresiones existentes;
+- no esconder errores haciendo tests más permisivos;
+- cuando un test automático pasa pero la UI real falla, confiar en la evidencia real y fortalecer la regresión;
+- seguir usando el camino común contractual;
+- no crear otra capa paralela;
+- Paso a paso puede conservar editores especializados;
+- Frase y Paso a paso deben converger en la misma semántica resuelta;
+- `Nombre = valor` es ayuda opcional, nunca requisito;
+- el usuario no debe conocer propiedades internas;
+- si falta una decisión real, preguntar;
+- si hay ambigüedad real, no decidir silenciosamente;
+- los valores declarativos ya elegidos en Paso a paso no vuelven a interpretarse como intención.
+
+
+## ÁREAS A PRESERVAR
+
+Mientras no haya evidencia de bug real:
+- motor;
+- handlers runtime;
+- mapa;
+- canvas/aristas/zoom;
+- Queue runtime;
+- SMTP;
+- Subflow;
+- documentos NC_AR/factura ya cerrados;
+- DB;
+- backtrack;
+- HIf.cs.
+
+
+## FORMA DE COLABORAR
+
+Quiero método colaborativo y no burocrático.
+
+Yo puedo plantear una necesidad sin saber cómo debería resolverse técnicamente en un producto de workflows.
+
+Vos debés:
+- estudiar;
+- reconstruir;
+- detectar implicancias;
+- proponer el camino profesional;
+- marcar riesgos;
+- discutir decisiones conmigo;
+- insistir si hay una alternativa claramente mejor.
+
+No quiero que simplemente aceptes mi primera idea si ves una solución mejor.
+
+
+## FORMATO DE FIX
+
+Cuando implementemos:
+- ZIP de reemplazo;
+- estructura real;
+- archivos completos modificados;
+- LEEME;
+- causa;
+- fix exacto;
+- archivos tocados;
+- pruebas esperadas.
+
+No usar diff +/- salvo que yo lo pida.
+
+
+## PRIMERA RESPUESTA QUE ESPERO EN LA PRÓXIMA SESIÓN
+
+Cuando te entregue ContextPack + Prompt + ZIP:
+
+1. confirmá que leíste el ContextPack completo;
+2. confirmá que recibiste el ZIP;
+3. inspeccioná el ZIP real;
+4. decime qué línea integrada encontraste;
+5. confirmá si las regresiones/cobertura esperadas están presentes;
+6. reconstruí qué nodos ya están en camino común;
+7. proponé el próximo nodo/capacidad a trabajar;
+8. explicá por qué;
+9. NO escribas código todavía.
+
+Después lo discutimos y recién entonces implementamos.

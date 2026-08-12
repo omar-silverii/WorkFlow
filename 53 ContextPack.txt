@@ -1,0 +1,581 @@
+# CONTEXTPACK — Workflow Studio / Constructor IA
+## Cierre de sesión — 11/08/2026
+
+## 1. Proyecto y fuente de verdad
+
+Proyecto principal: Workflow Studio / Workflow Studio WebForms.
+
+Stack conocido:
+- ASP.NET WebForms .NET Framework 4.8
+- C#
+- Visual Studio 2022
+- SQL Server
+- Aplicación intranet
+- Debe funcionar sin depender de Internet ni CDNs
+- Una base / una conexión principal: `DefaultConnection`
+
+Regla permanente y obligatoria:
+- La fuente de verdad es SIEMPRE el ZIP completo más reciente que Omar entregue.
+- No asumir que los archivos quedaron exactamente como en el chat o en fixes parciales.
+- No inventar tablas, handlers, clases, controles, propiedades, endpoints o métodos.
+- Si un archivo no fue inspeccionado, no afirmar cómo está.
+- Antes de proponer cambios: inspeccionar el ZIP real y reconstruir el estado actual.
+- No reescribir arquitectura ni tocar cosas que ya funcionan sin evidencia.
+- Cambios mínimos, precisos y profesionales.
+- Si algo no cierra, decirlo.
+- Si existe un camino mejor, insistir y explicarlo.
+- El asistente debe actuar como ingeniero del sistema, no como ejecutor pasivo de instrucciones.
+
+Método permanente de trabajo:
+1. Omar presenta ContextPack + Prompt + ZIP completo actualizado.
+2. Confirmar lectura completa del ContextPack.
+3. Tomar el ZIP como única fuente de verdad.
+4. Inspeccionar archivos reales.
+5. Reconstruir estado integrado.
+6. Analizar implicancias productivas.
+7. Proponer solución y orden de trabajo.
+8. Discutir decisiones importantes antes de implementar.
+9. Recién después modificar.
+10. Preservar todo lo ya validado.
+
+Formato preferido para fixes:
+- ZIP de reemplazo con estructura real del proyecto.
+- Archivos completos modificados.
+- `LEEME`.
+- Si no se entrega ZIP: preferir `DONDE DICE → REEMPLAZAR POR`.
+- Evitar diff `+/-`.
+- No mandar archivos completos viejos o no inspeccionados.
+
+
+## 2. Filosofía vigente del Constructor IA
+
+Decisión oficial permanente:
+- El Constructor IA debe trabajar con **interpretación natural + diálogo de aclaración**.
+- El usuario no debe conocer JSON, nombres internos de propiedades ni variables técnicas.
+- La IA debe:
+  1. interpretar lo seguro;
+  2. inferir lo razonable;
+  3. mostrar qué entendió;
+  4. preguntar sólo cuando exista una ambigüedad real;
+  5. permitir revisar;
+  6. confirmar;
+  7. aplicar al canvas.
+
+No seguir ampliando un parser rígido frase por frase.
+
+Frase y Paso a paso pueden tener interfaces distintas, pero deben converger en:
+- la misma semántica;
+- la misma capa contractual;
+- el mismo nodo técnico válido;
+- sin duplicar defaults o reglas en JS y C#.
+
+Regla reforzada hoy:
+- **Paso a paso no debe volver a interpretar como lenguaje libre los valores ya elegidos por el usuario en un editor estructurado.**
+- Títulos, mensajes, descripciones, paths, payloads y otros valores ya elegidos son DATOS declarativos, no nuevas intenciones.
+- Ejemplo validado:
+  - Logger Warn
+  - Message = `Informar`
+  - `Informar` permanece texto y NO dispara `util.notify`.
+
+Sintaxis de precisión opcional:
+`Nombre = valor`
+
+Sigue siendo:
+- opcional;
+- nunca requisito;
+- traducida internamente a propiedades reales;
+- resuelta contra catálogos/Datos disponibles cuando corresponda.
+
+
+## 3. Línea validada previa que se preserva
+
+Antes del trabajo de hoy ya estaba validado:
+- Banco histórico: `19 OK / 0 FALLA / 0 SKIP`
+- Semántica fuerte: `15`
+- C1b Logger + Queue Consume: `2/2`
+- C2A Queue Publish: `2/2`
+- C2Ab sintaxis opcional: `1/1`
+- C2Bf Human Task base: `3/3`
+
+Validaciones previas importantes:
+- util.logger Frase ↔ Paso a paso.
+- queue.consume Frase ↔ Paso a paso.
+- queue.publish texto simple y estructurado.
+- usuario corto resuelto contra catálogo real.
+- Rol + Usuario como ambigüedad real.
+- no inventar dominio Windows.
+- no inventar payload/defaults inexistentes.
+
+
+## 4. Trabajo de hoy — Human Task completo
+
+### 4.1 FIX84C2Bg inicial — SUPERSedido
+
+Se exploró inicialmente la idea de distinguir `NO_APTO` y `RECHAZADO` dentro del Constructor.
+
+La prueba real mostró que ese enfoque mezclaba dos niveles:
+- diseño del workflow;
+- operación de una instancia ya en ejecución.
+
+Conclusión final:
+**esa versión conceptual NO es la línea vigente.**
+
+No tomar `FIX84C2Bg` inicial como cierre funcional.
+
+
+### 4.2 Decisión de producto final sobre Human Task
+
+En el **diseño del workflow / Constructor IA**, Human Task tiene resultados de flujo:
+
+- `APTO`
+- `NO_APTO`
+
+En la **ejecución real de una instancia**, la página de tarea humana puede ofrecer además:
+- `RECHAZAR / volver atrás`
+
+El rechazo/backtrack:
+- NO pertenece al contrato de construcción de Human Task.
+- NO debe aparecer como una tercera rama del Constructor.
+- Depende del estado real de la instancia.
+- Se resuelve operativamente desde la tarea en ejecución.
+- Usa el mecanismo existente de `WF_Tarea_Detalle` / `wfBack`.
+- No se rediseñó ni tocó ese runtime.
+
+Regla de lenguaje de diseño:
+- frases como “si Compras la rechaza” se interpretan como resultado negativo del diseño → `NO_APTO`;
+- NO como backtrack.
+
+No asumir que la palabra humana “rechaza” de una definición equivale al valor técnico runtime `rechazado`.
+
+
+### 4.3 FIX84C2Bg2 — APTO / NO APTO como salidas hermanas
+
+Se corrigió la representación funcional de Human Task.
+
+Modelo correcto:
+
+Human Task
+- APTO → continuación normal
+- NO_APTO → rama negativa
+
+No deben aparecer APTO y NO_APTO como pasos en serie.
+
+Se corrigió también que:
+- el título explícito `Título = Revisar factura` no absorba la oración siguiente;
+- no aparezca una segunda pregunta artificial de SI/NO cuando la acción ya estaba expresada.
+
+Regresión:
+- `C2Bg2 = 3/3` VALIDADO.
+
+
+### 4.4 FIX84C2Bg2b — advertencia explícita en rama humana
+
+Prueba real detectó que:
+`registrar una advertencia indicando que debe corregirse`
+
+estaba generando una duda artificial:
+- notificación;
+- Logger;
+- tarea.
+
+Decisión:
+- `registrar una advertencia` → `util.logger` con Level `Warn`
+- sin preguntar innecesariamente.
+
+También se corrigió la comparación entre:
+- borrador funcional;
+- grafo técnico interno.
+
+El borrador funcional puede ocultar el `control.if` técnico de `wf.tarea.resultado`, pero el canvas final mantiene ese nodo.
+
+Regresión:
+- `C2Bg2b = 1/1` VALIDADO.
+
+
+### 4.5 FIX84C2Bg2c — Paso a paso Human Task APTO/NO APTO
+
+Se detectó que Paso a paso armaba correctamente la estructura APTO/NO_APTO, pero luego volvía a convertirla en una frase intermedia y una validación legacy reabría preguntas SI/NO.
+
+Corrección:
+- Paso a paso conserva su estructura elegida.
+- No reconstruye las ramas desde la frase descriptiva.
+- APTO/NO_APTO convergen al mismo tramo semántico que Frase.
+- Se colapsa el `Fin` duplicado cuando las ramas ya convergen.
+
+Regresión:
+- `C2Bg2c = 1/1` VALIDADO.
+
+
+### 4.6 FIX84C2Bg2d — valores declarativos de Paso a paso
+
+Prueba real:
+- Logger Warn
+- Message = `Informar`
+
+El sistema volvía a interpretar la palabra `Informar` como intención de notificación.
+
+Corrección general:
+- si el origen es Paso a paso, valores de propiedades ya elegidas son DATOS;
+- no vuelven a entrar a detectores de intención/ambigüedad;
+- la misma palabra escrita como Frase libre sigue siendo interpretable normalmente.
+
+Regresión:
+- `C2Bg2d = 1/1` VALIDADO.
+
+Validación manual final de Human Task:
+- Human Task COMPRAS / Revisar Factura.
+- APTO → Fin.
+- NO APTO → Logger Warn.
+- Message = `Informar`.
+- Sin preguntas artificiales.
+- Al crear workflow:
+  - `human.task`
+  - `control.if` técnico sobre `wf.tarea.resultado == apto`
+  - true → Fin
+  - false → Logger Warn → Fin.
+
+Conclusión:
+**Human Task queda cerrado en esta etapa.**
+
+
+## 5. Trabajo de hoy — control.if camino común
+
+### 5.1 FIX84C2C1 — contrato común control.if
+
+Objetivo:
+incorporar `control.if` al mismo camino contractual común ya usado por otros nodos.
+
+Se preservó:
+- `HIf.cs`
+- motor/runtime
+- canvas
+- ramas
+- parser histórico
+- 19 casos A–S
+
+La capa común normaliza:
+1. condición simple `field / op / value`;
+2. operador sin valor (`not_empty`, `empty`, `exists`, etc.);
+3. reglas múltiples `ALL`;
+4. reglas múltiples `ANY`;
+5. expresión avanzada ya existente.
+
+Reglas:
+- aliases como `=` se normalizan a forma canónica;
+- operadores sin valor no conservan `value` artificial;
+- `ALL/ANY` quedan canónicos;
+- SI/NO siguen siendo conexiones del flujo, NO parámetros del nodo.
+
+El resolvedor contractual también quedó preparado para aclarar:
+- condición simple;
+- varias reglas;
+- expresión.
+
+Regresión:
+- `C2C1 = 4/4` VALIDADO.
+
+Prueba manual Paso a paso validada:
+- cargar factura;
+- IF `biz.factura.total > 100000`;
+- SI → file.write;
+- NO → otro file.write;
+- ambas ramas convergen en un Fin;
+- parámetros reales de ambos file.write conservados.
+
+
+### 5.2 FIX84C2C2 — interpretación natural de condiciones
+
+Objetivo:
+hacer que Frase natural produzca el mismo `control.if` contractual de C2C1.
+
+Decisión técnica importante:
+- NO reemplazar de golpe el parser natural histórico que ya sostiene A–S.
+- Los candidatos naturales existentes pasan por el constructor contractual común C2C1 antes de construir ramas.
+
+Se preservó:
+- `no supera`;
+- inversión histórica de ramas;
+- `caso contrario`;
+- negaciones;
+- `ALL`;
+- `ANY`;
+- presencia de CAE;
+- condiciones de total.
+
+Regresión:
+- `C2C2 = 5/5` VALIDADO.
+
+Casos:
+- TOTAL_SUPERA
+- NO_SUPERA_CASO_CONTRARIO
+- CAE_INFORMADO
+- ALL
+- ANY_NEGADO
+
+
+### 5.3 Prueba real detectó defecto después de C2C2
+
+Frase probada:
+
+`Cargar una factura electrónica. Si el total supera 100000, escribir el número de factura en C:\temp\SalidaSI.txt. Caso contrario, escribir el CUIT del emisor en C:\temp\SalidaNO.txt. Después finalizar.`
+
+C2C2 entendía el IF pero perdía los dos `file.write`.
+
+Resultado incorrecto:
+- condición presente;
+- acciones SI/NO ausentes;
+- falsas preguntas de “falta completar rama”.
+
+Conclusión:
+C2C2 estaba bien en contrato de condición pero su regresión era demasiado estrecha para probar composición completa.
+
+
+### 5.4 FIX84C2C2b — acciones naturales en ramas SI/NO
+
+Corrección:
+- el intérprete natural puede asociar acciones `file.write` a la rama SI/NO de una condición natural;
+- conserva contexto de rama;
+- resuelve el dato de negocio solicitado;
+- conserva path;
+- `Caso contrario` queda en la rama opuesta;
+- ambas ramas convergen en Fin;
+- si no puede resolver el dato de forma segura, no inventa contenido.
+
+Regresión:
+- `C2C2b = 1/1` VALIDADO.
+
+Validación visual de punta a punta:
+
+Frase:
+`Cargar una factura electrónica. Si el total supera 100000, escribir el número de factura en C:\temp\SalidaSI.txt. Caso contrario, escribir el CUIT del emisor en C:\temp\SalidaNO.txt. Después finalizar.`
+
+Resultado funcional correcto:
+
+Inicio
+→ Cargar factura
+→ Total > 100000
+   - SI → Escribir SalidaSI.txt
+          contenido `${biz.factura.numero}`
+   - NO → Escribir SalidaNO.txt
+          contenido `${biz.factura.emisor.cuit}`
+→ Fin común
+
+Workflow técnico creado y validado visualmente:
+- `doc.load`
+- `control.if`
+- true → `file.write` SalidaSI
+- false → `file.write` SalidaNO
+- convergencia a un único `util.end`
+
+Inspectores validados:
+- IF:
+  - field `biz.factura.total`
+  - op `>`
+  - value `100000`
+- file.write SI:
+  - path `C:\temp\SalidaSI.txt`
+  - contenido `${biz.factura.numero}`
+- file.write NO:
+  - path `C:\temp\SalidaNO.txt`
+  - contenido `${biz.factura.emisor.cuit}`
+
+Conclusión:
+**control.if queda cerrado en esta etapa.**
+
+
+## 6. Estado de regresión al cierre de hoy
+
+Última evidencia visible validada:
+
+Banco histórico:
+- `19 OK`
+- `0 FALLA`
+- `0 SKIP`
+- `Semántica fuerte = 15`
+
+Grupos nuevos / preservados:
+- C2Bf Human Task base = `3/3`
+- C2Bg2 Human Task APTO/NO_APTO = `3/3`
+- C2Bg2b Advertencia explícita = `1/1`
+- C2Bg2c Paso a paso ramas humanas = `1/1`
+- C2Bg2d Valores declarativos Paso a paso = `1/1`
+- C2C1 contrato común control.if = `4/4`
+- C2C2 interpretación natural control.if = `5/5`
+- C2C2b acciones naturales en ramas SI/NO = `1/1`
+
+Además permanecen las equivalencias validadas previas:
+- C1b Logger + Queue Consume = `2/2`
+- C2A Queue Publish = `2/2`
+- C2Ab sintaxis opcional = `1/1`
+
+Regla:
+- no modificar los 19 casos históricos para hacer pasar fixes nuevos;
+- si el test automático pasa pero la UI real falla, confiar en la evidencia real y fortalecer regresión.
+
+
+## 7. Arquitectura / responsabilidades confirmadas
+
+Camino común:
+- Frase y Paso a paso terminan en una representación semántica común.
+- `WfAiResolvedNodeBuilder` ya cubre al menos:
+  - `util.logger`
+  - `queue.consume`
+  - `queue.publish`
+  - `human.task`
+  - `control.if`
+  (verificar lista exacta en el ZIP nuevo antes de afirmar cobertura completa).
+
+Piezas relevantes conocidas, verificar nombres exactos en ZIP:
+- `WfAiConstructionContractRegistry`
+- `WfAiResolvedNodeBuilder`
+- `WfAiInterpretationDraftBuilder`
+- `WfAiClarificationResolver`
+- `WfAiMlnetProvider`
+- `WfAiCatalogProvider`
+- `WF_AiRegression.aspx` / `.cs`
+- `Scripts/workflow.ai.assistant.js`
+
+Principios:
+- el motor orquesta, no debe absorber lógica de IA;
+- handlers runtime no se tocan salvo bug real;
+- Paso a paso conserva editores especializados;
+- Frase usa interpretación natural;
+- ambos deben converger;
+- valores estructurados no se vuelven a interpretar como intención;
+- ramas pertenecen al flujo/conexiones.
+
+
+## 8. Backtrack / RECHAZADO — estado conceptual
+
+Mantener esta decisión para próximas sesiones:
+
+- `RECHAZADO` / volver atrás es una capacidad operativa de una instancia en ejecución.
+- No es una tercera rama del Human Task en el Constructor.
+- No debe aparecer junto a APTO/NO_APTO en diseño.
+- El destino de backtrack no se configura como parámetro inventado del nodo.
+- El runtime existente usa `wfBack` y la UI operativa correspondiente.
+- No tocar esta línea salvo bug real o trabajo explícito futuro.
+
+
+## 9. UX pendiente — NO mezclar sin decisión explícita
+
+### A. Finalizar flujo
+
+Sigue existiendo la contradicción:
+- Paso a paso advierte que “falta Finalizar flujo”.
+- Después el sistema puede agregar un `Fin` técnico automáticamente.
+
+Se vio nuevamente durante C2C1/C2C2.
+
+No es bug funcional de control.if.
+Dejar como limpieza UX posterior.
+
+
+### B. Frase técnica generada por Paso a paso
+
+La caja inferior puede mostrar una frase intermedia técnica/descriptiva.
+Después de Bg2d quedó firme:
+- esa frase NO es fuente de verdad de la estructura;
+- propiedades elegidas en Paso a paso son declarativas;
+- la frase puede quedar como descripción humana/técnica auxiliar.
+
+A futuro puede mejorarse visualmente, pero no mezclar salvo que afecte al trabajo actual.
+
+
+## 10. Áreas cerradas / preservar
+
+Mientras no haya evidencia de bug real:
+- no tocar motor;
+- no tocar handlers runtime;
+- no tocar mapa de instancia;
+- no tocar canvas/aristas/zoom;
+- no tocar Queue runtime;
+- no tocar SMTP;
+- no tocar Subflow;
+- no tocar documento NC_AR/factura ya cerrados;
+- no rediseñar DB;
+- no tocar backtrack por cambios de Constructor;
+- no tocar `HIf.cs` por trabajo contractual salvo evidencia real.
+
+Canvas/aristas/zoom continúa considerado estable.
+
+
+## 11. Próxima sesión — orden obligatorio
+
+Omar entregará:
+1. este ContextPack;
+2. Prompt de arranque;
+3. ZIP completo actualizado con TODOS los fixes integrados hasta el cierre del 11/08/2026.
+
+El asistente debe:
+
+### Paso 1
+Leer completo ContextPack y Prompt.
+
+### Paso 2
+Confirmar recepción del ZIP nuevo.
+
+### Paso 3
+Tomar ese ZIP como ÚNICA fuente de verdad.
+
+### Paso 4
+Inspeccionar archivos reales antes de proponer cualquier cambio.
+
+### Paso 5
+Verificar que la línea integrada contiene realmente:
+- C1b
+- C2A
+- C2Ab
+- C2Bf
+- C2Bg2
+- C2Bg2b
+- C2Bg2c
+- C2Bg2d
+- C2C1
+- C2C2
+- C2C2b
+- regresiones correspondientes
+- 19 casos históricos A–S intactos
+
+No asumir por nombres de ZIP ni por el chat.
+
+### Paso 6
+Reconstruir cobertura real actual del camino común:
+- qué nodos ya convergen Frase ↔ Paso a paso;
+- cuáles siguen usando caminos paralelos/legacy;
+- cuáles son los próximos candidatos razonables.
+
+### Paso 7
+NO empezar automáticamente un nuevo fix.
+
+Primero presentar a Omar:
+- estado integrado encontrado;
+- qué está realmente cerrado;
+- qué falta;
+- próximo nodo/capacidad recomendable;
+- orden profesional;
+- riesgos de tocarlo.
+
+### Paso 8
+Discutir y acordar el próximo bloque antes de implementar.
+
+No asumir de antemano que el próximo nodo es uno específico.
+Elegirlo después de inspeccionar el ZIP y revisar cobertura real.
+
+
+## 12. Regla final de producto
+
+Objetivo permanente:
+
+**Frase natural y Paso a paso son dos interfaces distintas sobre una misma semántica contractual de workflow.**
+
+El usuario expresa intención.
+El sistema conoce la implementación.
+El sistema pregunta sólo cuando realmente no sabe.
+El usuario no debe aprender propiedades internas.
+
+La prueba no termina cuando una regresión da verde:
+- debe verse bien;
+- debe representar correctamente la intención;
+- debe aplicar al canvas;
+- y el workflow técnico resultante debe conservar parámetros, ramas y semántica.

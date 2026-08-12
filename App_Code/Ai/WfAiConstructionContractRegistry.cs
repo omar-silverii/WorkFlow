@@ -6,13 +6,13 @@ namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
     /// fix84a: primera muestra ejecutable del contrato universal.
-    /// La cobertura se limita deliberadamente a cinco nodos representativos.
+    /// La cobertura se amplía de forma incremental sobre los nodos ya cerrados; FIX84C2D4 incorpora state.vars.
     /// El registro describe intención, parámetros, inferencia, controles, salidas y validaciones;
     /// no reemplaza handlers, catálogo, Phrase Engine ni WfAiMlnetProvider.
     /// </summary>
     public static class WfAiConstructionContractRegistry
     {
-        public const string Version = "fix84c2b-contract-v6";
+        public const string Version = "fix84c2d4-contract-v10";
 
         public static List<WfAiNodeConstructionContract> Build()
         {
@@ -22,7 +22,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 QueueConsume(),
                 Logger(),
                 HumanTask(),
-                ControlIf()
+                ControlIf(),
+                Notify(),
+                FileWrite(),
+                FileRead(),
+                StateVars()
             };
         }
 
@@ -239,6 +243,189 @@ namespace Intranet.WorkflowStudio.WebForms
                 ControlKind = WfAiControlKind.RoleOrUser,
                 Blocking = true,
                 Exclusive = true
+            });
+
+            return contract;
+        }
+
+        private static WfAiNodeConstructionContract Notify()
+        {
+            var contract = new WfAiNodeConstructionContract
+            {
+                NodeType = "util.notify",
+                Label = "Notificar",
+                HumanIntent = "Crear una notificación operativa interna para un rol o un usuario real.",
+                HumanPhrases = L("notificar internamente", "avisar por sistema", "crear una notificación interna", "notificar a compras"),
+                Parameters = new List<WfAiParameterContract>
+                {
+                    P("tipo", "Tipo", "string", false, WfAiInferencePolicy.SafeDefault, J("sistema"), "", WfAiControlKind.Select, L("sistema"), false),
+                    P("canal", "Canal", "string", false, WfAiInferencePolicy.SafeDefault, J("sistema"), "", WfAiControlKind.Select, L("sistema"), false),
+                    P("nivel", "Nivel", "string", false, WfAiInferencePolicy.SafeDefault, J("info"), "", WfAiControlKind.Select, L("info", "warn", "error", "debug"), false),
+                    P("destinoTipo", "Tipo de destino", "string", false, WfAiInferencePolicy.NeverInfer, null, "", WfAiControlKind.Select, L("rol", "usuario"), false),
+                    P("usuarioDestino", "Usuario destino", "string", false, WfAiInferencePolicy.NeverInfer, null, "¿A qué usuario querés notificar?", WfAiControlKind.Select, null, true),
+                    P("rolDestino", "Rol destino", "string", false, WfAiInferencePolicy.NeverInfer, null, "¿A qué rol querés notificar?", WfAiControlKind.Select, null, true),
+                    P("destino", "Destino", "string", false, WfAiInferencePolicy.NeverInfer, null, "", WfAiControlKind.Text, null, false),
+                    P("prioridad", "Prioridad", "string", false, WfAiInferencePolicy.SafeDefault, J("normal"), "", WfAiControlKind.Select, L("normal", "alta", "baja"), false),
+                    P("asunto", "Asunto", "string", false, WfAiInferencePolicy.SafeDefault, J("Notificación"), "", WfAiControlKind.Text, null, false, L("Notificación Workflow Studio", "Aviso interno")),
+                    P("mensaje", "Mensaje", "string", true, WfAiInferencePolicy.NeverInfer, null, "¿Qué mensaje querés enviar en la notificación?", WfAiControlKind.Text, null, true, L("Notificación interna generada por Asistente IA.", "Notificación generada por Asistente IA.", "Hay una novedad pendiente en el workflow")),
+                    P("urlAccion", "URL de acción", "string", false, WfAiInferencePolicy.SafeDefault, null, "", WfAiControlKind.Text, null, false)
+                },
+                InputFields = L("Cualquier dato disponible mediante ${...}"),
+                OutputFields = L(
+                    "notify.last.id", "notify.last.persisted", "notify.last.error",
+                    "notify.last.type", "notify.last.canal", "notify.last.requestedCanal",
+                    "notify.last.nivel", "notify.last.prioridad", "notify.last.destino",
+                    "notify.last.usuarioDestino", "notify.last.rolDestino", "notify.last.title",
+                    "notify.last.message", "notify.last.urlAccion"),
+                Validations = L(
+                    "debe existir exactamente un destino: rolDestino O usuarioDestino",
+                    "no inventar destinatario",
+                    "mensaje obligatorio",
+                    "util.notify es notificación interna; para correo real usar email.send",
+                    "tipo/canal sistema, nivel info/warn/error/debug y prioridad normal/alta/baja"),
+                SummaryTemplate = "Notificar a {destino}: {mensaje}."
+            };
+
+            contract.AlternativeRequirements.Add(new WfAiAlternativeRequirement
+            {
+                Key = "notificationDestination",
+                Label = "Destino de la notificación",
+                Alternatives = new List<List<string>> { L("rolDestino"), L("usuarioDestino") },
+                ClarificationQuestion = "¿Quién debe recibir la notificación interna?",
+                ControlKind = WfAiControlKind.RoleOrUser,
+                Blocking = true,
+                Exclusive = true
+            });
+
+            return contract;
+        }
+
+        private static WfAiNodeConstructionContract FileWrite()
+        {
+            var contract = new WfAiNodeConstructionContract
+            {
+                NodeType = "file.write",
+                Label = "Archivo: Escribir",
+                HumanIntent = "Escribir texto, una plantilla o un dato disponible en una ruta de archivo elegida por el usuario.",
+                HumanPhrases = L("escribir un archivo", "guardar un archivo", "escribir un dato en un archivo", "guardar texto en una ruta"),
+                Parameters = new List<WfAiParameterContract>
+                {
+                    P("path", "Ruta destino", "string", true, WfAiInferencePolicy.NeverInfer, null,
+                        "¿En qué ruta querés escribir el archivo?", WfAiControlKind.Text, null, true,
+                        L(@"C:\temp\wf_ai_regression.txt", @"C:\temp\out.txt", "C:/data/salida.json")),
+                    P("content", "Contenido", "string", false, WfAiInferencePolicy.NeverInfer, null,
+                        "¿Qué contenido querés escribir?", WfAiControlKind.Text, null, true,
+                        L("Contenido generado por Asistente IA", "Contenido generado por Constructor IA")),
+                    P("origen", "Dato de origen", "string", false, WfAiInferencePolicy.NeverInfer, null,
+                        "¿Qué dato disponible querés escribir?", WfAiControlKind.AvailableData, null, true),
+                    P("encoding", "Encoding", "string", false, WfAiInferencePolicy.SafeDefault, J("utf-8"), "", WfAiControlKind.Text, null, false),
+                    P("overwrite", "Sobrescribir", "boolean", false, WfAiInferencePolicy.SafeDefault, new JValue(true), "", WfAiControlKind.Boolean, null, false),
+                    P("zipMode", "Modo ZIP", "string", false, WfAiInferencePolicy.SafeDefault, J("none"), "", WfAiControlKind.Select, L("none", "zip"), false),
+                    P("entryName", "Entrada ZIP", "string", false, WfAiInferencePolicy.AskIfMissing, null, "", WfAiControlKind.Text, null, false)
+                },
+                InputFields = L("Datos disponibles del workflow mediante ${...} o una clave de contexto"),
+                OutputFields = L(
+                    "file.write.lastPath", "file.write.lastLength", "file.write.lastEncoding",
+                    "file.write.lastZipMode", "file.write.lastEntryName", "file.write.skipped", "file.write.lastError"),
+                Validations = L(
+                    "path es obligatorio y nunca se inventa",
+                    "debe existir content u origen",
+                    "content, path y origen son datos declarativos y no nuevas intenciones",
+                    "encoding utf-8, overwrite true y zipMode none son defaults técnicos seguros"),
+                SummaryTemplate = "Escribir un archivo en {path}."
+            };
+
+            contract.AlternativeRequirements.Add(new WfAiAlternativeRequirement
+            {
+                Key = "fileWriteSource",
+                Label = "Contenido a escribir",
+                Alternatives = new List<List<string>> { L("content"), L("origen") },
+                ClarificationQuestion = "¿Qué contenido querés escribir? Podés escribir texto o insertar un dato disponible.",
+                ControlKind = WfAiControlKind.Text,
+                Blocking = true,
+                Exclusive = false
+            });
+
+            return contract;
+        }
+
+        private static WfAiNodeConstructionContract FileRead()
+        {
+            return new WfAiNodeConstructionContract
+            {
+                NodeType = "file.read",
+                Label = "Archivo: Leer",
+                HumanIntent = "Leer un archivo del servidor y dejar su contenido disponible en el contexto del workflow.",
+                HumanPhrases = L("leer un archivo", "abrir un archivo", "leer archivo y guardar el contenido", "leer archivo como JSON"),
+                Parameters = new List<WfAiParameterContract>
+                {
+                    P("path", "Ruta del archivo", "string", true, WfAiInferencePolicy.NeverInfer, null,
+                        "¿Qué archivo querés leer? Indicá la ruta del servidor.", WfAiControlKind.Text, null, true,
+                        L(@"C:\Temp\entrada.txt", @"C:\temp\input.json")),
+                    P("salida", "Guardar contenido en", "string", false, WfAiInferencePolicy.SafeDefault, J("archivo"),
+                        "", WfAiControlKind.Text, null, false),
+                    P("asJson", "Leer como JSON", "boolean", false, WfAiInferencePolicy.SafeDefault, new JValue(false),
+                        "", WfAiControlKind.Boolean, null, false),
+                    P("encoding", "Encoding", "string", false, WfAiInferencePolicy.SafeDefault, J("utf-8"),
+                        "", WfAiControlKind.Text, null, false),
+                    P("zipMode", "Compresión", "string", false, WfAiInferencePolicy.SafeDefault, J("auto"),
+                        "", WfAiControlKind.Select, L("auto", "none", "zip", "gzip"), false),
+                    P("zipEntry", "Entrada ZIP", "string", false, WfAiInferencePolicy.AskIfMissing, null,
+                        "", WfAiControlKind.Text, null, false),
+                    P("useCache", "Usar caché al reanudar", "boolean", false, WfAiInferencePolicy.SafeDefault, new JValue(true),
+                        "", WfAiControlKind.Boolean, null, false)
+                },
+                InputFields = L("input.filePath", "Una ruta literal o una plantilla ${...} que resuelva a una ruta"),
+                OutputFields = L(
+                    "archivo (o la salida elegida)", "file.read.lastPath", "file.read.lastLength",
+                    "file.read.lastEncoding", "file.read.lastZipMode", "file.read.lastAsJson",
+                    "file.read.exists", "file.read.lastError"),
+                Validations = L(
+                    "path es obligatorio y nunca se inventa",
+                    "output es alias legacy; el contrato canónico usa salida",
+                    "salida debe ser una clave válida de contexto y no debe pisar file.read.*",
+                    "salida archivo, asJson false, encoding utf-8, zipMode auto y useCache true son defaults técnicos seguros",
+                    "path, salida y zipEntry son datos declarativos y no nuevas intenciones"),
+                SummaryTemplate = "Leer el archivo {path} y guardar su contenido en {salida}."
+            };
+        }
+
+        private static WfAiNodeConstructionContract StateVars()
+        {
+            var contract = new WfAiNodeConstructionContract
+            {
+                NodeType = "state.vars",
+                Label = "Variables",
+                HumanIntent = "Guardar y/o quitar variables del contexto del workflow.",
+                HumanPhrases = L("guardar una variable", "definir una variable", "asignar una variable", "quitar una variable", "eliminar una variable"),
+                Parameters = new List<WfAiParameterContract>
+                {
+                    P("set", "Variables a guardar", "object", false, WfAiInferencePolicy.NeverInfer, null,
+                        "", WfAiControlKind.PayloadEditor, null, false),
+                    P("remove", "Variables a quitar", "array", false, WfAiInferencePolicy.NeverInfer, null,
+                        "", WfAiControlKind.Text, null, false)
+                },
+                InputFields = L("Datos disponibles del workflow mediante ${...}"),
+                OutputFields = L(
+                    "state.last.nodeId", "state.last.setCount", "state.last.removeCount",
+                    "state.last.removedCount", "state.last.setKeys", "state.last.removeKeys"),
+                Validations = L(
+                    "debe existir al menos una variable en set o remove",
+                    "las claves de set/remove deben ser rutas de contexto válidas",
+                    "set y remove son datos declarativos y no nuevas intenciones",
+                    "los valores guardados conservan texto, JSON, números, booleanos y plantillas ${...}"),
+                SummaryTemplate = "Actualizar variables del contexto."
+            };
+
+            contract.AlternativeRequirements.Add(new WfAiAlternativeRequirement
+            {
+                Key = "stateVarsChange",
+                Label = "Cambio de variables",
+                Alternatives = new List<List<string>> { L("set"), L("remove") },
+                ClarificationQuestion = "¿Qué variable querés guardar o quitar? Para guardar podés indicar variable = valor; para quitar, indicá la variable.",
+                ControlKind = WfAiControlKind.Text,
+                Blocking = true,
+                Exclusive = false
             });
 
             return contract;

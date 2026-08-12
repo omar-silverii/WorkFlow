@@ -6,7 +6,7 @@ using Newtonsoft.Json.Linq;
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// FIX84B/FIX84C2C1: aplica respuestas estructuradas de aclaración sobre una copia del plan.
+    /// FIX84B/FIX84C2C1/FIX84C2D2/FIX84C2D4: aplica respuestas estructuradas de aclaración sobre una copia del plan.
     /// No vuelve a interpretar la frase ni toca handlers/runtime. El plan base se reconstruye
     /// en cada POST y estas decisiones se aplican de forma determinística encima.
     /// </summary>
@@ -172,6 +172,46 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
 
+            if (string.Equals(clarification.NodeType, "util.notify", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(clarification.Parameter, "notificationDestination", StringComparison.OrdinalIgnoreCase))
+            {
+                JObject destination = answer as JObject;
+                string kind = Text(destination == null ? null : destination["kind"]).ToLowerInvariant();
+                string value = Text(destination == null ? null : destination["value"]);
+                if (value.Length == 0 || (kind != "role" && kind != "user"))
+                {
+                    result.Errors.Add("Elegí un rol o un usuario real para la notificación interna.");
+                    return;
+                }
+
+                if (kind == "role")
+                {
+                    if (!CatalogHasRole(catalog, value))
+                    {
+                        result.Errors.Add("El rol seleccionado ya no existe en el catálogo real: " + value);
+                        return;
+                    }
+                    parameters["rolDestino"] = value;
+                    parameters.Remove("usuarioDestino");
+                    parameters["destinoTipo"] = "rol";
+                    parameters["destino"] = value;
+                    Accept(result, clarification, "Rol: " + value);
+                    return;
+                }
+
+                if (!CatalogHasUser(catalog, value))
+                {
+                    result.Errors.Add("El usuario seleccionado ya no existe en el catálogo real: " + value);
+                    return;
+                }
+                parameters["usuarioDestino"] = value;
+                parameters.Remove("rolDestino");
+                parameters["destinoTipo"] = "usuario";
+                parameters["destino"] = value;
+                Accept(result, clarification, "Usuario: " + value);
+                return;
+            }
+
             if (string.Equals(clarification.NodeType, "control.if", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(clarification.Parameter, "conditionDefinition", StringComparison.OrdinalIgnoreCase))
             {
@@ -324,6 +364,110 @@ namespace Intranet.WorkflowStudio.WebForms
                 return;
             }
 
+            if (string.Equals(clarification.NodeType, "state.vars", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(clarification.Parameter, "stateVarsChange", StringComparison.OrdinalIgnoreCase))
+            {
+                string value = Text(answer);
+                if (value.Length == 0)
+                {
+                    result.Errors.Add("Indicá qué variable querés guardar o quitar.");
+                    return;
+                }
+
+                string label = Text(action["label"]);
+                bool removeRequested = label.IndexOf("quitar", StringComparison.OrdinalIgnoreCase) >= 0
+                    || label.IndexOf("eliminar", StringComparison.OrdinalIgnoreCase) >= 0
+                    || label.IndexOf("borrar", StringComparison.OrdinalIgnoreCase) >= 0
+                    || label.IndexOf("remover", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (removeRequested)
+                {
+                    var remove = new JArray();
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (string part in value.Split(','))
+                    {
+                        string key = (part ?? string.Empty).Trim();
+                        if (key.Length == 0) continue;
+                        if (!IsValidStatePath(key))
+                        {
+                            result.Errors.Add("La variable a quitar no tiene un formato válido: " + key);
+                            return;
+                        }
+                        if (seen.Add(key)) remove.Add(key);
+                    }
+                    if (remove.Count == 0)
+                    {
+                        result.Errors.Add("Indicá la variable que querés quitar.");
+                        return;
+                    }
+                    parameters["remove"] = remove;
+                    parameters.Remove("set");
+                    var removeLabels = new List<string>();
+                    foreach (JToken token in remove) removeLabels.Add(Text(token));
+                    Accept(result, clarification, "Quitar: " + string.Join(", ", removeLabels));
+                    return;
+                }
+
+                int eq = value.IndexOf('=');
+                if (eq <= 0 || eq >= value.Length - 1)
+                {
+                    result.Errors.Add("Para guardar una variable indicá nombre = valor. Ejemplo: biz.estado = Pendiente.");
+                    return;
+                }
+
+                string setKey = value.Substring(0, eq).Trim();
+                string setValue = value.Substring(eq + 1).Trim();
+                if (!IsValidStatePath(setKey))
+                {
+                    result.Errors.Add("La variable destino no tiene un formato válido: " + setKey);
+                    return;
+                }
+                if (setValue.Length == 0)
+                {
+                    result.Errors.Add("Indicá el valor a guardar en " + setKey + ".");
+                    return;
+                }
+
+                var set = new JObject { [setKey] = ParseStateVarsAnswerValue(setValue) };
+                parameters["set"] = set;
+                parameters.Remove("remove");
+                Accept(result, clarification, setKey + " = " + setValue);
+                return;
+            }
+
+            if (string.Equals(clarification.NodeType, "file.write", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(clarification.Parameter, "fileWriteSource", StringComparison.OrdinalIgnoreCase))
+            {
+                JObject structured = answer as JObject;
+                string kind = Text(structured == null ? null : structured["kind"]).ToLowerInvariant();
+                string value = Text(structured == null ? answer : structured["value"]);
+                if (value.Length == 0)
+                {
+                    result.Errors.Add("Indicá qué contenido o dato querés escribir en el archivo.");
+                    return;
+                }
+
+                if (kind == "context" || kind == "origen" || kind == "dato")
+                {
+                    if (!IsValidStatePath(value))
+                    {
+                        result.Errors.Add("La variable elegida para file.write no tiene un formato válido: " + value);
+                        return;
+                    }
+                    parameters["origen"] = value;
+                    parameters.Remove("content");
+                    Accept(result, clarification, "Dato: " + value);
+                    return;
+                }
+
+                // El control actual de aclaración es texto. Un token ${...} puede escribirse
+                // directamente y sigue siendo una plantilla declarativa, no una nueva intención.
+                parameters["content"] = value;
+                parameters.Remove("origen");
+                Accept(result, clarification, value);
+                return;
+            }
+
             result.Errors.Add("FIX84B todavía no tiene un resolvedor para " + clarification.NodeType + "/" + clarification.Parameter + ".");
         }
 
@@ -356,6 +500,34 @@ namespace Intranet.WorkflowStudio.WebForms
             }
 
             result.Errors.Add("No hay una resolución contractual implementada para esta ambigüedad: " + SafeQuestion(clarification));
+        }
+
+        private static JToken ParseStateVarsAnswerValue(string raw)
+        {
+            string value = (raw ?? string.Empty).Trim();
+            if (value.Length == 0) return new JValue(string.Empty);
+
+            if ((value.StartsWith("{") && value.EndsWith("}")) || (value.StartsWith("[") && value.EndsWith("]")))
+            {
+                try { return JToken.Parse(value); } catch { return new JValue(value); }
+            }
+
+            bool b;
+            if (bool.TryParse(value, out b)) return new JValue(b);
+            int i;
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out i)) return new JValue(i);
+            double d;
+            if (double.TryParse(value.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out d)) return new JValue(d);
+            return new JValue(value);
+        }
+
+        private static bool IsValidStatePath(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            if (text.Length == 0 || text.IndexOf("${", StringComparison.Ordinal) >= 0) return false;
+            return System.Text.RegularExpressions.Regex.IsMatch(
+                text,
+                @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
         }
 
         private static JToken NormalizeParameterAnswer(WfAiParameterContract parameter, JToken answer, out string error)

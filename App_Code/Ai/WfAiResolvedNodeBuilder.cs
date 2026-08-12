@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace Intranet.WorkflowStudio.WebForms
 {
     /// <summary>
-    /// FIX84C1/FIX84C2A/FIX84C2Ab/FIX84C2B/FIX84C2Bb/FIX84C2Bc/FIX84C2Bd/FIX84C2Bf/FIX84C2C1: punto común de construcción semántica para nodos cubiertos.
+    /// FIX84C1/FIX84C2A/FIX84C2Ab/FIX84C2B/FIX84C2Bb/FIX84C2Bc/FIX84C2Bd/FIX84C2Bf/FIX84C2C1/FIX84C2D1/FIX84C2D2/FIX84C2D3/FIX84C2D4: punto común de construcción semántica para nodos cubiertos.
     /// Frase y Paso a paso entregan candidatos; esta capa aplica contrato, defaults,
     /// reglas derivadas y validaciones antes de devolver el ADD_NODE normalizado.
     /// No ejecuta handlers, no toca canvas y deja nodos fuera de la cobertura sin modificar.
@@ -33,14 +33,18 @@ namespace Intranet.WorkflowStudio.WebForms
             "queue.consume",
             "queue.publish",
             "human.task",
-            "control.if"
+            "control.if",
+            "util.notify",
+            "file.write",
+            "file.read",
+            "state.vars"
         };
 
         public WfAiResolvedPlanResult ResolvePlan(JObject plan, string sourceText, string sourceKind)
         {
             var result = new WfAiResolvedPlanResult
             {
-                Version = "fix84c2c1-common-node-v6",
+                Version = "fix84c2d4-common-node-v10",
                 SourceKind = string.IsNullOrWhiteSpace(sourceKind) ? "unknown" : sourceKind.Trim(),
                 Plan = plan == null ? new JObject() : (JObject)plan.DeepClone()
             };
@@ -147,6 +151,66 @@ namespace Intranet.WorkflowStudio.WebForms
                 ResolveQueuePublish(parameters, contract, sourceText, sourceKind, node);
             else if (string.Equals(nodeType, "control.if", StringComparison.OrdinalIgnoreCase))
                 ResolveControlIf(parameters, contract, sourceText, sourceKind, node);
+            else if (string.Equals(nodeType, "file.read", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveFileRead(parameters, contract, sourceText, sourceKind, node);
+
+                string currentLabel = Text(action["label"]);
+                if (currentLabel.Length == 0 || currentLabel.Equals("Archivo: Leer", StringComparison.OrdinalIgnoreCase))
+                {
+                    action["label"] = "Leer archivo";
+                    node.Label = "Leer archivo";
+                }
+            }
+            else if (string.Equals(nodeType, "file.write", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveFileWrite(parameters, contract, sourceText, sourceKind, node, catalog);
+
+                // FIX84C2D2: Paso a paso usaba el rótulo técnico "Archivo: Escribir" mientras
+                // Frase usa "Escribir archivo". Son la misma intención; unificamos únicamente
+                // el rótulo genérico sin cambiar labels específicos ya existentes en ramas.
+                string currentLabel = Text(action["label"]);
+                if (currentLabel.Length == 0 || currentLabel.Equals("Archivo: Escribir", StringComparison.OrdinalIgnoreCase))
+                {
+                    action["label"] = "Escribir archivo";
+                    node.Label = "Escribir archivo";
+                }
+            }
+            else if (string.Equals(nodeType, "state.vars", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveStateVars(parameters, contract, sourceText, sourceKind, node);
+
+                // FIX84C2D4: con datos resueltos preservamos el label histórico "Definir variables"
+                // (L_STATE_VARS_LOGGER) y hacemos que Paso a paso muestre la misma identidad visual.
+                // Si todavía falta el cambio, conservamos Guardar/Quitar para que el diálogo sepa
+                // qué operación pidió la persona sin inventar un parámetro técnico adicional.
+                bool hasResolvedStateChange = HasMeaningfulToken(FindValue(parameters, "set"))
+                    || HasMeaningfulToken(FindValue(parameters, "remove"));
+                string currentStateLabel = Text(action["label"]);
+                if (hasResolvedStateChange
+                    || (currentStateLabel.IndexOf("Guardar", StringComparison.OrdinalIgnoreCase) < 0
+                        && currentStateLabel.IndexOf("Quitar", StringComparison.OrdinalIgnoreCase) < 0))
+                {
+                    action["label"] = "Definir variables";
+                    node.Label = "Definir variables";
+                }
+            }
+            else if (string.Equals(nodeType, "util.notify", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveNotify(parameters, contract, sourceText, sourceKind, node, catalog);
+
+                string destination = Text(FindValue(parameters, "usuarioDestino"));
+                if (destination.Length == 0) destination = Text(FindValue(parameters, "rolDestino"));
+                string currentLabel = Text(action["label"]);
+                if (destination.Length > 0
+                    && (currentLabel.Length == 0
+                        || currentLabel.Equals("Notificar", StringComparison.OrdinalIgnoreCase)
+                        || currentLabel.Equals("Notificación", StringComparison.OrdinalIgnoreCase)))
+                {
+                    action["label"] = "Notificar a " + destination;
+                    node.Label = Text(action["label"]);
+                }
+            }
             else if (string.Equals(nodeType, "human.task", StringComparison.OrdinalIgnoreCase))
             {
                 ResolveHumanTask(parameters, contract, sourceText, sourceKind, node, catalog);
@@ -221,6 +285,771 @@ namespace Intranet.WorkflowStudio.WebForms
                 AddParameter(node, levelContract, new JValue(level), implicitDefault ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
                     implicitDefault ? "safe_default" : SourceForExplicitValue(sourceKind));
             }
+        }
+
+        // FIX84C2D3: file.read usa el mismo contrato para Frase y Paso a paso.
+        // La ruta es una decisión real y nunca se fabrica. El nombre de salida y el resto
+        // reciben sólo defaults técnicos compatibles con HFileRead.
+        private static void ResolveFileRead(
+            JObject p,
+            WfAiNodeConstructionContract contract,
+            string sourceText,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            WfAiParameterContract pathContract = contract.FindParameter("path");
+            JToken pathToken = FindValue(p, "path");
+            string path = Text(pathToken);
+            bool pathPlaceholder = IsImplicitPlaceholder(pathContract, pathToken, sourceText, sourceKind);
+            if (path.Length == 0 || pathPlaceholder)
+            {
+                string inferredPath = IsPhraseSource(sourceKind) ? InferFileReadPath(sourceText) : string.Empty;
+                if (inferredPath.Length > 0)
+                {
+                    path = inferredPath;
+                    p["path"] = path;
+                    AddParameter(node, pathContract, new JValue(path), WfAiInterpretationStatus.Inferred, "natural_inference");
+                }
+                else
+                {
+                    RemoveProperty(p, "path");
+                    AddParameter(node, pathContract, null, WfAiInterpretationStatus.Missing,
+                        pathPlaceholder ? "placeholder_rejected" : "not_supplied");
+                    node.Errors.Add("file.read: indicá la ruta del archivo a leer.");
+                }
+            }
+            else
+            {
+                p["path"] = path;
+                AddParameter(node, pathContract, new JValue(path), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            // HFileRead acepta output como alias de salida. La representación contractual
+            // común conserva sólo salida para que Frase y Paso a paso comparen lo mismo.
+            WfAiParameterContract outputContract = contract.FindParameter("salida");
+            string salida = Text(FindValue(p, "salida"));
+            if (salida.Length == 0) salida = Text(FindValue(p, "output"));
+            RemoveProperty(p, "output");
+            if (salida.Length == 0)
+            {
+                salida = Text(outputContract == null ? null : outputContract.DefaultValue);
+                if (salida.Length == 0) salida = "archivo";
+                p["salida"] = salida;
+                AddParameter(node, outputContract, new JValue(salida), WfAiInterpretationStatus.Inferred, "safe_default");
+            }
+            else if (!IsValidStatePath(salida))
+            {
+                p["salida"] = salida;
+                AddParameter(node, outputContract, new JValue(salida), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.read: la salida debe ser una clave válida de contexto, por ejemplo archivo o biz.archivo.texto.");
+            }
+            else if (salida.StartsWith("file.read.", StringComparison.OrdinalIgnoreCase))
+            {
+                p["salida"] = salida;
+                AddParameter(node, outputContract, new JValue(salida), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.read: la salida no puede usar file.read.* porque esas claves están reservadas para metadatos técnicos.");
+            }
+            else
+            {
+                p["salida"] = salida;
+                bool defaultOutput = outputContract != null && outputContract.DefaultValue != null
+                    && string.Equals(salida, Text(outputContract.DefaultValue), StringComparison.OrdinalIgnoreCase);
+                AddParameter(node, outputContract, new JValue(salida), defaultOutput ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                    defaultOutput ? "safe_default" : SourceForExplicitValue(sourceKind));
+            }
+
+            ResolveFileReadSafeBoolean(p, contract.FindParameter("asJson"), false, sourceKind, node);
+            ResolveFileReadSafeString(p, contract.FindParameter("encoding"), "utf-8", sourceKind, node, false);
+            ResolveFileReadSafeString(p, contract.FindParameter("zipMode"), "auto", sourceKind, node, true);
+            ResolveFileReadSafeBoolean(p, contract.FindParameter("useCache"), true, sourceKind, node);
+
+            WfAiParameterContract zipEntryContract = contract.FindParameter("zipEntry");
+            string zipEntry = Text(FindValue(p, "zipEntry"));
+            if (zipEntry.Length > 0)
+            {
+                p["zipEntry"] = zipEntry;
+                AddParameter(node, zipEntryContract, new JValue(zipEntry), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+            else
+            {
+                RemoveProperty(p, "zipEntry");
+                AddParameter(node, zipEntryContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+            }
+        }
+
+        private static void ResolveFileReadSafeString(
+            JObject p,
+            WfAiParameterContract contract,
+            string fallback,
+            string sourceKind,
+            WfAiResolvedNode node,
+            bool enforceOptions)
+        {
+            if (contract == null) return;
+            string value = Text(FindValue(p, contract.Name));
+            if (value.Length == 0)
+            {
+                value = Text(contract.DefaultValue);
+                if (value.Length == 0) value = fallback;
+                p[contract.Name] = value;
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Inferred, "safe_default");
+                return;
+            }
+
+            if (string.Equals(contract.Name, "zipMode", StringComparison.OrdinalIgnoreCase))
+                value = value.Trim().ToLowerInvariant();
+            p[contract.Name] = value;
+
+            if (enforceOptions && !ContractOptionAllowed(contract, value))
+            {
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.read: " + contract.Label + " no permitido '" + value + "'.");
+                return;
+            }
+
+            bool sameAsDefault = contract.DefaultValue != null
+                && string.Equals(value, Text(contract.DefaultValue), StringComparison.OrdinalIgnoreCase);
+            AddParameter(node, contract, new JValue(value), sameAsDefault ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                sameAsDefault ? "safe_default" : SourceForExplicitValue(sourceKind));
+        }
+
+        private static void ResolveFileReadSafeBoolean(
+            JObject p,
+            WfAiParameterContract contract,
+            bool fallback,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            if (contract == null) return;
+            JToken token = FindValue(p, contract.Name);
+            bool value;
+            if (token == null || token.Type == JTokenType.Null || Text(token).Length == 0)
+            {
+                value = contract.DefaultValue != null && contract.DefaultValue.Type == JTokenType.Boolean
+                    ? contract.DefaultValue.Value<bool>()
+                    : fallback;
+                p[contract.Name] = value;
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Inferred, "safe_default");
+                return;
+            }
+
+            if (token.Type == JTokenType.Boolean) value = token.Value<bool>();
+            else if (!bool.TryParse(Text(token), out value))
+            {
+                AddParameter(node, contract, token.DeepClone(), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.read: " + contract.Label + " debe ser Sí o No.");
+                return;
+            }
+
+            p[contract.Name] = value;
+            bool defaultValue = contract.DefaultValue != null && contract.DefaultValue.Type == JTokenType.Boolean
+                ? contract.DefaultValue.Value<bool>()
+                : fallback;
+            AddParameter(node, contract, new JValue(value), value == defaultValue ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                value == defaultValue ? "safe_default" : SourceForExplicitValue(sourceKind));
+        }
+
+        private static string InferFileReadPath(string sourceText)
+        {
+            string text = sourceText ?? string.Empty;
+            Match token = Regex.Match(text,
+                @"\b(?:leer|abrir)\s+(?:el\s+)?archivo\s+(?<path>\$\{[^}]+\})",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (token.Success) return (token.Groups["path"].Value ?? string.Empty).Trim();
+
+            Match path = Regex.Match(text,
+                @"\b(?:leer|abrir)\s+(?:el\s+)?archivo\s+(?<path>[A-Za-z]:\\[^\r\n,;]+?\.[A-Za-z0-9]{1,8}|/[^\r\n,;]+?\.[A-Za-z0-9]{1,8})",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            return path.Success ? (path.Groups["path"].Value ?? string.Empty).Trim() : string.Empty;
+        }
+
+        // FIX84C2D2: file.write usa el mismo contrato para Frase y Paso a paso.
+        // Ruta y contenido/origen son decisiones declarativas; no se fabrican. Solamente
+        // encoding, overwrite y zipMode reciben defaults técnicos seguros.
+        private static void ResolveFileWrite(
+            JObject p,
+            WfAiNodeConstructionContract contract,
+            string sourceText,
+            string sourceKind,
+            WfAiResolvedNode node,
+            WfAiCatalog catalog)
+        {
+            WfAiParameterContract pathContract = contract.FindParameter("path");
+            JToken pathToken = FindValue(p, "path");
+            string path = Text(pathToken);
+            bool pathPlaceholder = IsImplicitPlaceholder(pathContract, pathToken, sourceText, sourceKind);
+            if (path.Length == 0 || pathPlaceholder)
+            {
+                string inferredPath = IsPhraseSource(sourceKind) ? InferFileWritePath(sourceText) : string.Empty;
+                if (inferredPath.Length > 0)
+                {
+                    p["path"] = inferredPath;
+                    AddParameter(node, pathContract, new JValue(inferredPath), WfAiInterpretationStatus.Inferred, "natural_inference");
+                }
+                else
+                {
+                    RemoveProperty(p, "path");
+                    AddParameter(node, pathContract, null, WfAiInterpretationStatus.Missing,
+                        pathPlaceholder ? "placeholder_rejected" : "not_supplied");
+                    node.Errors.Add("file.write: indicá la ruta del archivo a escribir.");
+                }
+            }
+            else
+            {
+                p["path"] = path;
+                AddParameter(node, pathContract, new JValue(path), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            WfAiParameterContract contentContract = contract.FindParameter("content");
+            WfAiParameterContract originContract = contract.FindParameter("origen");
+            JToken contentToken = FindValue(p, "content");
+            string content = Text(contentToken);
+            bool contentPlaceholder = IsImplicitPlaceholder(contentContract, contentToken, sourceText, sourceKind);
+            string origin = Text(FindValue(p, "origen"));
+
+            if (contentPlaceholder)
+            {
+                content = string.Empty;
+                RemoveProperty(p, "content");
+            }
+
+            if (content.Length == 0 && origin.Length == 0 && IsPhraseSource(sourceKind))
+            {
+                string inferredContent = InferFileWriteContentFromPhrase(sourceText, catalog);
+                if (inferredContent.Length > 0)
+                {
+                    content = inferredContent;
+                    p["content"] = content;
+                    AddParameter(node, contentContract, new JValue(content), WfAiInterpretationStatus.Inferred, "available_data_inference");
+                }
+            }
+
+            if (content.Length > 0)
+            {
+                p["content"] = content;
+                // content tiene precedencia real en HFileWrite. Si llega un origen redundante de
+                // una capa legacy lo retiramos para que el nodo canónico tenga una sola fuente.
+                RemoveProperty(p, "origen");
+                if (!node.Parameters.Exists(x => string.Equals(x.Name, "content", StringComparison.OrdinalIgnoreCase)))
+                    AddParameter(node, contentContract, new JValue(content), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                AddParameter(node, originContract, null, WfAiInterpretationStatus.Resolved, "not_used_content_present");
+            }
+            else if (origin.Length > 0)
+            {
+                p["origen"] = origin;
+                RemoveProperty(p, "content");
+                AddParameter(node, contentContract, null, WfAiInterpretationStatus.Resolved, "not_used_origin_present");
+                if (!IsValidStatePath(origin))
+                {
+                    AddParameter(node, originContract, new JValue(origin), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                    node.Errors.Add("file.write: la variable origen no tiene un formato válido: '" + origin + "'.");
+                }
+                else
+                {
+                    AddParameter(node, originContract, new JValue(origin), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                }
+            }
+            else
+            {
+                RemoveProperty(p, "content");
+                RemoveProperty(p, "origen");
+                AddParameter(node, contentContract, null, WfAiInterpretationStatus.Missing,
+                    contentPlaceholder ? "placeholder_rejected" : "not_supplied");
+                AddParameter(node, originContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                node.Errors.Add("file.write: indicá qué contenido o dato querés escribir.");
+            }
+
+            ResolveFileWriteSafeString(p, contract.FindParameter("encoding"), "utf-8", sourceKind, node, false);
+            ResolveFileWriteSafeBoolean(p, contract.FindParameter("overwrite"), true, sourceKind, node);
+            ResolveFileWriteSafeString(p, contract.FindParameter("zipMode"), "none", sourceKind, node, true);
+
+            // El runtime acepta entryName o zipEntryName. El contrato común usa entryName.
+            string entryName = Text(FindValue(p, "entryName"));
+            if (entryName.Length == 0) entryName = Text(FindValue(p, "zipEntryName"));
+            RemoveProperty(p, "zipEntryName");
+            WfAiParameterContract entryContract = contract.FindParameter("entryName");
+            if (entryName.Length > 0)
+            {
+                p["entryName"] = entryName;
+                AddParameter(node, entryContract, new JValue(entryName), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+            else
+            {
+                RemoveProperty(p, "entryName");
+                AddParameter(node, entryContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+            }
+        }
+
+        private static void ResolveFileWriteSafeString(
+            JObject p,
+            WfAiParameterContract contract,
+            string fallback,
+            string sourceKind,
+            WfAiResolvedNode node,
+            bool enforceOptions)
+        {
+            if (contract == null) return;
+            string value = Text(FindValue(p, contract.Name));
+            if (value.Length == 0)
+            {
+                value = Text(contract.DefaultValue);
+                if (value.Length == 0) value = fallback;
+                p[contract.Name] = value;
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Inferred, "safe_default");
+                return;
+            }
+
+            if (string.Equals(contract.Name, "zipMode", StringComparison.OrdinalIgnoreCase))
+                value = value.Trim().ToLowerInvariant();
+            p[contract.Name] = value;
+
+            if (enforceOptions && !ContractOptionAllowed(contract, value))
+            {
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.write: " + contract.Label + " no permitido '" + value + "'.");
+                return;
+            }
+
+            bool sameAsDefault = contract.DefaultValue != null
+                && string.Equals(value, Text(contract.DefaultValue), StringComparison.OrdinalIgnoreCase);
+            AddParameter(node, contract, new JValue(value), sameAsDefault ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                sameAsDefault ? "safe_default" : SourceForExplicitValue(sourceKind));
+        }
+
+        private static void ResolveFileWriteSafeBoolean(
+            JObject p,
+            WfAiParameterContract contract,
+            bool fallback,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            if (contract == null) return;
+            JToken token = FindValue(p, contract.Name);
+            bool value;
+            if (token == null || token.Type == JTokenType.Null || Text(token).Length == 0)
+            {
+                value = contract.DefaultValue != null ? contract.DefaultValue.Value<bool>() : fallback;
+                p[contract.Name] = value;
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Inferred, "safe_default");
+                return;
+            }
+
+            if (!TryBool(token, out value))
+            {
+                AddParameter(node, contract, token.DeepClone(), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("file.write: " + contract.Label + " debe ser Sí o No.");
+                return;
+            }
+
+            p[contract.Name] = value;
+            bool defaultValue = contract.DefaultValue != null && contract.DefaultValue.Type == JTokenType.Boolean
+                ? contract.DefaultValue.Value<bool>()
+                : fallback;
+            AddParameter(node, contract, new JValue(value), value == defaultValue ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                value == defaultValue ? "safe_default" : SourceForExplicitValue(sourceKind));
+        }
+
+        private static string InferFileWritePath(string sourceText)
+        {
+            Match match = Regex.Match(sourceText ?? string.Empty,
+                @"(?<path>[A-Za-z]:\\[^\r\n,;]+?\.[A-Za-z0-9]{1,8}|/[^\r\n,;]+?\.[A-Za-z0-9]{1,8})",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            return match.Success ? (match.Groups["path"].Value ?? string.Empty).Trim() : string.Empty;
+        }
+
+        private static string InferFileWriteContentFromPhrase(string sourceText, WfAiCatalog catalog)
+        {
+            string text = (sourceText ?? string.Empty).Trim();
+            if (text.Length == 0) return string.Empty;
+
+            Match match = Regex.Match(text,
+                @"\b(?:escribir|guardar)\s+(?<what>.+?)\s+en\s+(?:(?:el|un)\s+archivo\s+)?(?:[A-Za-z]:\\|/)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!match.Success) return string.Empty;
+
+            string what = Regex.Replace(match.Groups["what"].Value ?? string.Empty, @"\s+", " ").Trim();
+            string whatKey = WfAiExplicitAssignmentParser.NormalizeHumanKey(what);
+            if (whatKey.Length == 0 || whatKey == "archivo" || whatKey == "unarchivo" || whatKey == "elarchivo")
+                return string.Empty;
+
+            Match direct = Regex.Match(what, @"^\$\{(?<path>[^}]+)\}$");
+            if (direct.Success) return "${" + direct.Groups["path"].Value.Trim() + "}";
+
+            if (catalog == null || catalog.Fields == null) return string.Empty;
+            WfAiFieldInfo best = null;
+            int bestScore = 0;
+            foreach (WfAiFieldInfo field in catalog.Fields)
+            {
+                if (field == null || string.IsNullOrWhiteSpace(field.Path) || string.IsNullOrWhiteSpace(field.Label)) continue;
+                string labelKey = WfAiExplicitAssignmentParser.NormalizeHumanKey(field.Label);
+                string pathKey = WfAiExplicitAssignmentParser.NormalizeHumanKey(field.Path);
+                int score = 0;
+                if (whatKey == labelKey || whatKey == pathKey) score = 1000 + labelKey.Length;
+                else if (whatKey.EndsWith(labelKey, StringComparison.OrdinalIgnoreCase)) score = 700 + labelKey.Length;
+                else if (labelKey.EndsWith(whatKey, StringComparison.OrdinalIgnoreCase) && whatKey.Length >= 5) score = 500 + whatKey.Length;
+                if (score > bestScore)
+                {
+                    best = field;
+                    bestScore = score;
+                }
+            }
+
+            return best == null ? string.Empty : "${" + best.Path.Trim() + "}";
+        }
+
+        private static bool IsValidStatePath(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            if (text.Length == 0 || text.IndexOf("${", StringComparison.Ordinal) >= 0) return false;
+            return Regex.IsMatch(text, @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
+        }
+
+        // FIX84C2D4: state.vars converge en el mismo contrato para Frase y Paso a paso.
+        // set/remove son datos declarativos. No inventamos claves ni valores.
+        private static void ResolveStateVars(
+            JObject p,
+            WfAiNodeConstructionContract contract,
+            string sourceText,
+            string sourceKind,
+            WfAiResolvedNode node)
+        {
+            WfAiParameterContract setContract = contract.FindParameter("set");
+            WfAiParameterContract removeContract = contract.FindParameter("remove");
+
+            JToken rawSet = FindValue(p, "set");
+            JObject normalizedSet = null;
+            bool setWasSupplied = rawSet != null && rawSet.Type != JTokenType.Null && HasMeaningfulToken(rawSet);
+            if (setWasSupplied)
+            {
+                if (rawSet is JObject)
+                {
+                    normalizedSet = new JObject();
+                    foreach (JProperty prop in ((JObject)rawSet).Properties())
+                    {
+                        string key = (prop.Name ?? string.Empty).Trim();
+                        if (!IsValidStatePath(key))
+                        {
+                            node.Errors.Add("state.vars: la variable destino no tiene formato válido: '" + key + "'.");
+                            continue;
+                        }
+                        normalizedSet[key] = prop.Value == null ? JValue.CreateNull() : prop.Value.DeepClone();
+                        AddUnique(node.OutputFields, key);
+                    }
+                }
+                else if (rawSet.Type == JTokenType.String)
+                {
+                    try
+                    {
+                        JObject parsed = JObject.Parse(Text(rawSet));
+                        normalizedSet = new JObject();
+                        foreach (JProperty prop in parsed.Properties())
+                        {
+                            string key = (prop.Name ?? string.Empty).Trim();
+                            if (!IsValidStatePath(key))
+                            {
+                                node.Errors.Add("state.vars: la variable destino no tiene formato válido: '" + key + "'.");
+                                continue;
+                            }
+                            normalizedSet[key] = prop.Value == null ? JValue.CreateNull() : prop.Value.DeepClone();
+                            AddUnique(node.OutputFields, key);
+                        }
+                    }
+                    catch
+                    {
+                        node.Errors.Add("state.vars: set debe ser un objeto de variables válido.");
+                    }
+                }
+                else
+                {
+                    node.Errors.Add("state.vars: set debe ser un objeto de variables válido.");
+                }
+            }
+
+            if (normalizedSet != null && normalizedSet.HasValues)
+            {
+                p["set"] = normalizedSet;
+                AddParameter(node, setContract, normalizedSet.DeepClone(),
+                    node.Errors.Count == 0 ? WfAiInterpretationStatus.Resolved : WfAiInterpretationStatus.Unrecognized,
+                    SourceForExplicitValue(sourceKind));
+            }
+            else
+            {
+                RemoveProperty(p, "set");
+                AddParameter(node, setContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+            }
+
+            JToken rawRemove = FindValue(p, "remove");
+            var normalizedRemove = new JArray();
+            var seenRemove = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool removeWasSupplied = rawRemove != null && rawRemove.Type != JTokenType.Null && HasMeaningfulToken(rawRemove);
+            if (removeWasSupplied)
+            {
+                var values = new List<string>();
+                if (rawRemove is JArray)
+                {
+                    foreach (JToken token in (JArray)rawRemove)
+                        values.Add(Text(token));
+                }
+                else
+                {
+                    foreach (string part in Text(rawRemove).Split(','))
+                        values.Add((part ?? string.Empty).Trim());
+                }
+
+                foreach (string raw in values)
+                {
+                    string key = (raw ?? string.Empty).Trim();
+                    if (key.Length == 0) continue;
+                    if (!IsValidStatePath(key))
+                    {
+                        node.Errors.Add("state.vars: la variable a quitar no tiene formato válido: '" + key + "'.");
+                        continue;
+                    }
+                    if (seenRemove.Add(key)) normalizedRemove.Add(key);
+                }
+            }
+
+            if (normalizedRemove.Count > 0)
+            {
+                p["remove"] = normalizedRemove;
+                AddParameter(node, removeContract, normalizedRemove.DeepClone(),
+                    node.Errors.Count == 0 ? WfAiInterpretationStatus.Resolved : WfAiInterpretationStatus.Unrecognized,
+                    SourceForExplicitValue(sourceKind));
+            }
+            else
+            {
+                RemoveProperty(p, "remove");
+                AddParameter(node, removeContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+            }
+
+            if ((normalizedSet == null || !normalizedSet.HasValues) && normalizedRemove.Count == 0)
+                node.Errors.Add("state.vars: indicá al menos una variable para guardar o quitar.");
+        }
+
+        private static bool HasMeaningfulToken(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return false;
+            if (token is JObject) return ((JObject)token).HasValues;
+            if (token is JArray) return ((JArray)token).Count > 0;
+            return Text(token).Length > 0;
+        }
+
+        // FIX84C2D1: util.notify converge en el mismo contrato para Frase y Paso a paso.
+        // El Constructor sólo completa defaults técnicos seguros; destinatario y mensaje son decisiones de negocio.
+        private static void ResolveNotify(JObject p, WfAiNodeConstructionContract contract, string sourceText, string sourceKind, WfAiResolvedNode node, WfAiCatalog catalog)
+        {
+            ResolveNotifySafeOption(p, contract.FindParameter("tipo"), "sistema", sourceKind, node);
+            ResolveNotifySafeOption(p, contract.FindParameter("canal"), "sistema", sourceKind, node);
+            ResolveNotifySafeOption(p, contract.FindParameter("nivel"), "info", sourceKind, node);
+            ResolveNotifySafeOption(p, contract.FindParameter("prioridad"), "normal", sourceKind, node);
+
+            WfAiParameterContract roleContract = contract.FindParameter("rolDestino");
+            WfAiParameterContract userContract = contract.FindParameter("usuarioDestino");
+            WfAiParameterContract typeContract = contract.FindParameter("destinoTipo");
+            WfAiParameterContract destinationContract = contract.FindParameter("destino");
+
+            string role = Text(FindValue(p, "rolDestino"));
+            string user = Text(FindValue(p, "usuarioDestino"));
+            string destination = Text(FindValue(p, "destino"));
+            string destinationType = Text(FindValue(p, "destinoTipo")).ToLowerInvariant();
+
+            // Compatibilidad conservadora con candidatos legacy: destino + destinoTipo se traduce
+            // a la representación canónica, pero no inventamos destinatarios cuando no existe ninguno.
+            if (role.Length == 0 && user.Length == 0 && destination.Length > 0)
+            {
+                if (destinationType == "usuario") user = destination;
+                else if (destinationType == "rol") role = destination;
+                else if (destination.Contains("\\") || destination.Contains("@")) user = destination;
+                else role = destination;
+            }
+
+            // La frase "al usuario USUARIO1" podía llegar del provider legacy como rolDestino=USUARIO1
+            // porque el texto corto no contiene dominio. La palabra usuario es una señal explícita;
+            // resolvemos contra WF_User real y nunca fabricamos el dominio.
+            if (IsPhraseSource(sourceKind) && user.Length == 0 && role.Length > 0 && PhraseExplicitlyTargetsUser(sourceText))
+            {
+                WfAiUserReferenceResolution explicitUser = WfAiUserReferenceResolver.Resolve(catalog, role);
+                if (explicitUser.IsResolved)
+                {
+                    user = explicitUser.UserKey;
+                    role = string.Empty;
+                }
+                else
+                {
+                    node.Warnings.Add("util.notify: la referencia de usuario '" + role + "' no pudo resolverse de forma única; elegí un usuario real del catálogo.");
+                    role = string.Empty;
+                }
+            }
+
+            if (user.Length > 0 && catalog != null)
+            {
+                WfAiUserReferenceResolution userResolution = WfAiUserReferenceResolver.Resolve(catalog, user);
+                if (userResolution.IsResolved)
+                {
+                    user = userResolution.UserKey;
+                }
+                else
+                {
+                    string originalUser = user;
+                    user = string.Empty;
+                    node.Warnings.Add(string.Equals(userResolution.Status, WfAiUserReferenceStatus.Ambiguous, StringComparison.OrdinalIgnoreCase)
+                        ? "util.notify: el usuario '" + originalUser + "' coincide con más de un usuario activo; elegí el destinatario exacto."
+                        : "util.notify: no encontré un usuario activo que coincida con '" + originalUser + "'; elegí un destinatario del catálogo.");
+                }
+            }
+
+            if (role.Length > 0 && user.Length > 0)
+            {
+                p["rolDestino"] = role;
+                p["usuarioDestino"] = user;
+                RemoveProperty(p, "destinoTipo");
+                RemoveProperty(p, "destino");
+                AddParameter(node, roleContract, new JValue(role), WfAiInterpretationStatus.Ambiguous, SourceForExplicitValue(sourceKind));
+                AddParameter(node, userContract, new JValue(user), WfAiInterpretationStatus.Ambiguous, SourceForExplicitValue(sourceKind));
+                AddParameter(node, typeContract, null, WfAiInterpretationStatus.Ambiguous, "conflicting_destination");
+                AddParameter(node, destinationContract, null, WfAiInterpretationStatus.Ambiguous, "conflicting_destination");
+                node.Errors.Add("util.notify: se indicó rol y usuario al mismo tiempo; elegí un único destino.");
+            }
+            else if (role.Length > 0)
+            {
+                p["rolDestino"] = role;
+                RemoveProperty(p, "usuarioDestino");
+                p["destinoTipo"] = "rol";
+                p["destino"] = role;
+                AddParameter(node, roleContract, new JValue(role), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                AddParameter(node, userContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+                AddParameter(node, typeContract, new JValue("rol"), WfAiInterpretationStatus.Inferred, "derived_from:rolDestino");
+                AddParameter(node, destinationContract, new JValue(role), WfAiInterpretationStatus.Inferred, "derived_from:rolDestino");
+            }
+            else if (user.Length > 0)
+            {
+                p["usuarioDestino"] = user;
+                RemoveProperty(p, "rolDestino");
+                p["destinoTipo"] = "usuario";
+                p["destino"] = user;
+                AddParameter(node, roleContract, null, WfAiInterpretationStatus.Resolved, "optional_empty");
+                AddParameter(node, userContract, new JValue(user), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+                AddParameter(node, typeContract, new JValue("usuario"), WfAiInterpretationStatus.Inferred, "derived_from:usuarioDestino");
+                AddParameter(node, destinationContract, new JValue(user), WfAiInterpretationStatus.Inferred, "derived_from:usuarioDestino");
+            }
+            else
+            {
+                RemoveProperty(p, "rolDestino");
+                RemoveProperty(p, "usuarioDestino");
+                RemoveProperty(p, "destinoTipo");
+                RemoveProperty(p, "destino");
+                AddParameter(node, roleContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                AddParameter(node, userContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                AddParameter(node, typeContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                AddParameter(node, destinationContract, null, WfAiInterpretationStatus.Missing, "not_supplied");
+                node.Errors.Add("util.notify: indicá un rol o un usuario destino.");
+            }
+
+            WfAiParameterContract subjectContract = contract.FindParameter("asunto");
+            JToken subjectToken = FindValue(p, "asunto");
+            string subject = Text(subjectToken);
+            bool subjectPlaceholder = IsImplicitPlaceholder(subjectContract, subjectToken, sourceText, sourceKind);
+            if (subject.Length == 0 || subjectPlaceholder)
+            {
+                subject = Text(subjectContract == null ? null : subjectContract.DefaultValue);
+                if (subject.Length == 0) subject = "Notificación";
+                p["asunto"] = subject;
+                AddParameter(node, subjectContract, new JValue(subject), WfAiInterpretationStatus.Inferred, "safe_default");
+            }
+            else
+            {
+                p["asunto"] = subject;
+                AddParameter(node, subjectContract, new JValue(subject), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            WfAiParameterContract messageContract = contract.FindParameter("mensaje");
+            JToken messageToken = FindValue(p, "mensaje");
+            string message = Text(messageToken);
+            bool messagePlaceholder = IsImplicitPlaceholder(messageContract, messageToken, sourceText, sourceKind);
+            if (message.Length == 0 || messagePlaceholder)
+            {
+                string inferred = IsPhraseSource(sourceKind) ? InferNotifyMessage(sourceText) : string.Empty;
+                if (inferred.Length > 0)
+                {
+                    p["mensaje"] = inferred;
+                    AddParameter(node, messageContract, new JValue(inferred), WfAiInterpretationStatus.Inferred, "natural_inference");
+                }
+                else
+                {
+                    RemoveProperty(p, "mensaje");
+                    AddParameter(node, messageContract, null, WfAiInterpretationStatus.Missing, messagePlaceholder ? "placeholder_rejected" : "not_supplied");
+                    node.Errors.Add("util.notify: indicá qué mensaje querés enviar.");
+                }
+            }
+            else
+            {
+                p["mensaje"] = message;
+                AddParameter(node, messageContract, new JValue(message), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+
+            WfAiParameterContract urlContract = contract.FindParameter("urlAccion");
+            string url = Text(FindValue(p, "urlAccion"));
+            if (url.Length > 0)
+            {
+                p["urlAccion"] = url;
+                AddParameter(node, urlContract, new JValue(url), WfAiInterpretationStatus.Resolved, SourceForExplicitValue(sourceKind));
+            }
+            else
+            {
+                RemoveProperty(p, "urlAccion");
+                AddParameter(node, urlContract, null, WfAiInterpretationStatus.Resolved, "runtime_current_instance");
+            }
+        }
+
+        private static void ResolveNotifySafeOption(JObject p, WfAiParameterContract contract, string fallback, string sourceKind, WfAiResolvedNode node)
+        {
+            if (contract == null) return;
+            string value = Text(FindValue(p, contract.Name));
+            if (value.Length == 0)
+            {
+                value = Text(contract.DefaultValue);
+                if (value.Length == 0) value = fallback;
+                p[contract.Name] = value;
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Inferred, "safe_default");
+                return;
+            }
+
+            value = value.Trim().ToLowerInvariant();
+            p[contract.Name] = value;
+            if (!ContractOptionAllowed(contract, value))
+            {
+                AddParameter(node, contract, new JValue(value), WfAiInterpretationStatus.Unrecognized, SourceForExplicitValue(sourceKind));
+                node.Errors.Add("util.notify: " + contract.Label + " no permitido '" + value + "'.");
+                return;
+            }
+
+            bool sameAsDefault = contract.DefaultValue != null
+                && string.Equals(value, Text(contract.DefaultValue), StringComparison.OrdinalIgnoreCase);
+            AddParameter(node, contract, new JValue(value), sameAsDefault ? WfAiInterpretationStatus.Inferred : WfAiInterpretationStatus.Resolved,
+                sameAsDefault ? "safe_default" : SourceForExplicitValue(sourceKind));
+        }
+
+        private static bool PhraseExplicitlyTargetsUser(string sourceText)
+        {
+            return Regex.IsMatch(sourceText ?? string.Empty,
+                @"\b(?:notificar|avisar)\b.*?\b(?:al|a|para)\s+(?:el\s+|la\s+)?usuario\b",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        }
+
+        private static string InferNotifyMessage(string sourceText)
+        {
+            string text = Regex.Replace(sourceText ?? string.Empty, @"\s+", " ").Trim();
+            if (text.Length == 0) return string.Empty;
+
+            Match match = Regex.Match(text,
+                @"\b(?:notificar|avisar)\b.*?(?:\bmensaje\b\s*(?:=|:)?\s*|\bindicando(?:\s+que)?\s+)(?<msg>.+?)(?=(?:\.\s|;\s|,\s*)?(?:luego|despues|después|finalmente|finalizar|terminar|si\s|caso\s+contrario)\b|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!match.Success) return string.Empty;
+
+            string message = Regex.Replace(match.Groups["msg"].Value ?? string.Empty, @"\s+", " ").Trim();
+            while (message.EndsWith(".", StringComparison.Ordinal) || message.EndsWith(",", StringComparison.Ordinal) || message.EndsWith(";", StringComparison.Ordinal))
+                message = message.Substring(0, message.Length - 1).Trim();
+            return message;
         }
 
         private static void ResolveQueuePublish(JObject p, WfAiNodeConstructionContract contract, string sourceText, string sourceKind, WfAiResolvedNode node)

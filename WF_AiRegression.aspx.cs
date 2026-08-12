@@ -747,6 +747,34 @@ namespace Intranet.WorkflowStudio.WebForms
                 summary.Items.Add(RunC2C2NaturalAnyCase(catalog));
                 // FIX84C2C2b: prueba de punta a punta de acciones naturales en ambas ramas.
                 summary.Items.Add(RunC2C2bNaturalBranchActionsCase(catalog));
+
+                // FIX84C2D1: util.notify entra al camino contractual común. Protegemos destino
+                // por rol, usuario humano corto resuelto contra catálogo y diálogo cuando falta mensaje.
+                summary.Items.Add(RunC2D1NotifyRoleCase(catalog));
+                summary.Items.Add(RunC2D1NotifyUserCase(catalog));
+                summary.Items.Add(RunC2D1NotifyMissingMessageCase(catalog));
+
+                // FIX84C2D2: file.write entra al camino contractual común. Protegemos texto
+                // literal, dato disponible inferido naturalmente, valores declarativos que no
+                // deben disparar otras intenciones y diálogo cuando faltan ruta/contenido.
+                summary.Items.Add(RunC2D2FileWriteLiteralCase(catalog));
+                summary.Items.Add(RunC2D2FileWriteAvailableDataCase(catalog));
+                summary.Items.Add(RunC2D2FileWriteDeclarativeContentCase(catalog));
+                summary.Items.Add(RunC2D2FileWriteMissingDataCase(catalog));
+
+                // FIX84C2D3: file.read entra al camino común. Protegemos lectura de texto,
+                // salida/JSON explícitos, path como dato declarativo y diálogo cuando falta ruta.
+                summary.Items.Add(RunC2D3FileReadTextCase(catalog));
+                summary.Items.Add(RunC2D3FileReadJsonOutputCase(catalog));
+                summary.Items.Add(RunC2D3FileReadDeclarativePathCase(catalog));
+                summary.Items.Add(RunC2D3FileReadMissingPathCase(catalog));
+
+                // FIX84C2D4: state.vars entra al camino común. Protegemos set/remove,
+                // valores declarativos y diálogo cuando falta el cambio real.
+                summary.Items.Add(RunC2D4StateSetCase(catalog));
+                summary.Items.Add(RunC2D4StateRemoveCase(catalog));
+                summary.Items.Add(RunC2D4StateDeclarativeValueCase(catalog));
+                summary.Items.Add(RunC2D4StateMissingChangeCase(catalog));
             }
             catch (Exception ex)
             {
@@ -1587,6 +1615,627 @@ namespace Intranet.WorkflowStudio.WebForms
                 && JToken.DeepEquals(CanonicalResolvedAction(resolvedAction, "control.if"), CanonicalResolvedAction(expectedAction, "control.if"));
         }
 
+        private static ConstructionEquivalenceItem RunC2D1NotifyRoleCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D1_NOTIFY_ROLE",
+                "util.notify",
+                "Notificar internamente al rol COMPRAS con mensaje factura aprobada.",
+                new[] { "util.start", "util.notify", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "util.notify",
+                    ["label"] = "Notificar",
+                    ["params"] = new JObject
+                    {
+                        ["rolDestino"] = "COMPRAS",
+                        ["mensaje"] = "factura aprobada"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D1NotifyUserCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D1_NOTIFY_USUARIO_CORTO",
+                "util.notify",
+                "Notificar internamente al usuario USUARIO1 con mensaje revisión disponible.",
+                new[] { "util.start", "util.notify", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "util.notify",
+                    ["label"] = "Notificar",
+                    ["params"] = new JObject
+                    {
+                        ["usuarioDestino"] = "USUARIO1",
+                        ["mensaje"] = "revisión disponible"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D1NotifyMissingMessageCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Notificar internamente.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2D1_NOTIFY_DATOS_FALTANTES",
+                NodeType = "util.notify",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult common = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            JObject notify = FindActionByType(common == null ? null : common.Plan, "util.notify");
+            JObject parameters = notify == null ? null : notify["params"] as JObject;
+
+            bool noInventedMessage = parameters != null
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["mensaje"] ?? ""));
+            bool noInventedDestination = parameters != null
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["rolDestino"] ?? ""))
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["usuarioDestino"] ?? ""));
+            bool commonBlocksMessage = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("mensaje", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool commonBlocksDestination = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("rol o un usuario", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft draft = common == null ? null : draftBuilder.Build(phrase, common.Plan, catalog);
+            WfAiClarification messageQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "util.notify", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "mensaje", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+            WfAiClarification destinationQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "util.notify", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "notificationDestination", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+            bool dialogueResolves = false;
+            if (messageQuestion != null && destinationQuestion != null)
+            {
+                const string answerText = "La factura está lista para revisar";
+                var answers = new JObject
+                {
+                    [destinationQuestion.Id] = new JObject
+                    {
+                        ["kind"] = "role",
+                        ["value"] = "COMPRAS"
+                    },
+                    [messageQuestion.Id] = answerText
+                };
+                WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(
+                    common.Plan, draft, answers, catalog);
+                WfAiResolvedPlanResult resolvedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                    resolution.Plan, phrase, "phrase_resolved");
+                JObject resolvedNotify = FindActionByType(resolvedCommon == null ? null : resolvedCommon.Plan, "util.notify");
+                JObject resolvedParams = resolvedNotify == null ? null : resolvedNotify["params"] as JObject;
+                WfAiInterpretationDraft resolvedDraft = resolvedCommon == null
+                    ? null
+                    : draftBuilder.Build(phrase, resolvedCommon.Plan, catalog);
+
+                bool exactMessage = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["mensaje"] ?? ""), answerText, StringComparison.Ordinal);
+                bool exactDestination = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["rolDestino"] ?? ""), "COMPRAS", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(Convert.ToString(resolvedParams["usuarioDestino"] ?? ""));
+                bool noBlocking = resolvedDraft == null || resolvedDraft.BlockingClarificationCount == 0;
+
+                dialogueResolves = resolution != null
+                    && resolution.Errors.Count == 0
+                    && resolvedCommon != null
+                    && resolvedCommon.Errors.Count == 0
+                    && exactMessage
+                    && exactDestination
+                    && noBlocking;
+            }
+
+            item.PhraseJson = common == null || common.Plan == null ? "{}" : common.Plan.ToString(Formatting.None);
+            item.StepJson = "rolDestino = COMPRAS; mensaje = respuesta explícita del usuario";
+            item.Ok = model != null && model.Ok
+                && common != null
+                && noInventedMessage
+                && noInventedDestination
+                && commonBlocksMessage
+                && commonBlocksDestination
+                && messageQuestion != null
+                && destinationQuestion != null
+                && dialogueResolves;
+            item.Message = item.Ok
+                ? "Sin destinatario ni mensaje explícitos, util.notify no inventa decisiones: pregunta ambos datos y la respuesta guiada deja un único destino real y el mensaje exacto."
+                : "Los datos faltantes no quedaron protegidos correctamente. mensajeNoInventado=" + noInventedMessage
+                    + ", destinoNoInventado=" + noInventedDestination
+                    + ", bloqueaMensaje=" + commonBlocksMessage
+                    + ", bloqueaDestino=" + commonBlocksDestination
+                    + ", preguntaMensaje=" + (messageQuestion != null)
+                    + ", preguntaDestino=" + (destinationQuestion != null)
+                    + ", resuelve=" + dialogueResolves
+                    + ", erroresComún=" + (common == null ? "n/a" : JoinList(common.Errors));
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2D2FileWriteLiteralCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D2_FILE_WRITE_TEXTO_LITERAL",
+                "file.write",
+                @"Escribir archivo en C:\temp\D2_literal.txt con contenido Prueba D2. Después finalizar.",
+                new[] { "util.start", "file.write", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.write",
+                    ["label"] = "Archivo: Escribir",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\D2_literal.txt",
+                        ["content"] = "Prueba D2"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D2FileWriteAvailableDataCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D2_FILE_WRITE_DATO_DISPONIBLE",
+                "file.write",
+                @"Escribir el ID de instancia en C:\temp\D2_instancia.txt. Después finalizar.",
+                new[] { "util.start", "file.write", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.write",
+                    ["label"] = "Archivo: Escribir",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\D2_instancia.txt",
+                        ["content"] = "${wf.instanceId}"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D2FileWriteDeclarativeContentCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D2_FILE_WRITE_CONTENIDO_DECLARATIVO",
+                "file.write",
+                @"Escribir archivo en C:\temp\D2_dato.txt con contenido Notificar internamente al rol COMPRAS. Después finalizar.",
+                new[] { "util.start", "file.write", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.write",
+                    ["label"] = "Archivo: Escribir",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\D2_dato.txt",
+                        ["content"] = "Notificar internamente al rol COMPRAS"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D2FileWriteMissingDataCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Escribir archivo. Después finalizar.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2D2_FILE_WRITE_DATOS_FALTANTES",
+                NodeType = "file.write",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult common = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            JObject write = FindActionByType(common == null ? null : common.Plan, "file.write");
+            JObject parameters = write == null ? null : write["params"] as JObject;
+
+            bool noInventedPath = parameters != null
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["path"] ?? ""));
+            bool noInventedSource = parameters != null
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["content"] ?? ""))
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["origen"] ?? ""));
+            bool commonBlocksPath = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("ruta", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool commonBlocksSource = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("contenido", StringComparison.OrdinalIgnoreCase) >= 0
+                || (e ?? string.Empty).IndexOf("dato", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft draft = common == null ? null : draftBuilder.Build(phrase, common.Plan, catalog);
+            WfAiClarification pathQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "file.write", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "path", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+            WfAiClarification sourceQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "file.write", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "fileWriteSource", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+            bool dialogueResolves = false;
+            if (pathQuestion != null && sourceQuestion != null)
+            {
+                const string answerPath = @"C:\temp\D2_aclarado.txt";
+                const string answerContent = "Texto decidido por el usuario";
+                var answers = new JObject
+                {
+                    [pathQuestion.Id] = answerPath,
+                    [sourceQuestion.Id] = answerContent
+                };
+
+                WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(
+                    common.Plan, draft, answers, catalog);
+                WfAiResolvedPlanResult resolvedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                    resolution.Plan, phrase, "phrase_resolved");
+                JObject resolvedWrite = FindActionByType(resolvedCommon == null ? null : resolvedCommon.Plan, "file.write");
+                JObject resolvedParams = resolvedWrite == null ? null : resolvedWrite["params"] as JObject;
+                WfAiInterpretationDraft resolvedDraft = resolvedCommon == null
+                    ? null
+                    : draftBuilder.Build(phrase, resolvedCommon.Plan, catalog);
+
+                bool exactValues = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["path"] ?? ""), answerPath, StringComparison.Ordinal)
+                    && string.Equals(Convert.ToString(resolvedParams["content"] ?? ""), answerContent, StringComparison.Ordinal)
+                    && string.IsNullOrWhiteSpace(Convert.ToString(resolvedParams["origen"] ?? ""));
+                bool safeDefaults = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["encoding"] ?? ""), "utf-8", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["overwrite"] ?? ""), "True", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["zipMode"] ?? ""), "none", StringComparison.OrdinalIgnoreCase);
+                bool noBlocking = resolvedDraft == null || resolvedDraft.BlockingClarificationCount == 0;
+
+                dialogueResolves = resolution != null
+                    && resolution.Errors.Count == 0
+                    && resolvedCommon != null
+                    && resolvedCommon.Errors.Count == 0
+                    && exactValues
+                    && safeDefaults
+                    && noBlocking;
+            }
+
+            item.PhraseJson = common == null || common.Plan == null ? "{}" : common.Plan.ToString(Formatting.None);
+            item.StepJson = @"path = C:\temp\D2_aclarado.txt; content = Texto decidido por el usuario";
+            item.Ok = model != null && model.Ok
+                && common != null
+                && noInventedPath
+                && noInventedSource
+                && commonBlocksPath
+                && commonBlocksSource
+                && pathQuestion != null
+                && sourceQuestion != null
+                && dialogueResolves;
+            item.Message = item.Ok
+                ? "Sin ruta ni contenido, file.write no inventa decisiones: pregunta ambos datos y el diálogo deja el nodo válido con defaults técnicos seguros."
+                : "Los datos faltantes de file.write no quedaron protegidos. rutaNoInventada=" + noInventedPath
+                    + ", fuenteNoInventada=" + noInventedSource
+                    + ", bloqueaRuta=" + commonBlocksPath
+                    + ", bloqueaFuente=" + commonBlocksSource
+                    + ", preguntaRuta=" + (pathQuestion != null)
+                    + ", preguntaFuente=" + (sourceQuestion != null)
+                    + ", resuelve=" + dialogueResolves
+                    + ", erroresComún=" + (common == null ? "n/a" : JoinList(common.Errors));
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2D3FileReadTextCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D3_FILE_READ_TEXTO",
+                "file.read",
+                @"Leer archivo C:\temp\D3_texto.txt. Después finalizar.",
+                new[] { "util.start", "file.read", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.read",
+                    ["label"] = "Archivo: Leer",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\D3_texto.txt"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D3FileReadJsonOutputCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D3_FILE_READ_JSON_SALIDA",
+                "file.read",
+                @"Leer archivo C:\temp\D3_datos.json como JSON y guardar el contenido en datos.archivo. Después finalizar.",
+                new[] { "util.start", "file.read", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.read",
+                    ["label"] = "Archivo: Leer",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\D3_datos.json",
+                        ["salida"] = "datos.archivo",
+                        ["asJson"] = true
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D3FileReadDeclarativePathCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D3_FILE_READ_PATH_DECLARATIVO",
+                "file.read",
+                @"Leer archivo C:\temp\Notificar_COMPRAS.txt. Después finalizar.",
+                new[] { "util.start", "file.read", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "file.read",
+                    ["label"] = "Archivo: Leer",
+                    ["params"] = new JObject
+                    {
+                        ["path"] = @"C:\temp\Notificar_COMPRAS.txt"
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D3FileReadMissingPathCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Leer archivo. Después finalizar.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2D3_FILE_READ_RUTA_FALTANTE",
+                NodeType = "file.read",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult common = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            JObject read = FindActionByType(common == null ? null : common.Plan, "file.read");
+            JObject parameters = read == null ? null : read["params"] as JObject;
+
+            bool noInventedPath = parameters != null
+                && string.IsNullOrWhiteSpace(Convert.ToString(parameters["path"] ?? ""));
+            bool safeDefaults = parameters != null
+                && string.Equals(Convert.ToString(parameters["salida"] ?? ""), "archivo", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(parameters["asJson"] ?? ""), "False", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(parameters["encoding"] ?? ""), "utf-8", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(parameters["zipMode"] ?? ""), "auto", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Convert.ToString(parameters["useCache"] ?? ""), "True", StringComparison.OrdinalIgnoreCase);
+            bool commonBlocksPath = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("ruta", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft draft = common == null ? null : draftBuilder.Build(phrase, common.Plan, catalog);
+            WfAiClarification pathQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "file.read", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "path", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+            bool dialogueResolves = false;
+            if (pathQuestion != null)
+            {
+                const string answerPath = @"C:\temp\D3_aclarado.txt";
+                var answers = new JObject { [pathQuestion.Id] = answerPath };
+                WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(
+                    common.Plan, draft, answers, catalog);
+                WfAiResolvedPlanResult resolvedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                    resolution.Plan, phrase, "phrase_resolved");
+                JObject resolvedRead = FindActionByType(resolvedCommon == null ? null : resolvedCommon.Plan, "file.read");
+                JObject resolvedParams = resolvedRead == null ? null : resolvedRead["params"] as JObject;
+                WfAiInterpretationDraft resolvedDraft = resolvedCommon == null
+                    ? null
+                    : draftBuilder.Build(phrase, resolvedCommon.Plan, catalog);
+
+                bool exactPath = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["path"] ?? ""), answerPath, StringComparison.Ordinal);
+                bool resolvedDefaults = resolvedParams != null
+                    && string.Equals(Convert.ToString(resolvedParams["salida"] ?? ""), "archivo", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["asJson"] ?? ""), "False", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["encoding"] ?? ""), "utf-8", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["zipMode"] ?? ""), "auto", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Convert.ToString(resolvedParams["useCache"] ?? ""), "True", StringComparison.OrdinalIgnoreCase);
+                bool noBlocking = resolvedDraft == null || resolvedDraft.BlockingClarificationCount == 0;
+
+                dialogueResolves = resolution != null
+                    && resolution.Errors.Count == 0
+                    && resolvedCommon != null
+                    && resolvedCommon.Errors.Count == 0
+                    && exactPath
+                    && resolvedDefaults
+                    && noBlocking;
+            }
+
+            item.PhraseJson = common == null || common.Plan == null ? "{}" : common.Plan.ToString(Formatting.None);
+            item.StepJson = @"path = C:\temp\D3_aclarado.txt; salida = archivo";
+            item.Ok = model != null && model.Ok
+                && common != null
+                && noInventedPath
+                && safeDefaults
+                && commonBlocksPath
+                && pathQuestion != null
+                && dialogueResolves;
+            item.Message = item.Ok
+                ? "Sin ruta explícita, file.read no inventa un archivo: pregunta la ruta y conserva sólo defaults técnicos seguros."
+                : "La ruta faltante de file.read no quedó protegida. rutaNoInventada=" + noInventedPath
+                    + ", defaults=" + safeDefaults
+                    + ", bloqueaRuta=" + commonBlocksPath
+                    + ", preguntaRuta=" + (pathQuestion != null)
+                    + ", resuelve=" + dialogueResolves
+                    + ", erroresComún=" + (common == null ? "n/a" : JoinList(common.Errors));
+            return item;
+        }
+
+        private static ConstructionEquivalenceItem RunC2D4StateSetCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D4_STATE_SET_SIMPLE",
+                "state.vars",
+                "Guardar variable biz.prueba.d4 como OK_D4. Después finalizar.",
+                new[] { "util.start", "state.vars", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "state.vars",
+                    ["label"] = "Guardar variable",
+                    ["params"] = new JObject
+                    {
+                        ["set"] = new JObject { ["biz.prueba.d4"] = "OK_D4" }
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D4StateRemoveCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D4_STATE_REMOVE",
+                "state.vars",
+                "Quitar variable biz.prueba.d4. Después finalizar.",
+                new[] { "util.start", "state.vars", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "state.vars",
+                    ["label"] = "Quitar variable",
+                    ["params"] = new JObject
+                    {
+                        ["remove"] = new JArray("biz.prueba.d4")
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D4StateDeclarativeValueCase(WfAiCatalog catalog)
+        {
+            return RunEquivalenceCase(
+                catalog,
+                "C2D4_STATE_VALOR_DECLARATIVO",
+                "state.vars",
+                "Guardar variable biz.prueba.mensaje como Notificar internamente al rol COMPRAS. Después finalizar.",
+                new[] { "util.start", "state.vars", "util.end" },
+                new JObject
+                {
+                    ["action"] = "ADD_NODE",
+                    ["nodeType"] = "state.vars",
+                    ["label"] = "Guardar variable",
+                    ["params"] = new JObject
+                    {
+                        ["set"] = new JObject { ["biz.prueba.mensaje"] = "Notificar internamente al rol COMPRAS" }
+                    }
+                },
+                true);
+        }
+
+        private static ConstructionEquivalenceItem RunC2D4StateMissingChangeCase(WfAiCatalog catalog)
+        {
+            const string phrase = "Guardar variable. Después finalizar.";
+            var item = new ConstructionEquivalenceItem
+            {
+                Id = "C2D4_STATE_DATOS_FALTANTES",
+                NodeType = "state.vars",
+                Phrase = phrase
+            };
+
+            WfAiLocalModelResult model = new WfAiMlnetProvider().Interpret(phrase, catalog, "{}");
+            WfAiResolvedPlanResult common = model != null && model.Ok && model.Plan != null
+                ? new WfAiResolvedNodeBuilder(catalog).ResolvePlan(model.Plan, phrase, "phrase")
+                : null;
+            JObject state = FindActionByType(common == null ? null : common.Plan, "state.vars");
+            JObject parameters = state == null ? null : state["params"] as JObject;
+
+            bool noInventedSet = parameters != null && !(parameters["set"] is JObject);
+            bool noInventedRemove = parameters != null && !(parameters["remove"] is JArray);
+            bool commonBlocks = common != null && common.Errors.Any(e =>
+                (e ?? string.Empty).IndexOf("guardar o quitar", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            var draftBuilder = new WfAiInterpretationDraftBuilder();
+            WfAiInterpretationDraft draft = common == null ? null : draftBuilder.Build(phrase, common.Plan, catalog);
+            WfAiClarification changeQuestion = draft == null || draft.Clarifications == null
+                ? null
+                : draft.Clarifications.FirstOrDefault(c => c != null
+                    && string.Equals(c.NodeType, "state.vars", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(c.Parameter, "stateVarsChange", StringComparison.OrdinalIgnoreCase)
+                    && c.Blocking);
+
+            bool dialogueResolves = false;
+            if (changeQuestion != null)
+            {
+                const string answer = "biz.prueba.d4 = OK_D4";
+                var answers = new JObject { [changeQuestion.Id] = answer };
+                WfAiClarificationResolutionResult resolution = new WfAiClarificationResolver().Resolve(
+                    common.Plan, draft, answers, catalog);
+                WfAiResolvedPlanResult resolvedCommon = new WfAiResolvedNodeBuilder(catalog).ResolvePlan(
+                    resolution.Plan, phrase, "phrase_resolved");
+                JObject resolvedState = FindActionByType(resolvedCommon == null ? null : resolvedCommon.Plan, "state.vars");
+                JObject resolvedParams = resolvedState == null ? null : resolvedState["params"] as JObject;
+                JObject resolvedSet = resolvedParams == null ? null : resolvedParams["set"] as JObject;
+                WfAiInterpretationDraft resolvedDraft = resolvedCommon == null
+                    ? null
+                    : draftBuilder.Build(phrase, resolvedCommon.Plan, catalog);
+
+                bool exact = resolvedSet != null
+                    && string.Equals(Convert.ToString(resolvedSet["biz.prueba.d4"] ?? ""), "OK_D4", StringComparison.Ordinal);
+                bool noBlocking = resolvedDraft == null || resolvedDraft.BlockingClarificationCount == 0;
+
+                dialogueResolves = resolution != null
+                    && resolution.Errors.Count == 0
+                    && resolvedCommon != null
+                    && resolvedCommon.Errors.Count == 0
+                    && exact
+                    && noBlocking;
+            }
+
+            item.PhraseJson = common == null || common.Plan == null ? "{}" : common.Plan.ToString(Formatting.None);
+            item.StepJson = "biz.prueba.d4 = OK_D4";
+            item.Ok = model != null && model.Ok
+                && common != null
+                && state != null
+                && noInventedSet
+                && noInventedRemove
+                && commonBlocks
+                && changeQuestion != null
+                && dialogueResolves;
+            item.Message = item.Ok
+                ? "Sin variable/valor explícitos, state.vars no inventa datos: pregunta el cambio y la respuesta guiada deja un set válido."
+                : "Los datos faltantes de state.vars no quedaron protegidos. setNoInventado=" + noInventedSet
+                    + ", removeNoInventado=" + noInventedRemove
+                    + ", bloquea=" + commonBlocks
+                    + ", pregunta=" + (changeQuestion != null)
+                    + ", resuelve=" + dialogueResolves
+                    + ", erroresComún=" + (common == null ? "n/a" : JoinList(common.Errors));
+            return item;
+        }
+
         private static ConstructionEquivalenceItem RunC2C2NaturalTotalCase(WfAiCatalog catalog)
         {
             return RunC2C2NaturalConditionCase(
@@ -1948,6 +2597,10 @@ namespace Intranet.WorkflowStudio.WebForms
             var c2c1 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C1_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2c2 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C2_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2c2b = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2d1 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2D1_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2d2 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2D2_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2d3 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2D3_", StringComparison.OrdinalIgnoreCase)).ToList();
+            var c2d4 = summary.Items.Where(x => x != null && (x.Id ?? string.Empty).StartsWith("C2D4_", StringComparison.OrdinalIgnoreCase)).ToList();
             var c2a = summary.Items.Where(x => x != null
                 && (x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2AB_", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -2019,6 +2672,30 @@ namespace Intranet.WorkflowStudio.WebForms
                     "Valida de punta a punta que una condición natural conserve las acciones escritas en cada rama, sus parámetros y la convergencia final, sin pedir completar una rama ya expresada.",
                     c2c2b));
 
+            if (c2d1.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Contrato común FIX84C2D1 — util.notify",
+                    "Verifica Frase ↔ Paso a paso para destino por rol y por usuario real, y protege que el Constructor no invente el mensaje cuando falta: debe pedirlo mediante el diálogo de aclaración.",
+                    c2d1));
+
+            if (c2d2.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Contrato común FIX84C2D2 — file.write",
+                    "Verifica Frase ↔ Paso a paso para texto literal y Datos disponibles, protege que path/content sean datos declarativos y exige aclaración real cuando faltan ruta o contenido.",
+                    c2d2));
+
+            if (c2d3.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Contrato común FIX84C2D3 — file.read",
+                    "Verifica Frase ↔ Paso a paso para lectura de texto, salida/JSON explícitos, protege path como dato declarativo y exige aclaración real cuando falta la ruta.",
+                    c2d3));
+
+            if (c2d4.Count > 0)
+                sb.AppendLine(RenderConstructionEquivalenceGroup(
+                    "Contrato común FIX84C2D4 — state.vars",
+                    "Verifica Frase ↔ Paso a paso para guardar/quitar variables, protege claves y valores como datos declarativos y exige aclaración real cuando falta el cambio.",
+                    c2d4));
+
             var other = summary.Items.Where(x => x != null
                 && !(x.Id ?? string.Empty).StartsWith("C1_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2A_", StringComparison.OrdinalIgnoreCase)
@@ -2030,7 +2707,11 @@ namespace Intranet.WorkflowStudio.WebForms
                 && !(x.Id ?? string.Empty).StartsWith("C2BG2D_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2C1_", StringComparison.OrdinalIgnoreCase)
                 && !(x.Id ?? string.Empty).StartsWith("C2C2_", StringComparison.OrdinalIgnoreCase)
-                && !(x.Id ?? string.Empty).StartsWith("C2C2B_", StringComparison.OrdinalIgnoreCase)).ToList();
+                && !(x.Id ?? string.Empty).StartsWith("C2C2B_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2D1_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2D2_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2D3_", StringComparison.OrdinalIgnoreCase)
+                && !(x.Id ?? string.Empty).StartsWith("C2D4_", StringComparison.OrdinalIgnoreCase)).ToList();
             if (other.Count > 0)
                 sb.AppendLine(RenderConstructionEquivalenceGroup(
                     "Equivalencia de construcción",
